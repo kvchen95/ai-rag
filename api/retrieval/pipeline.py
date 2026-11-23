@@ -125,14 +125,17 @@ class RetrievalSnapshot:
         """§11.2 的 `score_snapshot`：各路最高分与分布。"""
         dense = [c.dense_score for c in self.candidates if c.dense_score is not None]
         sparse = [c.sparse_score for c in self.candidates if c.sparse_score is not None]
-        rerank = [c.rerank_score for c in self.candidates if c.rerank_score is not None]
+        rerank_scores = [c.rerank_score for c in self.candidates if c.rerank_score is not None]
         return {
             "top1": None
             if self.decision.top1 is None
             else round(self.decision.top1, 6),
             "dense_top1": round(max(dense), 6) if dense else None,
             "sparse_top1": round(max(sparse), 6) if sparse else None,
-            "rerank": [round(s, 6) for s in rerank],
+            # 两个键不能同名：早先这里连写两次 `"rerank"`，后一个（`as_audit()` 的
+            # dict）把前一个（分数列表）静默覆盖掉，于是审计里永远看不到分数分布——
+            # 而"分怎么分布"正是排查"这次为什么判成弱相关"的第一个依据。
+            "rerank_scores": [round(s, 6) for s in rerank_scores],
             "fused": [round(c.fused_score, 6) for c in self.candidates],
             "routes": {"dense": self.dense_count, "sparse": self.sparse_count},
             "after_dedup": len(self.candidates),

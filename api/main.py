@@ -23,7 +23,7 @@ from api.config import Settings, get_settings
 from api.errors import install_error_handlers
 from api.middleware import RequestContextMiddleware
 from api.observability import configure_logging, get_logger, log_event
-from api.routers import health, ingest
+from api.routers import health, ingest, qa
 
 logger = get_logger("api.main")
 
@@ -76,6 +76,7 @@ def create_app(
     install_error_handlers(app)
     app.include_router(health.router)
     app.include_router(ingest.router)
+    app.include_router(qa.router)
     return app
 
 

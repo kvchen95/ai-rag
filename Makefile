@@ -17,7 +17,7 @@ API_TEST_NETWORK ?= ai-rag_default
 API_TEST_DSN ?= postgresql+psycopg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)
 
 .DEFAULT_GOAL := help
-.PHONY: help dev up up-models down logs ps build pull config health wait reset qdrant-init psql smoke web-build prints-env test-api test-api-db api-dev-image db-migrate db-status index-rebuild index-rebuild-dry samples scan doc verify-scan-api promote rollback vector-sync reconcile reconcile-dry reclaim reclaim-dry ingest-status verify-a3 verify-a3-api verify-a3-migration test-a3 test-a3-vectors test-a3-flip test-a3-sync samples-layout verify-parse a2-mutation test-a2
+.PHONY: help dev up up-models down logs ps build pull config health wait reset qdrant-init psql smoke web-build prints-env test-api test-api-db api-dev-image db-migrate db-status index-rebuild index-rebuild-dry samples scan doc verify-scan-api promote rollback vector-sync reconcile reconcile-dry reclaim reclaim-dry ingest-status verify-a3 verify-a3-api verify-a3-migration test-a3 test-a3-vectors test-a3-flip test-a3-sync samples-layout verify-parse a2-mutation test-a2 test-b4-logic test-b4 verify-b4 b4-mutation
 
 help:
 	@echo "ai-rag local dev — targets"
@@ -60,6 +60,12 @@ help:
 	@echo "  make verify-a3      # 端到端演练（真 PG/Qdrant/TEI，8 步）"
 	@echo "  make verify-a3-api  # promote/reconcile 的 404/409/422 契约实测"
 	@echo "  make test-a3        # A3 集成用例（需真 PG + Qdrant + embedding）"
+	@echo ""
+	@echo "  B4（§9–§10、附录 C/D）— 生成 / 五道校验 / 三档降级 / SSE"
+	@echo "  make test-b4-logic  # 纯逻辑用例（证据包/五道校验/数字归一/事件顺序）"
+	@echo "  make test-b4        # B4 集成用例（真 PG + Qdrant + TEI，生成用脚本替身）"
+	@echo "  make verify-b4      # 端到端演练：六条判据逐条打印实测出口"
+	@echo "  make b4-mutation    # 10 条判据逐个改坏，确认对应用例真的会红"
 	@echo ""
 	@echo "  make test-api    # 跑 api/tests（单元用例；读 PG 的集成用例自动跳过）"
 	@echo "  make test-api-db # 同上，且把宿主 PG 指给集成用例（host.docker.internal）"
@@ -332,3 +338,49 @@ test-a3-sync: api-dev-image
 		-e EMBEDDING_BASE_URL="http://embedding:8000/v1" \
 		-e EMBEDDING_API_KEY=local \
 		$(API_DEV_IMAGE) pytest -c api/pytest.ini api/tests/a3/test_sync.py api/tests/a3/test_reconcile_reclaim.py
+
+# --- B4: 证据包 / 受限生成 / 五道校验 / 三档降级 / SSE ------------------------
+# 纯逻辑用例不需要任何服务：证据包组装、数字与专名归一、五道校验、事件顺序
+# 全部可注入替身（真模型的行为只有在配了网关的环境里才验得到，这里不假装）。
+test-b4-logic: api-dev-image
+	@$(DOCKER) run --rm -e RUN_MIGRATIONS=0 $(API_DEV_IMAGE) \
+		pytest -c api/pytest.ini api/tests/test_generate_evidence.py \
+		api/tests/test_generate_llm.py api/tests/test_verify_numbers.py \
+		api/tests/test_verify_checks.py api/tests/test_qa_sse.py api/tests/test_qa_api.py
+
+# 集成用例要真 PG + Qdrant + TEI（检索侧全真跑），生成与判别是脚本替身。
+# 「生成用替身」这件事写在 api/tests/b4/test_qa_integration.py 的头注里：
+# 本机没有 LLM 网关，用假模型假装跑通比不跑更糟。
+test-b4: api-dev-image
+	@$(DOCKER) run --rm --network $(API_TEST_NETWORK) -e RUN_MIGRATIONS=0 \
+		-e AI_RAG_TEST_DATABASE_URL="$(API_TEST_DSN)" \
+		-e QDRANT_URL="http://qdrant:6333" \
+		-e EMBEDDING_BASE_URL="http://embedding:8000/v1" \
+		-e EMBEDDING_API_KEY=local \
+		-e EMBEDDING_MODEL="$${EMBEDDING_MODEL:-BAAI/bge-small-zh-v1.5}" \
+		-e EMBEDDING_DIM="$${EMBEDDING_DIM:-512}" \
+		-e RERANK_BASE_URL="http://rerank:8000" \
+		-e RERANK_API_KEY=local \
+		$(API_DEV_IMAGE) pytest -c api/pytest.ini api/tests/b4
+
+# 端到端演练：六条判据逐条打印实测出口（verdict / 事件序列 / citations 字段）。
+# 与 test-b4 的区别：它给出**过程**，不只给绿。
+verify-b4: api-dev-image
+	@$(DOCKER) run --rm --network $(API_TEST_NETWORK) -e RUN_MIGRATIONS=0 \
+		-e DATABASE_URL="$(API_TEST_DSN)" \
+		-e AI_RAG_TEST_DATABASE_URL="$(API_TEST_DSN)" \
+		-e QDRANT_URL="http://qdrant:6333" \
+		-e EMBEDDING_BASE_URL="http://embedding:8000/v1" \
+		-e EMBEDDING_API_KEY=local \
+		-e EMBEDDING_MODEL="$${EMBEDDING_MODEL:-BAAI/bge-small-zh-v1.5}" \
+		-e EMBEDDING_DIM="$${EMBEDDING_DIM:-512}" \
+		-e RERANK_BASE_URL="http://rerank:8000" \
+		-e RERANK_API_KEY=local \
+		-e AUTH_MODE=mock_header \
+		$(API_DEV_IMAGE) python scripts/verify_b4_qa.py
+
+# 变异测试：把 10 条关键判据逐条改坏，确认对应用例真的会红（跑完自动还原）。
+# 改坏后仍全绿 = 那条判据形同虚设，脚本以非零退出。
+b4-mutation: api-dev-image
+	@$(DOCKER) run --rm -e RUN_MIGRATIONS=0 $(API_DEV_IMAGE) \
+		python scripts/b4_mutation_check.py

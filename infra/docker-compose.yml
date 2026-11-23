@@ -170,6 +170,9 @@ services:
       AUTH_JWT_DEPTS_CLAIM: ${AUTH_JWT_DEPTS_CLAIM:-user_depts}
       AUTH_JWT_ROLES_CLAIM: ${AUTH_JWT_ROLES_CLAIM:-user_roles}
       AUTH_JWT_ADMIN_CLAIM: ${AUTH_JWT_ADMIN_CLAIM:-admin}
+      # 生成与 SSE（B4，§9 / 附录 C.2）：逐字增量的字符数。
+      # Temperature 固定 0，不做成环境变量——它是硬约束不是旋钮。
+      SSE_TOKEN_CHUNK_CHARS: ${SSE_TOKEN_CHUNK_CHARS:-2}
     ports:
       - "${API_PORT:-8000}:8000"
     volumes:

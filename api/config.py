@@ -102,6 +102,12 @@ class Settings(BaseSettings):
     max_question_chars: int = Field(default=500, gt=0)
     qa_max_concurrency: int = Field(default=8, gt=0)
 
+    # --- B4：生成与校验（§9 / §10 / 附录 C.2）---
+    # 逐字增量的字符数。不是业务阈值而是传输粒度，所以给默认值：
+    # 2 字一帧在中文下的观感接近打字机，一帧约 50 字节开销，一次 300 字的答案
+    # 约 150 帧，浏览器与反代都不会有问题。调大只是"蹦字"更明显。
+    sse_token_chunk_chars: int = Field(default=2, gt=0, le=64)
+
     # --- 审计（§11.2：保留一年，按合规要求可调）---
     audit_retention_days: int = Field(default=365, gt=0)
 
@@ -266,6 +272,14 @@ class Settings(BaseSettings):
                 "embedding": {"model": self.embedding_model, "dim": self.embedding_dim},
                 "rerank": {"model": self.rerank_model},
                 "llm": {"model": self.llm_model or None},
+            },
+            "generation": {
+                # 生成与判别的模型名是"配置指纹"的一部分：换模型必须能在 /healthz
+                # 一眼看出来，否则排查质量回退时第一个问题（跑的是哪个模型）答不上。
+                "llm_configured": bool(self.llm_base_url.strip()),
+                # Temperature 固定 0（§9.2），不做成配置项：它是硬约束不是旋钮。
+                "temperature": 0.0,
+                "sse_token_chunk_chars": self.sse_token_chunk_chars,
             },
             "stores": {
                 "qdrant_collection": self.qdrant_collection,
