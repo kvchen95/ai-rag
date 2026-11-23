@@ -24,6 +24,17 @@ EXPECTED = {
     ErrorCode.INTERNAL: (500, "稍后重试", AlertPolicy.ALWAYS),
 }
 
+# 契约层扩展：§11.3 的表只管业务错误，下面这些是附录 C 的接口契约要求的
+# （422 入参、404 找不到、409 扫描进行中、500 样本目录缺失）。
+# 单独列成一张表而不是混进 EXPECTED，是为了让"§11.3 原表被改了一行"仍然会红；
+# 加一个新码必须同时加到这张表里，否则下一条用例会拦下来。
+EXTENSIONS = {
+    ErrorCode.INVALID_REQUEST: (422, "请求格式不正确", AlertPolicy.NONE),
+    ErrorCode.NOT_FOUND: (404, "未找到该文档", AlertPolicy.NONE),
+    ErrorCode.SCAN_IN_PROGRESS: (409, "扫描正在进行中", AlertPolicy.BURST),
+    ErrorCode.SAMPLES_MISSING: (500, "稍后重试", AlertPolicy.ALWAYS),
+}
+
 
 class _OkPg:
     def open(self) -> None: ...
@@ -48,14 +59,25 @@ def _client_with_routes(*routes: tuple[str, object]) -> TestClient:
 
 
 def test_every_spec_matches_design_table() -> None:
-    assert set(ERROR_SPECS) - {ErrorCode.INVALID_REQUEST} == set(EXPECTED)
-    for code, (status, message, alert) in EXPECTED.items():
+    # §11.3 的原表逐行照抄；扩展码另表登记（见 EXTENSIONS）。
+    assert set(ERROR_SPECS) - set(EXTENSIONS) == set(EXPECTED)
+    for code, (status, message, alert) in {**EXPECTED, **EXTENSIONS}.items():
         spec = spec_for(code)
         assert (spec.http_status, spec.user_message, spec.alert) == (
             status,
             message,
             alert,
         ), code
+
+
+def test_every_error_code_is_registered_in_a_table() -> None:
+    """新增一个码却没人给它定状态码/文案/告警口径 = 监控会漏掉它。
+
+    这条是上一条的守卫：上一条只保证"表里的码对得上"，这条保证"枚举里的每个码
+    都在某张表里"。加码时忘了登记，这里会红并点名是哪个。
+    """
+    unregistered = set(ErrorCode) - set(EXPECTED) - set(EXTENSIONS)
+    assert not unregistered, f"未登记错误码: {sorted(c.value for c in unregistered)}"
 
 
 def test_sse_fallback_flag_only_on_streamable_codes() -> None:

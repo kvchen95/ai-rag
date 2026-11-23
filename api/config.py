@@ -215,7 +215,7 @@ class Settings(BaseSettings):
         用它来制造"另一个进程持锁"的场景。让服务自己报，脚本就不必抄一份数值
         （抄了之后改 key 不会红，脚本只会静静失去测并发的能力）。
         """
-        from api.ingest.scan import SCAN_LOCK_KEY  # 局部导入：config 不该依赖 ingest 包
+        from api.ingest.lockkeys import SCAN_LOCK_KEY  # 局部导入：config 不该依赖 ingest 包
 
         return {
             "samples_dir": self.ingest_samples_dir,

@@ -34,9 +34,18 @@ class ErrorCode(StrEnum):
     MODEL_TIMEOUT = "model_timeout"
     INDEX_STALE = "index_stale"
     INTERNAL = "internal"
-    # 契约层扩展：§11.3 的表只管业务错误，入参不合法需要一个自己的码，
-    # 不能塞进 internal（会误触发告警），也不该借 auth_invalid 的文案。
+    # --- 契约层扩展：§11.3 的表只管业务错误 -------------------------------------
+    # 入参不合法需要一个自己的码，不能塞进 internal（会误触发告警），
+    # 也不该借 auth_invalid 的文案。
     INVALID_REQUEST = "invalid_request"
+    # 附录 C.1 给 `GET /api/v1/documents/{doc_key}` 定了 404、给 scan 定了 409，
+    # §11.3 却没有对应行。补两个码而不是在路由里手搓响应体：文案、状态码、
+    # 告警口径必须仍然只有一个来源，否则"409 要不要告警"就又散到监控配置里了。
+    NOT_FOUND = "not_found"
+    SCAN_IN_PROGRESS = "scan_in_progress"
+    # 扫描目录不存在/不可读：这不是"扫完发现 0 个文件"，而是摄取根本无法开始。
+    # 归 internal 会跟真正的代码 bug 混在一起，归 invalid_request 又不是入参问题。
+    SAMPLES_MISSING = "samples_missing"
 
 
 class AlertPolicy(StrEnum):
@@ -76,6 +85,13 @@ ERROR_SPECS: Mapping[ErrorCode, ErrorSpec] = {
         500, "稍后重试", AlertPolicy.ALWAYS, sse_fallback=True
     ),
     ErrorCode.INVALID_REQUEST: ErrorSpec(422, "请求格式不正确", AlertPolicy.NONE),
+    # 404 是用户侧问题（链接/编号错了），不告警。
+    ErrorCode.NOT_FOUND: ErrorSpec(404, "未找到该文档", AlertPolicy.NONE),
+    # 409 是"有人正在跑"，正常并发行为。但连续出现说明有人在反复点，
+    # 或者有一轮扫描卡死没释放锁——两种都需要人看一眼，所以按 BURST。
+    ErrorCode.SCAN_IN_PROGRESS: ErrorSpec(409, "扫描正在进行中", AlertPolicy.BURST),
+    # 配置/部署问题，不是用户问题：出现即告警（通常是挂载没挂上或路径写错）。
+    ErrorCode.SAMPLES_MISSING: ErrorSpec(500, "稍后重试", AlertPolicy.ALWAYS),
 }
 
 

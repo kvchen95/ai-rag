@@ -84,6 +84,17 @@ def log_event(
     logger.log(level, event, extra={"fields": fields})
 
 
+def log_exception(
+    logger: logging.Logger, event: str, /, *, level: int = logging.ERROR, **fields: Any
+) -> None:
+    """结构化打点 + 当前异常栈。
+
+    `logger.exception` 不接受 `extra={"fields": ...}`，它的字段会被吞掉——
+    需要"错误栈 + 结构化字段"时用这个，别退化成 f-string 拼进消息。
+    """
+    logger.log(level, event, exc_info=True, extra={"fields": fields})
+
+
 def extract_request_id(headers: list[tuple[bytes, bytes]]) -> str | None:
     """从入站请求头取 trace id；支持 X-Request-Id / X-Trace-Id / W3C traceparent。"""
     for raw_key, raw_value in headers:

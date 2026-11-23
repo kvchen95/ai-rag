@@ -42,6 +42,13 @@ docker compose exec -T api python scripts/qdrant_init.py --recreate     # 维度
 `infra/api/entrypoint.sh` 调用的也是这个 runner，别再加第二套（两套 runner 写同一张台账，
 迟早出现"一边记录过、另一边没记录"的分裂）。
 
+### 迁移清单
+
+| 文件 | 内容 | 作者 |
+|---|---|---|
+| `001_init.sql` | 五张表 + 视图 + 索引/约束 | DA1 |
+| `002_ingest_job_status.sql` | `ingest_jobs` 状态枚举 CHECK、`running` 必须有 `started_at`、终态必须有 `finished_at`、`failed` 必须带 `error`、同一版本最多一个未结束任务 | A1 |
+
 ### 造一个干净库
 
 ```bash
@@ -94,8 +101,19 @@ v_active_chunks   — 视图：version 与 chunk 双 active 的切片 = 可检�
 `chunks.embedding_dense` 是**可选缓存列**：检索走 Qdrant，PG 里这一列只用于离线分析
 （聚类、去重、相似切片排查）。`NULL` 不影响任何链路。
 
-`ingest_jobs.status` 故意**不加 CHECK**：状态机归摄取卡（A1）所有，建议
-`queued / running / succeeded / failed / canceled`，定稿后由 A1 提一个新迁移加约束。
+`ingest_jobs.status` 的枚举已由 **A1 定稿并落成 CHECK**（`db/migrations/002_ingest_job_status.sql`）：
+
+| 状态 | 含义 | 进入方式 |
+|---|---|---|
+| `queued` | 已入队，等 worker 取 | 扫描新建 / `running` 重试退避回来 |
+| `running` | 正在跑（**必须带 `started_at`**） | `claim_next_job` |
+| `succeeded` | 跑完（**必须带 `finished_at`**） | `succeed_job` |
+| `failed` | 终态失败（**必须带 `finished_at` 与 `error`**） | 重试耗尽 / 直接判失败 |
+| `canceled` | 人工取消（**必须带 `finished_at`**） | `cancel_job` |
+
+重试是 `running → queued` 原地 `retry_count+1`（`INGEST_MAX_RETRIES=3` = 1 次尝试 + 3 次重试）；
+`failed` 是终态，不再回 `queued`；同一版本同时只能有一个未结束任务
+（`uq_ingest_jobs_open_version`，部分唯一索引）。状态机与重试口径写在 `api/ingest/jobs.py`。
 
 ---
 
@@ -248,4 +266,4 @@ docker compose exec -T api python scripts/qdrant_rebuild.py --doc-key policy/tra
    若将来要在 PG 里做向量检索，需另加 `USING hnsw (embedding_dense vector_cosine_ops)`。
 4. **`qa_log` 保留一年**：没有自动清理任务。上线前加一个定时 `DELETE`（或按月分区），
    放在 §4.3 回收任务旁边。
-5. **`ingest_jobs.status` 枚举未约束**（见 §3），等 A1 定稿。
+5. **`ingest_jobs.status` 枚举已在 002 里落成 CHECK**（见 §3 的状态机表），不再是待定项。

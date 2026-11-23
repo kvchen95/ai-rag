@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from api.routers import health
+from api.routers import health, ingest
 
-__all__ = ["health"]
+__all__ = ["health", "ingest"]

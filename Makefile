@@ -17,7 +17,7 @@ API_TEST_NETWORK ?= ai-rag_default
 API_TEST_DSN ?= postgresql+psycopg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)
 
 .DEFAULT_GOAL := help
-.PHONY: help dev up up-models down logs ps build pull config health wait reset qdrant-init psql smoke web-build prints-env test-api test-api-db api-dev-image db-migrate db-status index-rebuild index-rebuild-dry
+.PHONY: help dev up up-models down logs ps build pull config health wait reset qdrant-init psql smoke web-build prints-env test-api test-api-db api-dev-image db-migrate db-status index-rebuild index-rebuild-dry samples scan doc verify-scan-api
 
 help:
 	@echo "ai-rag local dev — targets"
@@ -39,6 +39,10 @@ help:
 	@echo "  make index-rebuild-dry  # 只看重建计划，不写不编码正文"
 	@echo "  make psql        # 进 PG 交互 shell"
 	@echo "  make web-build   # 在 Docker 里构建前端产物到 web/dist（nginx 挂载它）"
+	@echo "  make samples     # 生成开发期样本 PDF（samples/，字节确定，已存在则不动）"
+	@echo "  make scan        # 扫 samples/：added/changed/skipped/failed"
+	@echo "  make doc DOC_KEY=policy/travel-cn  # 查文档入库状态"
+	@echo "  make verify-scan-api  # 实测 /api/v1/ingest/scan 的 200/404/409"
 	@echo "  make test-api    # 跑 api/tests（单元用例；读 PG 的集成用例自动跳过）"
 	@echo "  make test-api-db # 同上，且把宿主 PG 指给集成用例（host.docker.internal）"
 	@echo ""
@@ -87,6 +91,24 @@ psql:
 
 reset:
 	@bash scripts/dev.sh reset
+
+# --- 摄取（A1）----------------------------------------------------------------
+# 样本 PDF 由脚本生成（stdlib，字节确定），随仓库走：`samples/{doc_key}.pdf`（附录 B）。
+samples:
+	@docker compose exec -T api python scripts/make_samples.py
+
+# 扫 samples/：新文档/变更/跳过/失败。并发扫第二次返回 409。
+scan:
+	@curl -sS -X POST http://127.0.0.1:$${API_PORT:-8000}/api/v1/ingest/scan | python3 -m json.tool
+
+# 查某文档的入库状态（doc_key 里带 `/`，quoted 传）。
+doc:
+	@test -n "$(DOC_KEY)" || (echo "usage: make doc DOC_KEY=policy/travel-cn" && exit 1)
+	@curl -sS "http://127.0.0.1:$${API_PORT:-8000}/api/v1/documents/$(DOC_KEY)" | python3 -m json.tool
+
+# 契约实测：200 / 404 / 409（含另一个进程持锁）。宿主跑，不需要容器重启。
+verify-scan-api:
+	@python3 scripts/verify_scan_api.py
 
 # --- schema / index（DA1）-----------------------------------------------------
 # 迁移只在 api 容器里跑：宿主没有 psycopg，容器里装了（见 infra/api/requirements.txt）。

@@ -98,6 +98,26 @@ class PgDatabase:
             else:
                 conn.commit()
 
+    @contextmanager
+    def session(self) -> Iterator[psycopg.Connection[Any]]:
+        """一条连接，**事务由调用方自己管**。
+
+        只给"一个逻辑任务跨多个事务"的场景用（例如样本扫描：一个文件一个事务，
+        整轮共用一个会话级 advisory lock）。`connection()` 的"退出即提交"在这种
+        场景下会把半轮扫描提前提交掉，所以这里不替调用方 commit：
+        调用方每处理完一个单元自己 commit/rollback。
+
+        退出时如果还有未提交的事务，回滚掉——不静默提交别人的半成品。
+        连接归还池前会 `reset`（psycopg_pool 默认行为），会话级锁在还池前必须
+        已经显式释放，这一点由调用方保证（见 api/ingest/scan.py）。
+        """
+        with self._pool.connection() as conn:
+            try:
+                yield conn
+            finally:
+                if not conn.closed and conn.info.transaction_status != psycopg.pq.TransactionStatus.IDLE:
+                    conn.rollback()
+
     # --- 查询 ---
 
     def fetch_one(

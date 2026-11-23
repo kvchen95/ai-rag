@@ -70,6 +70,11 @@ async def healthz(request: Request) -> JSONResponse:
     # 配置指纹只在非生产环境暴露：这是排障用的，不是对外接口。
     if not settings.is_prod:
         body["config"] = settings.public_config()
+        # 摄取侧指纹：样本目录、重试上限、扫描锁 key。
+        #
+        # 锁 key 也在这里报，是为了让"验证并发 409"的脚本（scripts/verify_scan_api.py）
+        # 不必把数值抄一份——抄了之后改 key 不会红，脚本只会静静失去测并发的能力。
+        body["ingest"] = settings.public_ingest_config()
     if not ok:
         log_event(
             logger,

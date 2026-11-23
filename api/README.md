@@ -92,6 +92,122 @@ api/
 - 写失败不抛：调用方拿到 `AuditResult(ok=False)`，日志里是一条 ERROR
   `audit_write_failed`。审计挂掉不能把一次成功的回答变成失败，但也不能没人知道。
 
+## 摄取：样本扫描 / 判重 / ingest_jobs（§3.1、§4.4、附录 C.1）
+
+开发期摄取不是上传接口，是**扫目录**（§3.1）。三个模块，每个只管一件事：
+
+| 模块 | 做什么 | 为什么单独拆出来 |
+|---|---|---|
+| `ingest/fingerprint.py` | 路径 → `doc_key`；字节 → SHA-256；`version_id` | 判重的地基。三个调用方（扫描、将来的上传、评测脚本）必须算出**同一个** key，算法只能在一个人手里 |
+| `ingest/decide.py` | 扫描判定表（五格） | 全卡最容易改错的地方，纯函数才能把每格正反都测一遍 |
+| `ingest/jobs.py` | `ingest_jobs` 状态机 + 重试计数 | 状态迁移只能在这一处写 SQL，否则"哪几个状态能跳"会散开 |
+| `ingest/scan.py` | 扫目录、锁、按结论写库、报计数 | 唯一有副作用的一层 |
+| `ingest/lockkeys.py` | 扫描锁 key 的派生 | 必须落在 int8 内；零依赖，避免 `config.py` 反向依赖 psycopg |
+
+### doc_key 归一化
+
+§2.1 要求"去掉版本号、日期、序号后缀，只保留主体名"，具体规则：
+
+```text
+samples/policy/travel-cn.pdf              -> policy/travel-cn
+samples/policy/差旅管理办法-2025版.pdf      -> policy/差旅管理办法
+samples/policy/差旅管理办法-2025版-第2稿.pdf -> policy/差旅管理办法   （剥到稳定）
+samples/policy/差旅管理办法（2）.pdf         -> policy/差旅管理办法
+samples/hr/leave-2025.pdf                 -> hr/leave
+samples/x/2024-差旅.pdf                    -> x/2024-差旅        （中间的日期是主体，不剥）
+samples/x/2025.pdf                        -> x/2025            （剥空则回退原名，不产空 key）
+```
+
+只剥**段尾**修饰、剥到不再变化为止、剥空则回退原名、最后小写（`doc_key` 是标识符，
+展示名在 `documents.filename`）。`policy/travel-cn` 这类带 `/` 的 key 在路由里必须用
+`{doc_key:path}`，否则 FastAPI 只匹配到第一段。
+
+### 判定表（§3.1）与跳过原因
+
+**判定只看库里已有的既成事实**（documents 行是否存在、同 `(doc_key, file_hash)` 版本的状态）：
+
+| 情况 | 结论 | 写库动作 | 响应字段 |
+|---|---|---|---|
+| 新 `doc_key` | `add` | 建 documents + pending 版本 + 入队 | `added+1` |
+| 已有文档、新指纹 | `change` | 建 pending 版本 + 入队（**不动旧 active**） | `changed+1` |
+| 同指纹且版本 pending/active/skipped | `skip` / `unchanged` | 什么都不写 | `skipped+1` |
+| 同指纹但版本 `failed` | `skip` / `version_failed` | 什么都不写 | `skipped+1` |
+| 同指纹但版本 deprecated/purged | `skip` / `content_revert` | 什么都不写（回滚走 §4.4 翻牌） | `skipped+1` |
+| 两个文件归一化撞同一 key | `fail` / `doc_key_collision` | 两份都不入库 | `failed+1` |
+| 文件读不到 | `fail` / `unreadable` | 记一条 `failed` job（`version_id` 为空） | `failed+1` |
+
+后三种跳过必须分开报：只报一个 `skipped` 计数，运维看不出"这个文件其实一直解析失败"。
+
+**扫描永远不把版本置 `active`**：翻牌是 A3 的翻牌事务独占的动作（§4.1）。所以
+"指纹变了"只产生 pending 版本，`GET /documents/{doc_key}` 的 `active_version` 保持旧值，
+`documents.status` 在有 active 版本时也保持 `active`。
+
+### 单任务锁
+
+`pg_try_advisory_lock`（会话级，不是事务级——整轮扫描跨多个事务，事务级锁在第一个
+commit 就释放）。拿不到直接抛 `ScanInProgress` → 接口 409，**不排队**：并发第二次扫描
+只会看到同一批文件、算出同样的指纹，纯浪费 IO，还要抢同一批行锁。
+
+两个实现细节都是踩出来的：
+
+- 锁与所有写**共用同一条连接**（`PgDatabase.session()`）。锁挂在连接 A、写走连接 B 时，
+  B 可能在池里排在持有锁的 A 后面，形成自己等自己。
+- 锁 key 必须落在 **int8** 内。手写十六进制字面量很容易超（`0x61695F7261675F7363616E`
+  会被 PG 当 numeric，`pg_try_advisory_lock` 直接报 `function does not exist`），
+  所以从固定字符串取 sha256 前 8 字节并显式折成带符号 int8（`ingest/lockkeys.py`）。
+
+### ingest_jobs 状态机（002 迁移把它落成了 CHECK）
+
+```text
+         enqueue              claim                succeed
+  [*] -> queued --------------------> running --------------> succeeded
+            ^                            |
+            |  requeue (retry+1)         |  fail：还有额度 -> queued(retry+1)
+            +----------------------------+        额度用尽 -> failed
+            |
+            +--> canceled（queued/running 都能取消）
+```
+
+- **重试是同一行原地 `retry_count+1`**，不是新插一条：否则"失败过几次"散在多行里，
+  统计口径就说不清。`INGEST_MAX_RETRIES=3` = 1 次尝试 + 3 次重试 = 最多 4 次执行。
+- **`failed` 是终态**，不再回 `queued`。否则"一直失败的文件"每轮扫描都重跑一次，
+  日志被同一个问题刷满而看不出是同一个问题。
+- 数据库层的五条约束（`db/migrations/002_ingest_job_status.sql`）：
+  status 枚举、`running` 必须带 `started_at`、终态必须带 `finished_at`、
+  `failed` 必须带 `error`、同一版本最多一个未结束任务（部分唯一索引）。
+- `claim_next_job` 用 `FOR UPDATE SKIP LOCKED`，多 worker 不用应用层排队。
+  可选 `doc_key=` 参数用于按文档串行或定向调试。
+
+### 接口
+
+```bash
+curl -sX POST http://127.0.0.1:8000/api/v1/ingest/scan
+# {"added":1,"changed":0,"skipped":2,"failed":0,
+#  "reasons":{"unchanged":2},
+#  "items":[{"doc_key":"policy/travel-cn","filename":"travel-cn.pdf","outcome":"add",
+#            "version_id":"policy/travel-cn#7b0bcd16bc6b","job_id":7}]}
+
+curl -s http://127.0.0.1:8000/api/v1/documents/policy/travel-cn
+# {"doc_key":"policy/travel-cn","status":"queued","version_count":1,"pending_versions":1,
+#  "active_version":null,
+#  "latest_job":{"job_id":7,"status":"queued","retry_count":0,"retry_budget_left":3,...},
+#  "last_error":null}
+```
+
+错误走统一错误表（`errors.py`）：§11.3 之外补了三个契约码——`not_found`(404)、
+`scan_in_progress`(409)、`samples_missing`(500)。补码而不是在路由里手搓响应体，
+是为了让"409 要不要告警"仍然只有一个来源。
+
+`/healthz` 在非生产环境多返回一段 `ingest`（样本目录、重试上限、扫描锁 key）：
+验证脚本用它来制造"另一个进程持锁"的场景，不必把 key 数值抄一份——抄了之后改 key
+不会红，脚本只会静静失去测并发的能力。
+
+### 样本
+
+`samples/` 随仓库走（附录 B），由 `scripts/make_samples.py` 生成：纯 stdlib 手写 PDF 结构，
+xref 偏移由代码算出来，**字节确定**（不写时间戳）——这样 `file_hash` 稳定，才测得出
+"重复扫描跳过"。
+
 ## 配置
 
 两类，规则写在 `config.py` 顶部：
@@ -101,7 +217,8 @@ api/
   `GATE_REJECT_LOW`、`RETRIEVAL_TOP_K`、`RERANK_TOP_N_MIN/MAX`、`MAX_HOPS`、
   `EVIDENCE_MAX_CHARS`。缺了就启动失败，报错点名缺哪个变量。
 - **有默认值**（不改变业务语义）：连接池大小、连接/探测/模型调用超时、
-  `QA_BUDGET_S`、`MAX_QUESTION_CHARS`、`QA_MAX_CONCURRENCY`、`AUDIT_RETENTION_DAYS`。
+  `QA_BUDGET_S`、`MAX_QUESTION_CHARS`、`QA_MAX_CONCURRENCY`、`AUDIT_RETENTION_DAYS`、
+  `INGEST_SAMPLES_DIR`（样本目录位置）、`INGEST_MAX_RETRIES`（默认 3，口径见 §4.4）。
 
 跨字段校验在加载时就做：`GATE_REJECT_NONE < GATE_REJECT_LOW`、
 `RERANK_TOP_N_MIN <= RERANK_TOP_N_MAX <= RETRIEVAL_TOP_K`、配了网关必须有模型名。
@@ -240,6 +357,10 @@ WSL 里没有 docker 客户端时：`ln -sf "/mnt/c/Program Files/Docker/Docker/
 - 去掉 Qdrant 侧的 `date_confidence='explicit'` → 对拍与"只认显式时间"红。
 - 把 admin 的"去掉整条 ACL"改成"仍带 public 分支" → 结构用例红（语义错、结果同）。
 - 去掉版本兜底 → `ch_oldver` 漏进候选池，对拍红。
+- 把同指纹 `failed` 版本的跳过原因从 `version_failed` 改成 `unchanged` →
+  判定表用例与"失败原因要能报出来"的集成用例共 3 条红。
+- 让扫描直接把新版本置 `active` → 冷扫与"旧 active 不受影响"等 4 条红。
+- 让 `_acquire_scan_lock` 拿不到锁时静默放行 → 并发扫描的 409 用例红。
 
 ## 还没做（留给后续卡）
 
@@ -249,3 +370,6 @@ WSL 里没有 docker 客户端时：`ln -sf "/mnt/c/Program Files/Docker/Docker/
 - 限额的执行（并发上限、30 秒预算）：配置已就位，执行点属于 B4 的流式接口。
 - 时间归一的"最近 N 天""今年以来"等窗口型说法：本卡只做了卡片点名的四种
   （去年/上个月/前年/三月）+ 绝对日期，其余落到"未限定时间"并说明。
+- 摄取侧没做的（都不是本卡的验收项）：PDF 解析与切片（A2）、翻牌/同步/回收（A3）、
+  崩溃 worker 的任务回收（超时判失败，§4.4 提到但需要 worker 落地）、
+  文件读不到时的告警升级（现在只进 `ingest_jobs.error` 与日志）。
