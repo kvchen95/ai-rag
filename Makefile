@@ -17,7 +17,7 @@ API_TEST_NETWORK ?= ai-rag_default
 API_TEST_DSN ?= postgresql+psycopg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)
 
 .DEFAULT_GOAL := help
-.PHONY: help dev up up-models down logs ps build pull config health wait reset qdrant-init psql smoke web-build prints-env test-api test-api-db api-dev-image db-migrate db-status index-rebuild index-rebuild-dry samples scan doc verify-scan-api
+.PHONY: help dev up up-models down logs ps build pull config health wait reset qdrant-init psql smoke web-build prints-env test-api test-api-db api-dev-image db-migrate db-status index-rebuild index-rebuild-dry samples scan doc verify-scan-api promote rollback vector-sync reconcile reconcile-dry reclaim reclaim-dry ingest-status verify-a3 verify-a3-api test-a3 test-a3-vectors test-a3-flip test-a3-sync
 
 help:
 	@echo "ai-rag local dev — targets"
@@ -43,6 +43,18 @@ help:
 	@echo "  make scan        # 扫 samples/：added/changed/skipped/failed"
 	@echo "  make doc DOC_KEY=policy/travel-cn  # 查文档入库状态"
 	@echo "  make verify-scan-api  # 实测 /api/v1/ingest/scan 的 200/404/409"
+	@echo ""
+	@echo "  A3（§3.6、§4）— 双向量入库 / 翻牌 / 同步 / 回收"
+	@echo "  make promote VERSION_ID='policy/travel-cn#a91f'  # 索引+翻牌+同步+对账"
+	@echo "  make rollback VERSION_ID='policy/travel-cn#a91f' # 24h 内回滚"
+	@echo "  make vector-sync    # 把期望状态推给 Qdrant（失败退避重试）"
+	@echo "  make reconcile      # 两边对账并按 PG 修好（有残留则非零退出）"
+	@echo "  make reclaim-dry    # 看有多少旧版本过窗口（24h）"
+	@echo "  make ingest-status  # 版本/切片/同步/漂移一眼看（双 active 即非零）"
+	@echo "  make verify-a3      # 端到端演练（真 PG/Qdrant/TEI，8 步）"
+	@echo "  make verify-a3-api  # promote/reconcile 的 404/409/422 契约实测"
+	@echo "  make test-a3        # A3 集成用例（需真 PG + Qdrant + embedding）"
+	@echo ""
 	@echo "  make test-api    # 跑 api/tests（单元用例；读 PG 的集成用例自动跳过）"
 	@echo "  make test-api-db # 同上，且把宿主 PG 指给集成用例（host.docker.internal）"
 	@echo ""
@@ -110,6 +122,48 @@ doc:
 verify-scan-api:
 	@python3 scripts/verify_scan_api.py
 
+# --- A3：双向量入库 / 翻牌 / 同步 / 回收（§3.6、§4）---------------------------
+# 版本转正：索引（dense+bm25）-> 翻牌 -> 同步 -> 对账。VERSION_ID 必填。
+promote:
+	@test -n "$(VERSION_ID)" || (echo "usage: make promote VERSION_ID='policy/travel-cn#a91f'" && exit 1)
+	@$(COMPOSE) exec -T api python scripts/a3_ingest.py promote "$(VERSION_ID)"
+
+# 24h 内回滚到旧版。
+rollback:
+	@test -n "$(VERSION_ID)" || (echo "usage: make rollback VERSION_ID='policy/travel-cn#a91f'" && exit 1)
+	@$(COMPOSE) exec -T api python scripts/a3_ingest.py rollback "$(VERSION_ID)"
+
+# 消费期望状态（翻牌后把 payload.status 推给 Qdrant；失败退避重试）。
+vector-sync:
+	@$(COMPOSE) exec -T api python scripts/a3_ingest.py sync
+
+# 两边对账：默认按 PG 修好。有残留差异 -> 非零退出。
+reconcile:
+	@$(COMPOSE) exec -T api python scripts/a3_ingest.py reconcile
+
+# 只看差异，不改任何东西。
+reconcile-dry:
+	@$(COMPOSE) exec -T api python scripts/a3_ingest.py reconcile --dry-run
+
+# 回收过窗口的旧版本（切片 + 向量点 + 切片图）。先 dry-run 看条数。
+reclaim-dry:
+	@$(COMPOSE) exec -T api python scripts/a3_ingest.py reclaim --dry-run
+
+reclaim:
+	@$(COMPOSE) exec -T api python scripts/a3_ingest.py reclaim
+
+# 一眼看现状：版本/切片状态分布、待同步数、未修漂移、集合点数。双 active 即非零退出。
+ingest-status:
+	@$(COMPOSE) exec -T api python scripts/a3_ingest.py status
+
+# 端到端演练（真 CLI/真 PG/真 Qdrant/真 TEI，8 步走完 §4）。宿主跑。
+verify-a3:
+	@python3 scripts/verify_a3_pipeline.py
+
+# 契约实测：promote 的 404/409/422、reconcile 的 409。需要先起一个 api。
+verify-a3-api:
+	@python3 scripts/verify_a3_api.py
+
 # --- schema / index（DA1）-----------------------------------------------------
 # 迁移只在 api 容器里跑：宿主没有 psycopg，容器里装了（见 infra/api/requirements.txt）。
 db-migrate:
@@ -166,3 +220,42 @@ b2-mutation: api-dev-image
 # 执行计划：灌 20000 行 → 打四种身份形态的过滤计划 → 清理。
 b2-explain:
 	@bash scripts/b2_explain.sh
+
+# --- A3 集成用例 --------------------------------------------------------------
+# 需要真 PG + 真 Qdrant + 真 embedding 三个都通。缺一个就会 skip（不假装跑过），
+# 所以这里显式把三个地址都传进去，避免"跑完了但全是 skipped"这种假绿。
+# 用例自己建/删 a3_test_* 集合，不碰共享 kb_chunks。
+test-a3: api-dev-image
+	@$(DOCKER) run --rm --network $(API_TEST_NETWORK) -e RUN_MIGRATIONS=0 \
+		-e AI_RAG_TEST_DATABASE_URL="$(API_TEST_DSN)" \
+		-e QDRANT_URL="http://qdrant:6333" \
+		-e EMBEDDING_BASE_URL="http://embedding:8000/v1" \
+		-e EMBEDDING_API_KEY=local \
+		-e EMBEDDING_MODEL="$${EMBEDDING_MODEL:-BAAI/bge-small-zh-v1.5}" \
+		-e EMBEDDING_DIM="$${EMBEDDING_DIM:-512}" \
+		$(API_DEV_IMAGE) pytest -c api/pytest.ini api/tests/a3
+
+# 只跑双向量入库那一组（最快能证明"一个点同时有 dense+bm25"）。
+test-a3-vectors: api-dev-image
+	@$(DOCKER) run --rm --network $(API_TEST_NETWORK) -e RUN_MIGRATIONS=0 \
+		-e AI_RAG_TEST_DATABASE_URL="$(API_TEST_DSN)" \
+		-e QDRANT_URL="http://qdrant:6333" \
+		-e EMBEDDING_BASE_URL="http://embedding:8000/v1" \
+		-e EMBEDDING_API_KEY=local \
+		-e EMBEDDING_DIM="$${EMBEDDING_DIM:-512}" \
+		$(API_DEV_IMAGE) pytest -c api/pytest.ini api/tests/a3/test_vectors.py
+
+# 只跑翻牌事务那一组（无双 active / 事务性 / 并发）。
+test-a3-flip: api-dev-image
+	@$(DOCKER) run --rm --network $(API_TEST_NETWORK) -e RUN_MIGRATIONS=0 \
+		-e AI_RAG_TEST_DATABASE_URL="$(API_TEST_DSN)" \
+		$(API_DEV_IMAGE) pytest -c api/pytest.ini api/tests/a3/test_flip.py
+
+# 只跑同步 + 对账 + 回收（不编码正文，只要 PG + Qdrant，最快）。
+test-a3-sync: api-dev-image
+	@$(DOCKER) run --rm --network $(API_TEST_NETWORK) -e RUN_MIGRATIONS=0 \
+		-e AI_RAG_TEST_DATABASE_URL="$(API_TEST_DSN)" \
+		-e QDRANT_URL="http://qdrant:6333" \
+		-e EMBEDDING_BASE_URL="http://embedding:8000/v1" \
+		-e EMBEDDING_API_KEY=local \
+		$(API_DEV_IMAGE) pytest -c api/pytest.ini api/tests/a3/test_sync.py api/tests/a3/test_reconcile_reclaim.py

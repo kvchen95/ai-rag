@@ -85,6 +85,16 @@ class PgDatabase:
 
     # --- 事务 ---
 
+    @property
+    def pool(self) -> ConnectionPool[Any]:
+        """底层连接池。给"一次逻辑动作跨多个短事务"的调用方用（`sync.drain`）。
+
+        公开它而不是让调用方摸 `_pool`：`drain` 确实需要逐条领任务、各自提交，
+        `connection()` 的"退出即提交"包不住它。与其让每个调用方各抄一份私有访问，
+        不如把这条通道摆到明面上，并在文档里说清它只给这种场景用。
+        """
+        return self._pool
+
     @contextmanager
     def connection(self) -> Iterator[psycopg.Connection[Any]]:
         """一个事务。正常退出提交，异常回滚——不提供 autocommit 入口，

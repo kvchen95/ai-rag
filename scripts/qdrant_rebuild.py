@@ -6,6 +6,8 @@ the effective date. This script re-derives, for each chunk:
 
   * dense  : bge-small-zh-v1.5 (512d, TEI)          -> vector["dense"]
   * sparse : Qdrant server-side BM25, modifier=idf   -> vector["bm25"] = {"text": ...}
+             （正文先过 `qdrant_common.bm25_text()` 做中文 bigram 切分；不切的话
+             整句中文只产出 1 个 token，关键词路对中文等于废掉）
   * payload: doc_key / version_id / status / is_public / allowed_depts /
              allowed_roles / effective_year / chunk_type (+ chunk_id, parent_id, page_num)
 
@@ -274,7 +276,7 @@ def main() -> int:
                     "id": pid,
                     "vector": {
                         qc.DENSE_VECTOR: vec,
-                        qc.SPARSE_VECTOR: {"text": r["content_text"], "model": qc.BM25_MODEL},
+                        qc.SPARSE_VECTOR: qc.bm25_vector(r["content_text"]),
                     },
                     "payload": qc.build_payload(r),
                 })
@@ -295,7 +297,7 @@ def main() -> int:
                     "id": pid,
                     "vector": {
                         qc.DENSE_VECTOR: vec,
-                        qc.SPARSE_VECTOR: {"text": r["content_text"], "model": qc.BM25_MODEL},
+                        qc.SPARSE_VECTOR: qc.bm25_vector(r["content_text"]),
                     },
                     "payload": qc.build_payload(r),
                 })

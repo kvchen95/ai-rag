@@ -193,21 +193,52 @@ def scan_samples(
 
 
 # --- 锁 ----------------------------------------------------------------------
+#
+# 这里有一处**实测过的顺序陷阱**（B2 在 `test_ingest_scan_integration` 上撞到 5 个
+# 用例连环报 409）：
+#
+#   `pg_try_advisory_lock` 是**会话级**锁，而 `conn.commit()` / `conn.rollback()`
+#   会把连接**还给池**；还池时 psycopg_pool 会 reset 连接，但 reset **不释放**
+#   advisory lock（实测：reset 之后 `pg_locks` 里那条 advisory 记录还在）。
+#
+#   于是"先 commit 再把连接还池、等会儿拿另一条连接去 unlock"这件事不成立：
+#   unlock 发给了另一个会话，原来的锁留在原后端上直到那个连接被回收。表现是
+#   "第一次扫描之后，后面每次扫描都 409"——而且时好时坏（取决于池把哪条连接给你）。
+#
+# 正确做法有两条，这里都做：
+#
+#   1. 拿锁与放锁**在同一个 `with pg.session()` 块里**（同一后端），中间不 commit
+#      拿到的锁（commit 会还连接，但我们在同一个块里所以拿回来的是同一条）；
+#   2. unlock 之后再 commit —— 先解锁，再让连接回到池里。
+#
+# 契约：调用方必须在一个 `pool.connection()` / `session()` 块内成对调用，且不要在
+# 两者之间 commit。`scan_samples()` 就是这么用的。
 
 
 def _acquire_scan_lock(conn: Connection[Any]) -> None:
+    """会话级尝试拿锁。拿到返回 None，拿不到抛 `ScanInProgress`。
+
+    **不 commit**：commit 会让连接还池，锁可能落在另一条前端连接上（见上文）。
+    锁本身不依赖事务，所以不 commit 也能生效。
+    """
     with conn.cursor() as cur:
         cur.execute("SELECT pg_try_advisory_lock(%s)", (SCAN_LOCK_KEY,))
         row = cur.fetchone()
-    conn.commit()
     if not row or not row[0]:
         raise ScanInProgress()
 
 
 def _release_scan_lock(conn: Connection[Any]) -> None:
+    """解锁后提交。解锁失败就关连接——连接断了锁自动释放，总比留僵尸锁强。"""
     try:
         with conn.cursor() as cur:
             cur.execute("SELECT pg_advisory_unlock(%s)", (SCAN_LOCK_KEY,))
+            row = cur.fetchone()
+        if not row or not row[0]:
+            # 解锁返回 false = 这把锁本来不在当前会话上（说明拿锁与放锁不是同一后端）。
+            # 这时锁还挂在别的后端上，只能靠关连接强制释放——但我们的连接上并没有它，
+            # 所以只能记一条日志，让运维知道发生了"错位"。
+            log_event(logger, "scan_lock_release_missed", level=40)
         conn.commit()
     except Exception:  # noqa: BLE001 - 释放失败必须让连接死掉，否则锁会变僵尸
         log_exception(logger, "scan_lock_release_failed")

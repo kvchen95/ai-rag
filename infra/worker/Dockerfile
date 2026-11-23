@@ -10,9 +10,12 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-COPY infra/worker/requirements.txt /tmp/requirements.txt
+# worker 复用 api 的依赖清单：它 import api.ingest.* / api.clients.* / api.config，
+# 两份 requirements.txt 迟早出现"worker 里少一个包"这类隐性故障（A1 的 worker
+# requirements 里 qdrant-client 还是 1.12，而服务端是 1.15）。
+COPY infra/api/requirements.txt /tmp/requirements.txt
 RUN pip install --upgrade pip && pip install -r /tmp/requirements.txt
 
-COPY infra/worker/placeholder_worker.py /opt/placeholder/placeholder_worker.py
-
-CMD ["python", "/opt/placeholder/placeholder_worker.py"]
+# 源码由 compose 挂载（../:/app），镜像里不放代码：改代码不用重建镜像。
+# 入口是 vector_sync 常驻循环（§4.2：翻牌后的期望状态必须有东西消费）。
+CMD ["python", "worker/vector_sync_worker.py"]

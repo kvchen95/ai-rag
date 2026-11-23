@@ -46,6 +46,10 @@ class ErrorCode(StrEnum):
     # 扫描目录不存在/不可读：这不是"扫完发现 0 个文件"，而是摄取根本无法开始。
     # 归 internal 会跟真正的代码 bug 混在一起，归 invalid_request 又不是入参问题。
     SAMPLES_MISSING = "samples_missing"
+    # A3：要翻的版本不在可翻的状态（已 active / 已 deprecated / 已 purged）。
+    # 这是并发或操作顺序问题（别人先翻了），不是入参错误也不是服务故障，
+    # 所以给 409 而不是 422——调用方该做的是"刷新状态再看"，不是"改请求"。
+    VERSION_CONFLICT = "version_conflict"
 
 
 class AlertPolicy(StrEnum):
@@ -92,6 +96,9 @@ ERROR_SPECS: Mapping[ErrorCode, ErrorSpec] = {
     ErrorCode.SCAN_IN_PROGRESS: ErrorSpec(409, "扫描正在进行中", AlertPolicy.BURST),
     # 配置/部署问题，不是用户问题：出现即告警（通常是挂载没挂上或路径写错）。
     ErrorCode.SAMPLES_MISSING: ErrorSpec(500, "稍后重试", AlertPolicy.ALWAYS),
+    # 版本状态冲突：并发翻牌 / 重复翻牌。BURST 而不是 NONE——连续出现说明有人在
+    # 反复翻同一份文档，值得看一眼；单次出现是正常的幂等结果。
+    ErrorCode.VERSION_CONFLICT: ErrorSpec(409, "该版本状态已变更，请刷新后重试", AlertPolicy.BURST),
 }
 
 

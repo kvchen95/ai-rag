@@ -1,24 +1,35 @@
-"""摄取接口（详细设计.md 附录 C.1）。
+"""摄取接口（详细设计.md 附录 C.1 + §4 的转正/同步/对账/回收）。
 
-两个接口，形状照抄附录 C：
+六个接口：
 
 | 方法 | 路径 | 作用 | 失败 |
 |---|---|---|---|
 | POST | `/api/v1/ingest/scan` | 扫 samples/ | 409 任务进行中 |
 | GET  | `/api/v1/documents/{doc_key}` | 查入库状态 | 404 |
+| POST | `/api/v1/ingest/versions/{version_id}/promote` | 索引+翻牌+同步+对账 | 404/409/422 |
+| POST | `/api/v1/ingest/versions/{version_id}/rollback` | 24h 内回滚 | 404/409 |
+| POST | `/api/v1/ingest/sync` | 消费期望状态 | — |
+| GET  | `/api/v1/ingest/reconcile` | 两边对账（`?dry_run=true`） | — |
 
-四条实现约束：
+后四个是 A3 的运维面：翻牌与同步**必须**能通过接口触发，否则运维只能进容器敲脚本
+（那是"能跑"和"能运营"的区别）。它们都是同步阻塞的重活（编码、HTTP 往返），
+一律 `asyncio.to_thread` 丢线程池，理由同扫描：卡住事件循环会让 /healthz 探不到。
 
-1. **扫描是同步阻塞的重活**（读文件算指纹、写库），用 `asyncio.to_thread` 丢到线程池。
+五条实现约束：
+
+1. **扫描/翻牌都是同步阻塞的重活**，用 `asyncio.to_thread` 丢到线程池。
    否则一轮扫描会把事件循环卡住，连带 `/healthz` 都探不到——容器会被判 unhealthy。
-   psycopg 连接池是线程安全的，扫描线程借连接不受影响。
+   psycopg 连接池是线程安全的，工作线程借连接不受影响。
 2. **409 的判定点是"拿到锁没有"，不是"有没有 queued 任务"**。锁在库层，跨进程有效
    （两个 api 副本、或 api + 运维手跑脚本），内存里那把锁做不到这一点。
-3. **错误体走 `AppError`**，不在路由里手搓 409/404。§11.3 的表没有这两档，
-   所以 `errors.py` 补了 `not_found` / `scan_in_progress` 两个码——文案、状态码、
-   告警口径仍然只有一个来源。
+3. **错误体走 `AppError`**，不在路由里手搓 409/404。§11.3 的表没有这几档，
+   所以 `errors.py` 补了 `not_found` / `scan_in_progress` / `samples_missing` /
+   `version_conflict` 四个码——文案、状态码、告警口径仍然只有一个来源。
 4. **`doc_key` 是路径参数且带 `/`**（`policy/travel-cn`）。路由必须写
    `/documents/{doc_key:path}`，否则 FastAPI 只会匹配到 `policy` 那一段。
+   同理 `version_id` 也带 `#`（`policy/travel-cn#a91f`），用 `{version_id:path}`。
+5. **promote 的 422 与 409 分开**：版本找不到是 404，不是 pending（已翻过）是 409，
+   空版本是 422（"解析没产出东西"是内容问题，不是并发问题）。
 """
 
 from __future__ import annotations
@@ -32,13 +43,22 @@ from fastapi.responses import JSONResponse
 
 from api.clients.pg import PgDatabase
 from api.errors import AppError, ErrorCode
+from api.ingest.flip import (
+    EmptyVersion,
+    FlipError,
+    NotPending,
+    VersionNotFound,
+    rollback_to,
+)
 from api.ingest.jobs import latest_job_for_doc, retry_budget_left
+from api.ingest.reconcile import reconcile
 from api.ingest.scan import (
     SamplesRootMissing,
     ScanInProgress,
     get_document,
     scan_samples,
 )
+from api.ingest.sync import drain
 from api.observability import get_logger
 
 router = APIRouter(prefix="/api/v1", tags=["ingest"])
@@ -121,6 +141,165 @@ async def read_document(doc_key: str, request: Request) -> JSONResponse:
     if payload is None:
         raise AppError(ErrorCode.NOT_FOUND, detail=f"doc_key={doc_key}")
     return JSONResponse(status_code=200, content=payload)
+
+
+# --- A3：转正 / 回滚 / 同步 / 对账 --------------------------------------------
+#
+# 这四个动作都通过**同一个 pool + 同一个 store** 走，不另建连接：
+# `app.state.pg` 已经是进程单例的连接池，`_store(request)` 每请求新建（httpx.Client
+# 便宜，且它持有 keep-alive 连接、跨线程共享会有隐患——这些端点跑在 to_thread 里）。
+
+
+def _store(request: Request):
+    """每请求一个 QdrantVectorStore（httpx.Client 不做跨线程共享）。
+
+    参数全部来自 Settings，不读 os.environ：配置的唯一来源是 `api/config.py`，
+    脚本里读环境变量是脚本的事（那里没有 Settings），服务里读就是两套口径。
+    """
+    from api.ingest.vectors import QdrantVectorStore
+
+    settings = request.app.state.settings
+    return QdrantVectorStore(
+        base_url=settings.qdrant_url,
+        collection=settings.qdrant_collection,
+        api_key=settings.qdrant_api_key.get_secret_value(),
+        timeout_s=settings.qdrant_timeout_s,
+    )
+
+
+def _embedder(request: Request):
+    from api.ingest.vectors import Embedder
+
+    settings = request.app.state.settings
+    return Embedder(
+        base_url=settings.embedding_base_url,
+        model=settings.embedding_model,
+        dim=settings.embedding_dim,
+        api_key=settings.embedding_api_key.get_secret_value(),
+        timeout_s=settings.embedding_timeout_s,
+    )
+
+
+@router.post("/ingest/versions/{version_id:path}/promote")
+async def promote_version(version_id: str, request: Request) -> JSONResponse:
+    """把一个 pending 版本转正：索引 → 翻牌 → 同步 → 对账（§4.1、§4.2）。
+
+    顺序不能反（见 `api/ingest/pipeline.py` 的说明）：先写点（payload=pending，
+    检索看不到）再翻牌，就没有"版本已生效、向量库还空着"的窗口。
+    """
+    settings = request.app.state.settings
+
+    def _run() -> dict[str, Any]:
+        from api.ingest.pipeline import promote
+
+        store = _store(request)
+        embedder = _embedder(request)
+        try:
+            result = promote(
+                request.app.state.pg.pool,
+                store,
+                embedder,
+                version_id,
+                sync_max_attempts=settings.vector_sync_max_attempts,
+                sync_backoff_s=settings.vector_sync_backoff_s,
+            )
+            return result.as_dict()
+        finally:
+            embedder.close()
+            store.close()
+
+    try:
+        payload = await asyncio.to_thread(_run)
+    except VersionNotFound as exc:
+        raise AppError(ErrorCode.NOT_FOUND, detail=str(exc)) from exc
+    except EmptyVersion as exc:
+        raise AppError(ErrorCode.INVALID_REQUEST, detail=str(exc)) from exc
+    except NotPending as exc:
+        raise AppError(ErrorCode.VERSION_CONFLICT, detail=str(exc)) from exc
+    # 状态码：成功 200；失败但已落库（同步没完）用 207 表达"部分完成",
+    # 让调用方知道需要看 body 里的 drain/reconcile 而不是只看 HTTP 码。
+    return JSONResponse(status_code=200 if payload.get("ok") else 207, content=payload)
+
+
+@router.post("/ingest/versions/{version_id:path}/rollback")
+async def rollback_version(version_id: str, request: Request) -> JSONResponse:
+    """24 小时内把旧版翻回生效（§4.4）。"""
+    settings = request.app.state.settings
+
+    def _run() -> dict[str, Any]:
+        pg: PgDatabase = request.app.state.pg
+        store = _store(request)
+        try:
+            with pg.connection() as conn:
+                result = rollback_to(conn, version_id)
+            # 回滚同样是"库里改完再由同步器推 Qdrant"
+            report = drain(
+                pg.pool,
+                store,
+                max_attempts=settings.vector_sync_max_attempts,
+                backoff_s=settings.vector_sync_backoff_s,
+            )
+            return {"rollback": result.as_dict(), "drain": report.as_dict()}
+        finally:
+            store.close()
+
+    try:
+        payload = await asyncio.to_thread(_run)
+    except VersionNotFound as exc:
+        raise AppError(ErrorCode.NOT_FOUND, detail=str(exc)) from exc
+    except NotPending as exc:
+        raise AppError(ErrorCode.VERSION_CONFLICT, detail=str(exc)) from exc
+    except FlipError as exc:
+        raise AppError(ErrorCode.INVALID_REQUEST, detail=str(exc)) from exc
+    ok = payload["drain"]["failed"] == 0
+    return JSONResponse(status_code=200 if ok else 207, content=payload)
+
+
+@router.post("/ingest/sync")
+async def sync_vectors(request: Request) -> JSONResponse:
+    """消费到期的期望状态（worker 定时调它，运维也可手动触发）。"""
+    settings = request.app.state.settings
+
+    def _run() -> dict[str, Any]:
+        store = _store(request)
+        try:
+            report = drain(
+                request.app.state.pg.pool,
+                store,
+                max_attempts=settings.vector_sync_max_attempts,
+                backoff_s=settings.vector_sync_backoff_s,
+            )
+            return report.as_dict()
+        finally:
+            store.close()
+
+    payload = await asyncio.to_thread(_run)
+    return JSONResponse(status_code=200 if payload["failed"] == 0 else 207, content=payload)
+
+
+@router.get("/ingest/reconcile")
+async def reconcile_vectors(
+    request: Request, doc_key: str | None = None, dry_run: bool = False
+) -> JSONResponse:
+    """两边对账：默认按 PG 修好；`dry_run=true` 只报告（验收"漂移看得见"）。
+
+    **有残留差异就返回 409**（不是 200）：这个接口的主要用途是健康检查与验收，
+    返回 200 而 body 里写着 `remaining: 3` 会让调用方以为一切正常。
+    """
+    def _run() -> dict[str, Any]:
+        pg: PgDatabase = request.app.state.pg
+        store = _store(request)
+        try:
+            with pg.connection() as conn:
+                report = reconcile(conn, store, doc_key=doc_key, dry_run=dry_run)
+            return report.as_dict()
+        finally:
+            store.close()
+
+    payload = await asyncio.to_thread(_run)
+    return JSONResponse(
+        status_code=409 if payload["remaining"] else 200, content=payload
+    )
 
 
 def _job_payload(job: dict[str, Any], *, max_retries: int) -> dict[str, Any]:

@@ -362,6 +362,68 @@ WSL 里没有 docker 客户端时：`ln -sf "/mnt/c/Program Files/Docker/Docker/
 - 让扫描直接把新版本置 `active` → 冷扫与"旧 active 不受影响"等 4 条红。
 - 让 `_acquire_scan_lock` 拿不到锁时静默放行 → 并发扫描的 409 用例红。
 
+## 向量入库 / 转正 / 同步 / 回收（A3：§3.6、§4）
+
+翻牌要改三处（旧版下线、新版生效、切片状态同步），而向量库是副本。核心设计是：
+**翻牌事务只写"向量库应该是什么样"，不发 HTTP**；URL 里那一步由同步器在事务外消费。
+这样 PG 的事务边界不会被网络抖动绑住，而"翻牌发生过"这件事一定有记录。
+
+| 模块 | 做什么 | 关键取舍 |
+|---|---|---|
+| `ingest/vectors.py` | 一个切片写一个 point（dense + bm25 + payload），并回填 PG 的 `embedding_dense` | 先写点（payload=pending，检索看不到）再翻牌：反过来会有"版本已生效、向量库还空着"的窗口 |
+| `ingest/flip.py` | 一个事务改三处 + 写期望状态 | 空版本拒绝翻（否则旧版下线、新版无片 = 服务翻空）；降级在前、激活在后（否则撞 `ux_active_version`） |
+| `ingest/sync.py` | 消费期望状态：按 version_id 批量改 `payload.status` / 删点，失败退避重试 | 用**租约**而非行锁：领任务先提交，再做 HTTP 崩溃后租约到期自动重领，不需要"清理僵尸任务" |
+| `ingest/reconcile.py` | 两边对账，以 PG 为准覆盖 | 补点用 PG 已存的 `embedding_dense`，**不调编码服务**（编码挂时仍可修）；修不了的进 `remaining` 不假装修好 |
+| `ingest/reclaim.py` | 过 24h 窗口的旧版：切片 + 点 + 图 | 先删库行、点交给同步器补删（§4.4"向量库不可用时先删库行"）；`deprecated_at` 未知时补时间戳并跳过本轮，绝不"立刻删" |
+| `ingest/pipeline.py` | index → flip → drain → reconcile | 前置条件不满足抛 `FlipError` 子类（404/409/422 靠它区分），其余失败留在返回值里 |
+| `ingest/doclock.py` | 文档级事务锁 | 扫描/翻牌/回收共用同一表达式 `pg_advisory_xact_lock(hashtext(doc_key))`；一处定义，避免表达式漂移成两把锁 |
+
+### 三条会静默失效的判据
+
+这三条都不报错、不抛异常，只是"效果悄悄变差"，所以各自都有专门的用例盯着：
+
+1. **中文 BM25 必须预分词**。实测（Qdrant 1.15.3 + `modifier=idf`）：服务端的
+   `qdrant/bm25` 只按空白与标点切词，`住宿费标准每人每天500元` 整句只产出 **1 个
+   token**，而 `{"text": "住宿费"}` 的查询跟它对不上。三组对照的 top1 命中率：
+   原文↔原文 `1/4`、bigram↔bigram `3/4`、bigram 入库配原文查询 `2/4`。
+   所以 `qdrant_common.bm25_text()` 做中文 bigram + 拉丁整词，**入库与查询两侧
+   都必须过它**。为什么不是接分词器：分词器带词典版本，换一版就换一套切法，
+   历史索引与新查询不再对齐；bigram 无参数，重建前后必然一致。
+2. **跳过不是成功**。零宽字符（U+200B/200D/FEFF）能过 `ck_chunks_text_nonempty`
+   （它用 `btrim`），但 BM25 切出 0 个 token——Qdrant 收下、那条切片永远召回不到。
+   写入侧判据是"有没有可检索字符"，被跳过的切片让 `IndexReport.ok` 为 false。
+3. **同步成功不是 HTTP 200**。filter 写错时 Qdrant 照样返回 `completed`（实测：
+   一条都不匹配也返回 200）。所以 `verify_desired()` 回读两边的状态分布：
+   点总数、`status=desired` 的点数都必须与 PG 一致。
+
+### 接口
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/api/v1/ingest/versions/{version_id}/promote` | 索引+翻牌+同步+对账。404 无此版本 / 409 已翻过 / 422 空版本 |
+| POST | `/api/v1/ingest/versions/{version_id}/rollback` | 24h 内回滚。404 / 409 |
+| POST | `/api/v1/ingest/sync` | 消费期望状态 |
+| GET | `/api/v1/ingest/reconcile?doc_key=&dry_run=` | 对账。**有残留差异返回 409**（不是 200）——否则调用方会以为一切正常 |
+
+`version_id` 带 `#`（`policy/travel-cn#a91f`），路由用 `{version_id:path}`，
+URL 里要编码成 `%23`。
+
+### 运维入口
+
+```bash
+make promote VERSION_ID='policy/travel-cn#a91f'   # 一条命令转正
+make ingest-status                                # 版本/切片/同步/漂移一眼看（双 active 即非零退出）
+make reconcile-dry                                # 只看漂移，不改
+make reclaim-dry                                  # 看有多少旧版过了 24h 窗口
+make verify-a3                                    # 端到端演练：8 步走完 §4（真 PG/Qdrant/TEI）
+make verify-a3-api                                # HTTP 契约：404/409/422/409
+make test-a3                                      # 63 个集成用例
+```
+
+进展状态的消费者是 `worker/vector_sync_worker.py`（常驻循环，默认 10s 一轮、
+每 10 轮一次全量对账）。没有它，翻牌在库里生效而向量库永远不知道——所以它不是
+可选的运维便利，是 §4.2"翻牌后一分钟内必须同步完"的必要条件。
+
 ## 还没做（留给后续卡）
 
 - Query 理解/检索/门控（B3）、生成/校验/SSE（B4）：路由挂到 `api/routers/` 下，
@@ -370,6 +432,12 @@ WSL 里没有 docker 客户端时：`ln -sf "/mnt/c/Program Files/Docker/Docker/
 - 限额的执行（并发上限、30 秒预算）：配置已就位，执行点属于 B4 的流式接口。
 - 时间归一的"最近 N 天""今年以来"等窗口型说法：本卡只做了卡片点名的四种
   （去年/上个月/前年/三月）+ 绝对日期，其余落到"未限定时间"并说明。
-- 摄取侧没做的（都不是本卡的验收项）：PDF 解析与切片（A2）、翻牌/同步/回收（A3）、
-  崩溃 worker 的任务回收（超时判失败，§4.4 提到但需要 worker 落地）、
-  文件读不到时的告警升级（现在只进 `ingest_jobs.error` 与日志）。
+- 摄取侧没做的（都不是本卡的验收项）：PDF 解析与切片（A2）、崩溃 worker 的任务
+  回收（超时判失败，§4.4 提到但需要 worker 心跳落地）、文件读不到时的告警升级
+  （现在只进 `ingest_jobs.error` 与日志）。
+- **A3 的 reclaim 还没接定时触发**：`make reclaim` 是手动/运维入口，
+  `scripts/a3_ingest.py reclaim` 本身幂等，挂到 cron 或 worker 的每日一轮即可
+  （worker 目前只跑同步 + 对账）。
+- **BM25 预分词的查询侧**：`bm25_text()` 已在 `scripts/qdrant_common.py`，
+  但检索卡（B3）的查询体力化必须自己调它——本卡只保证了入库侧，
+  两侧共用同一个函数是 B3 的落点（漏了会从 3/4 掉到 2/4，见上文实测）。

@@ -48,6 +48,7 @@ docker compose exec -T api python scripts/qdrant_init.py --recreate     # 维度
 |---|---|---|
 | `001_init.sql` | 五张表 + 视图 + 索引/约束 | DA1 |
 | `002_ingest_job_status.sql` | `ingest_jobs` 状态枚举 CHECK、`running` 必须有 `started_at`、终态必须有 `finished_at`、`failed` 必须带 `error`、同一版本最多一个未结束任务 | A1 |
+| `003_vector_sync.sql` | `doc_versions.deprecated_at`（回收窗口起点）+ `vector_sync_tasks`（向量库期望状态）+ `vector_drift_log`（漂移账） | A3 |
 
 ### 造一个干净库
 
@@ -99,7 +100,32 @@ v_active_chunks   — 视图：version 与 chunk 双 active 的切片 = 可检�
 | 审计 | 一次问答一行，含身份快照（`user_id` / `user_depts` / `user_roles` / `is_admin`），保留 1 年；只存切片编号与分数摘要，不存原文 | §11.2 |
 
 `chunks.embedding_dense` 是**可选缓存列**：检索走 Qdrant，PG 里这一列只用于离线分析
-（聚类、去重、相似切片排查）。`NULL` 不影响任何链路。
+（聚类、去重、相似切片排查）。**A3 之后它还会被写入**：每次索引完把稠密向量回填进来，
+这样"向量库丢了点"可以只靠库内数据补回（对账的 `missing_point` 修复路径），
+不需要重新调编码服务。仍然可以为 `NULL`（老数据/未索引版本），不影响任何链路。
+
+`doc_versions.deprecated_at`（003 加的列）是**回收窗口的起点**：§4.3 的 24h 从这一刻
+起算。001 里那个索引原本建在 `activated_at` 上，那列记的是"生效时间"——拿下线时长
+去比生效时间，会把"生效 30 天才被取代"的版本在翻牌瞬间判成已过期、直接删掉仍在
+窗口内的回滚门。003 把索引改到 `deprecated_at` 并回填了历史行。
+
+### 向量库副本的两张表（003，A3）
+
+| 表 | 一行代表 | 谁写 | 谁读 |
+|---|---|---|---|
+| `vector_sync_tasks` | 一个版本的**期望状态**（active / deprecated / purged） | 翻牌、回滚、回收（**同一个事务**） | `sync.drain`（worker 循环 / API） |
+| `vector_drift_log` | 一处"两边不一致" | 同步重试耗尽、对账 | 对账、告警、`GET /api/v1/ingest/reconcile` |
+
+`vector_sync_tasks` 是**期望状态**而不是任务流水（`version_id` 主键，一个版本一行）：
+同一版本 24h 内可能被反复翻牌，流水会引入"两条相反指令谁先谁后"的问题；期望状态
+永远只有一句"它现在应该是 X"，重放天然幂等。期望**变了**才重置 `attempts` / `status`，
+没变就不动——否则每小时的对账会把已经同步好的版本反复重推。
+
+`vector_drift_log` 有 `uq_vector_drift_open_dedupe`（`dedupe_key` 上的部分唯一索引，
+`WHERE NOT fixed`）：同一处未修复的漂移只留一行。没有它，每小时的巡检会在账上刷出
+24 条同样的记录，"漂移次数"这个指标就废了。
+
+---
 
 `ingest_jobs.status` 的枚举已由 **A1 定稿并落成 CHECK**（`db/migrations/002_ingest_job_status.sql`）：
 
@@ -141,7 +167,12 @@ v_active_chunks   — 视图：version 与 chunk 双 active 的切片 = 可检�
 }
 ```
 
-- 写入时同一 point 带两路：`vector.dense = [512 float]`，`vector.bm25 = {"text": content_text, "model": "qdrant/bm25"}`
+- 写入时同一 point 带两路：`vector.dense = [512 float]`，`vector.bm25 = qdrant_common.bm25_vector(content_text)`
+- **中文必须先 bigram 切分再进 BM25**（A3 实测）。服务端 `qdrant/bm25` 只按空白和
+  标点切词，整句中文只产出 1 个 token → 关键词路对中文等于废掉。三组对照的 top1
+  命中率：原文↔原文 `1/4`、bigram↔bigram `3/4`、bigram 入库配原文查询 `2/4`。
+  所以 `bm25_vector()` / `bm25_text()` 是唯一入口，**入库与查询两侧都要过它**；
+  拉丁字母与数字整词保留（拆成 bigram 会让 `SKU-99213` 命中 `SKU-99214`）。
 - 正文**不进 payload**（避免第二份真相），payload 只有标识与过滤字段
 - 环境下限：Qdrant **≥ 1.15.3** 才支持自托管服务端 BM25；1.13.x 会在 upsert 报 `InferenceService is not initialized`
 
@@ -152,7 +183,8 @@ v_active_chunks   — 视图：version 与 chunk 双 active 的切片 = 可检�
 | `doc_key`, `version_id`, `chunk_id`, `chunk_type`, `status`, `parent_id` | keyword | 过滤 / 回查 / 同父片去重（§7.2） |
 | `is_public` | bool | 公开分支 |
 | `allowed_depts`, `allowed_roles` | keyword（数组） | `match.any` = 有交集 |
-| `effective_year`, `page_num` | integer | 年份过滤 / 引用定位 |
+| `effective_year`, `effective_date`, `page_num` | integer | 年份/日期过滤、引用定位 |
+| `date_confidence` | keyword | 时间过滤只认 `explicit`（§5.2） |
 
 ### point id 映射（**必读，附录 B 的 `id=chunk_id` 存不进去**）
 

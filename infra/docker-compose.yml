@@ -147,6 +147,13 @@ services:
       # 摄取（A1）：样本目录与重试上限。目录是相对 repo 根的路径（compose 把 ../ 挂到 /app）。
       INGEST_SAMPLES_DIR: ${INGEST_SAMPLES_DIR:-samples}
       INGEST_MAX_RETRIES: ${INGEST_MAX_RETRIES:-3}
+      # 向量同步 / 回收（A3，§4.2 / §4.3）
+      VECTOR_SYNC_MAX_ATTEMPTS: ${VECTOR_SYNC_MAX_ATTEMPTS:-4}
+      VECTOR_SYNC_BACKOFF_S: ${VECTOR_SYNC_BACKOFF_S:-1.0}
+      VECTOR_SYNC_INTERVAL_S: ${VECTOR_SYNC_INTERVAL_S:-10}
+      VECTOR_SYNC_RECONCILE_EVERY: ${VECTOR_SYNC_RECONCILE_EVERY:-10}
+      VECTOR_RETENTION_HOURS: ${VECTOR_RETENTION_HOURS:-24}
+      FIGURES_DIR: ${FIGURES_DIR:-figures}
       AUTH_MODE: ${AUTH_MODE:-fixed_jwt}
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-dev-only-change-me}
       AUTH_JWT_ALG: ${AUTH_JWT_ALG:-HS256}
@@ -196,6 +203,21 @@ services:
       VLM_BASE_URL: ${VLM_BASE_URL:-}
       VLM_API_KEY: ${VLM_API_KEY:-}
       VLM_MODEL: ${VLM_MODEL:-}
+      # 向量同步（A3，§4.2）：轮询间隔与对账节奏。口径全部来自环境变量，
+      # 不在 worker 里另写一份默认值（配置只有一个来源：api/config.py）。
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      SERVICE_NAME: ${SERVICE_NAME:-ai-rag-api}
+      DB_CONNECT_TIMEOUT_S: ${DB_CONNECT_TIMEOUT_S:-3}
+      DB_POOL_MIN: ${DB_POOL_MIN:-1}
+      DB_POOL_MAX: ${DB_POOL_MAX:-8}
+      QDRANT_TIMEOUT_S: ${QDRANT_TIMEOUT_S:-5}
+      EMBEDDING_TIMEOUT_S: ${EMBEDDING_TIMEOUT_S:-10}
+      VECTOR_SYNC_MAX_ATTEMPTS: ${VECTOR_SYNC_MAX_ATTEMPTS:-4}
+      VECTOR_SYNC_BACKOFF_S: ${VECTOR_SYNC_BACKOFF_S:-1.0}
+      VECTOR_SYNC_INTERVAL_S: ${VECTOR_SYNC_INTERVAL_S:-10}
+      VECTOR_SYNC_RECONCILE_EVERY: ${VECTOR_SYNC_RECONCILE_EVERY:-10}
+      VECTOR_RETENTION_HOURS: ${VECTOR_RETENTION_HOURS:-24}
+      FIGURES_DIR: ${FIGURES_DIR:-figures}
     volumes:
       - ../:/app
       - app_data:/app/data

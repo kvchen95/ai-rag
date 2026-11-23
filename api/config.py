@@ -93,6 +93,24 @@ class Settings(BaseSettings):
     # 重试上限：口径是"1 次尝试 + N 次重试"（§4.4「失败重试三次转人工清单」）。
     ingest_max_retries: int = Field(default=3, ge=0, le=10)
 
+    # --- 向量写入 / 同步 / 回收（A3：§3.6、§4.1-§4.3）---
+    # 同步失败重试三次（§4.2）。和 ingest_max_retries 同口径：三次**重试**，
+    # 即最多 4 次尝试。给了默认值是因为它属于运维参数，不改变检索语义。
+    vector_sync_max_attempts: int = Field(default=4, ge=1, le=10)
+    # 重试退避基数（秒）：第 n 次失败后等 base * 2^(n-1)。翻牌后一分钟内必须同步完
+    # （§4.2），所以基数不能大：1s/2s/4s 三次退避仍在窗口内。
+    vector_sync_backoff_s: float = Field(default=1.0, ge=0.0)
+    # 旧版本保留窗口（§4.3「保留 24 小时，留给回滚的门」）。
+    vector_retention_hours: int = Field(default=24, ge=0)
+    # 切片图目录（§3.4 裁图落在 figures/{chunk_id}.webp）；回收时一起清。
+    figures_dir: str = "figures"
+    # worker 的同步轮询间隔（秒）。§4.2 要求"翻牌后一分钟内必须同步完"，
+    # 所以默认 10s：一次抖动最多吃掉两三轮重试，仍在一分钟预算内。
+    vector_sync_interval_s: float = Field(default=10.0, gt=0)
+    # 每 N 轮做一次全量对账（0 = 不做）。对账要滚动整个集合，比 drain 贵一个量级，
+    # 所以不在每一轮做；但"漂移没人数才可怕"（§4.2），所以也不能不做。
+    vector_sync_reconcile_every: int = Field(default=10, ge=0)
+
     # --- 身份（§5.1 / B2 卡实现解析，这里只做配置承载）---
     # AUTH_MODE 决定凭证怎么来：fixed_jwt 验签；mock_header 只给本地开发用。
     # 两种模式的必填项由下面的跨字段校验分别盯着，避免"某模式下少配一项也能起"。
@@ -221,6 +239,14 @@ class Settings(BaseSettings):
             "samples_dir": self.ingest_samples_dir,
             "max_retries": self.ingest_max_retries,
             "scan_lock_key": SCAN_LOCK_KEY,
+            "vector_sync": {
+                "max_attempts": self.vector_sync_max_attempts,
+                "backoff_s": self.vector_sync_backoff_s,
+                "retention_hours": self.vector_retention_hours,
+                "figures_dir": self.figures_dir,
+                "interval_s": self.vector_sync_interval_s,
+                "reconcile_every": self.vector_sync_reconcile_every,
+            },
         }
 
 

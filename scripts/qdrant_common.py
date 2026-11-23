@@ -24,6 +24,7 @@ what makes the rebuild script idempotent.
 from __future__ import annotations
 
 import json
+import re
 import time
 import urllib.error
 import urllib.request
@@ -38,6 +39,55 @@ DEFAULT_COLLECTION = "kb_chunks"
 
 # Fixed namespace: changing it re-keys every point (= full rebuild). Do not change.
 POINT_NAMESPACE = uuid.UUID("6f3d3c1e-2b8a-5a0e-9c7d-1a2b3c4d5e6f")
+
+# ---------------------------------------------------------------------------
+# 中文 BM25 的必要预处理（§7.1 边界表："BM25 分词对中文切分不理想"）
+#
+# 实测（Qdrant 1.15.3 + modifier=idf，2026-11-24）：服务端的 `qdrant/bm25` 只按
+# **空白和标点**切词，不认中文词边界。于是「住宿费标准每人每天500元」整句只产出
+# **1 个 token**，而 `{"text": "住宿费"}` 的查询产出的 token 与它对不上——关键词路
+# 对中文基本召回不到东西。实测数字：
+#
+#   原文入库 + 原文查询          top1 命中 1/4（只有 SKU 编号那种带空格的能中）
+#   bigram 入库 + bigram 查询    top1 命中 3/4
+#   bigram 入库 + 原文查询        top1 命中 2/4（查询侧漏改就白做）
+#
+# 所以入库与查询**两侧都必须**先用 `bm25_text()` 处理。为什么要 bigram 而不是接
+# 一个分词器：分词器带来词典与版本（换一版 jieba 就换一套切法，历史索引与查询不再
+# 对齐，且重建前后不一致）；bigram 无参数，同一段文字永远切出同一串 token。
+# 代价是索引变大（中文按 2-gram 展开，约字符数 ×1），可接受。
+#
+# 拉丁字母/数字（型号、条款号、SKU）整体保留——它们本来就是"整词命中"的最佳场景，
+# 拆成 bigram 反而会让 `SKU-99213` 命中 `SKU-99214` 这种近似编号（危险的假命中）。
+# ---------------------------------------------------------------------------
+
+_CJK_RUN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+")
+_WORD = re.compile(r"[A-Za-z0-9][A-Za-z0-9._\-/]*")
+
+
+def bm25_text(text: str) -> str:
+    """把正文/查询转成 BM25 要吃的 token 串（中文 bigram + 拉丁整词）。
+
+    入库侧与查询侧必须调用同一个函数，否则两侧的 token 空间对不上（见上面实测表）。
+    """
+    out: list[str] = []
+    pos = 0
+    for match in _CJK_RUN.finditer(text):
+        out.extend(_WORD.findall(text[pos : match.start()]))
+        run = match.group()
+        if len(run) == 1:
+            out.append(run)
+        else:
+            out.extend(run[i : i + 2] for i in range(len(run) - 1))
+        pos = match.end()
+    out.extend(_WORD.findall(text[pos:]))
+    return " ".join(out)
+
+
+def bm25_vector(text: str) -> dict[str, Any]:
+    """Qdrant 稀疏向量字段（服务端推理）。入库与查询的查询体都用它，保证形状一致。"""
+    return {"text": bm25_text(text), "model": BM25_MODEL}
+
 
 # Payload indexes required by 附录 B: doc_key, version_id, is_public, allowed_depts,
 # allowed_roles, effective_year, chunk_type, status. chunk_id / parent_id / page_num

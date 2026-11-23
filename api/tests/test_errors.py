@@ -33,6 +33,7 @@ EXTENSIONS = {
     ErrorCode.NOT_FOUND: (404, "未找到该文档", AlertPolicy.NONE),
     ErrorCode.SCAN_IN_PROGRESS: (409, "扫描正在进行中", AlertPolicy.BURST),
     ErrorCode.SAMPLES_MISSING: (500, "稍后重试", AlertPolicy.ALWAYS),
+    ErrorCode.VERSION_CONFLICT: (409, "该版本状态已变更，请刷新后重试", AlertPolicy.BURST),
 }
 
 
