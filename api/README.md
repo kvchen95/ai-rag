@@ -620,11 +620,16 @@ make b3-mutation     # 7 条关键判据逐条改坏，确认对应用例真的�
 ### SSE 契约：`POST /api/v1/qa/stream`
 
 ```bash
+# AUTH_MODE=mock_header（仅本地开发）时的调用方式：身份来自请求头。
+# 默认配置是 fixed_jwt，那时要去掉这三个 X-User-* 头、改带 `Authorization: Bearer <jwt>`，
+# 否则会拿到 401（这正是"开流之前回 401"那条口径）。
 curl -sN -X POST http://127.0.0.1:8000/api/v1/qa/stream \
   -H 'X-User-Id: u_dev' -H 'X-User-Depts: fin' -H 'X-User-Roles: staff' \
   -H 'content-type: application/json' \
   -d '{"question":"2025年差旅住宿标准是多少","scope":{"doc_keys":["policy/travel-cn"]}}'
 ```
+
+`-N` 是必须的：curl 默认按块缓冲输出，不加它看不到逐字效果（本地看起来像一次性返回）。
 
 事件顺序（附录 C.2）：`step`（可多次）→ `token`（可多次）**或** `clarify`/`fallback` →
 `citations`（可选）→ `done`。`done` 永远最后一条，异常路径也发——前端没有别的结束信号。
