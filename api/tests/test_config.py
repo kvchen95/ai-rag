@@ -27,9 +27,18 @@ MUST_BE_REQUIRED = (
     "rerank_model",
     "gate_reject_none",
     "gate_reject_low",
+    "gate_borderline_low",
+    "gate_borderline_high",
     "retrieval_top_k",
     "rerank_top_n_min",
     "rerank_top_n_max",
+    "rerank_candidates_max",
+    "rerank_budget_ms",
+    "parent_child_keep",
+    "clarify_score_delta",
+    "clarify_options_max",
+    "suspected_docs_max",
+    "evidence_min_paras",
     "max_hops",
     "evidence_max_chars",
 )
@@ -73,6 +82,12 @@ def test_thresholds_and_models_come_from_env(monkeypatch: pytest.MonkeyPatch) ->
         ({"GATE_REJECT_NONE": 0.0}, "greater than 0"),
         ({"RERANK_TOP_N_MIN": 9}, "RERANK_TOP_N_MIN must be <= RERANK_TOP_N_MAX"),
         ({"RERANK_TOP_N_MAX": 31}, "RERANK_TOP_N_MAX must be <= RETRIEVAL_TOP_K"),
+        # 精排窗口不能超过候选上限（否则一半候选白召回，预算却按更大窗口在算）
+        ({"RERANK_CANDIDATES_MAX": 7}, "RERANK_TOP_N_MAX must be <= RERANK_CANDIDATES_MAX"),
+        # 澄清带上下界必须递增，否则这个区间为空，辅助条件永远用不上；
+        # 它相对门控阈值的位置由 `GateConfig.effective_borderline` 裁剪，
+        # 不在启动期硬绑（阈值本身要按 §12.2 波谷法重标定）。
+        ({"GATE_BORDERLINE_LOW": 0.45}, "GATE_BORDERLINE_LOW must be < GATE_BORDERLINE_HIGH"),
         ({"MAX_HOPS": 9}, "less than or equal to 5"),
         ({"EMBEDDING_DIM": 0}, "greater than 0"),
         ({"QDRANT_URL": "qdrant:6333"}, "must start with http:// or https://"),

@@ -259,6 +259,41 @@ b2-mutation: api-dev-image
 b2-explain:
 	@bash scripts/b2_explain.sh
 
+# --- B3: 问题理解 / 混合检索 / RRF / 精排 / 门控 / 多跳 ------------------------
+# 纯逻辑用例不需要任何服务（RRF、门控五态、精排四种结局、多跳五个停止原因）。
+# 靠 `api-dev-image` 依赖拿最新代码：镜像 build 时 COPY api/ 进 /app，所以每次
+# 重建后跑的就是磁盘上这一份。不挂载源码——本环境 `docker run -v <WSL 路径>` 在
+# 容器里是空目录（实测），挂载只会得到 "No such file: /app/api/pytest.ini"。
+test-b3-logic: api-dev-image
+	@$(DOCKER) run --rm -e RUN_MIGRATIONS=0 $(API_DEV_IMAGE) \
+		pytest -c api/pytest.ini api/tests/test_retrieval_logic.py \
+		api/tests/test_query_understand.py
+
+# 集成用例要四个服务全通：PG + Qdrant + embedding + rerank。
+# 每条判据都是对着真服务断言的（两路同 filter、旧版本剔除、精排降级审计、
+# 不泄露无权限文档、中文 BM25 必须过 bm25_text、本地 RRF 与原生等价）。
+test-b3: api-dev-image
+	@$(DOCKER) run --rm --network $(API_TEST_NETWORK) -e RUN_MIGRATIONS=0 \
+		-e AI_RAG_TEST_DATABASE_URL="$(API_TEST_DSN)" \
+		-e QDRANT_URL="http://qdrant:6333" \
+		-e EMBEDDING_BASE_URL="http://embedding:8000/v1" \
+		-e EMBEDDING_API_KEY=local \
+		-e RERANK_BASE_URL="http://rerank:8000" \
+		-e RERANK_API_KEY=local \
+		$(API_DEV_IMAGE) pytest -c api/pytest.ini api/tests/b3 \
+		api/tests/test_retrieval_logic.py api/tests/test_query_understand.py
+
+# 变异测试：把 7 条关键判据逐条改坏，确认对应用例真的会红（跑完自动还原）。
+# 改坏后仍全绿 = 那条判据形同虚设，脚本以非零退出。
+b3-mutation: api-dev-image
+	@$(DOCKER) run --rm --network $(API_TEST_NETWORK) -e RUN_MIGRATIONS=0 \
+		-e AI_RAG_TEST_DATABASE_URL="$(API_TEST_DSN)" \
+		-e QDRANT_URL="http://qdrant:6333" \
+		-e EMBEDDING_BASE_URL="http://embedding:8000/v1" \
+		-e EMBEDDING_API_KEY=local \
+		-e RERANK_BASE_URL="http://rerank:8000" \
+		$(API_DEV_IMAGE) python scripts/b3_mutation_check.py
+
 # --- A3 集成用例 --------------------------------------------------------------
 # 需要真 PG + 真 Qdrant + 真 embedding 三个都通。缺一个就会 skip（不假装跑过），
 # 所以这里显式把三个地址都传进去，避免"跑完了但全是 skipped"这种假绿。

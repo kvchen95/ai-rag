@@ -74,6 +74,29 @@ class Settings(BaseSettings):
     max_hops: int = Field(ge=0, le=5)
     evidence_max_chars: int = Field(gt=0)
 
+    # --- B3：检索的其余业务阈值（§7.2 / §7.3 / §7.5 / §8.1 / §8.2）---
+    # 每一条都是设计文档点名的数字，所以按本模块的第一条规则：来自环境变量，
+    # 代码里不给默认值。给了默认值就等于"文档改了阈值、代码还在用旧的"。
+    #
+    # 精排预算（§7.3"精排超时（> 800 毫秒）"）。超了就降级为按名次取前 N，
+    # 并在审计里记 degrade=rerank_timeout。
+    rerank_budget_ms: int = Field(gt=0)
+    # 精排候选上限（§7.5"上限 50，超了按名次截"）。
+    rerank_candidates_max: int = Field(gt=0)
+    # 同一父片最多保留几条（§7.2"同一父片最多保留两条子片"）。
+    parent_child_keep: int = Field(gt=0)
+    # 门控的辅助判定带（§8.1"最高分在 0.38–0.42 之间按辅助条件决定"）。
+    gate_borderline_low: float = Field(gt=0, le=1)
+    gate_borderline_high: float = Field(gt=0, le=1)
+    # 澄清触发：两份以上文档且分数差小于这个值（§8.2"差小于 0.05"）。
+    clarify_score_delta: float = Field(gt=0, lt=1)
+    # 澄清选项上限（§8.2"最多四个"）。
+    clarify_options_max: int = Field(gt=0)
+    # 拒答时给出的疑似文档上限（§8.1"有权限的疑似文档清单（≤3 份）"）。
+    suspected_docs_max: int = Field(gt=0)
+    # 复杂问题的有效证据条数下限（§8.1"复杂问题要求 ≥2 条分属不同段落"）。
+    evidence_min_paras: int = Field(gt=0)
+
     # --- 限额（§11.4）---
     qa_budget_s: int = Field(default=30, gt=0)
     max_question_chars: int = Field(default=500, gt=0)
@@ -158,6 +181,20 @@ class Settings(BaseSettings):
         # 精排取不了比召回到的更多：top_n_max 必须落在 top_k 之内。
         if self.rerank_top_n_max > self.retrieval_top_k:
             raise ValueError("RERANK_TOP_N_MAX must be <= RETRIEVAL_TOP_K")
+        # 精排窗口不能超过候选上限：超了等于一半候选白召回，而精排预算却按更大
+        # 的窗口在算——两边不一致时，先超时的是精排，先失效的却是召回。
+        if self.rerank_top_n_max > self.rerank_candidates_max:
+            raise ValueError("RERANK_TOP_N_MAX must be <= RERANK_CANDIDATES_MAX")
+        # 澄清带必须落在两档门控之间（§8.1 的"0.38–0.42 之间"是一个相对位置，
+        # 不是绝对数值）。这里只校验"上下界递增"，不硬性要求它落在 [reject_none,
+        # reject_low] 之内——因为门控阈值本身**可调**（换模型后要重标定，见
+        # default 卡的模型定档说明）。硬性限制会让"把阈值调到 0.10/0.55 重标定"
+        # 直接启动失败，那是把标定这件事堵死。
+        #
+        # 越界的处置交给 `GateConfig`：它把澄清带裁到 [reject_none, reject_low] 内
+        # （见下），保证"带宽为 0"时退化成纯阈值判定而不是永远不生效。
+        if self.gate_borderline_low >= self.gate_borderline_high:
+            raise ValueError("GATE_BORDERLINE_LOW must be < GATE_BORDERLINE_HIGH")
         if self.db_pool_min > self.db_pool_max:
             raise ValueError("DB_POOL_MIN must be <= DB_POOL_MAX")
         # 配了网关却没配模型名，等于让代码去猜一个模型。
@@ -207,8 +244,18 @@ class Settings(BaseSettings):
                 "top_k": self.retrieval_top_k,
                 "top_n_min": self.rerank_top_n_min,
                 "top_n_max": self.rerank_top_n_max,
+                "candidates_max": self.rerank_candidates_max,
+                "rerank_budget_ms": self.rerank_budget_ms,
+                "parent_child_keep": self.parent_child_keep,
                 "max_hops": self.max_hops,
                 "evidence_max_chars": self.evidence_max_chars,
+                "evidence_min_paras": self.evidence_min_paras,
+            },
+            "clarify": {
+                "score_delta": self.clarify_score_delta,
+                "options_max": self.clarify_options_max,
+                "suspected_docs_max": self.suspected_docs_max,
+                "borderline": [self.gate_borderline_low, self.gate_borderline_high],
             },
             "limits": {
                 "qa_budget_s": self.qa_budget_s,

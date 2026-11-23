@@ -528,20 +528,106 @@ OCR 开了就真出片且 `source:ocr` 进了库。
 `_check_stored_tables` / notes 往返就是这条的可执行判据，且各自都被变异测试覆盖
 （`as-row-table-cells` / `as-row-notes` 把 `as_row()` 改回丢列，两条用例都会红）。
 
+## 问题理解 / 混合检索 / 精排 / 门控 / 多跳（B3：§6–§8）
+
+一条链路：`understand()` → 两路召回 → RRF → 版本兜底 → 精排 → 门控 →（可选）多跳。
+装配只有一处（`retrieval.pipeline.build_pipeline(settings, pg)`），阈值全部来自
+`Settings`（`config.py` 里 14 个业务口径，代码里一个默认值都不给）。
+
+```
+query/__init__.py      §6 改写（同义/缩写/口语）+ 指代消解 + 时间归一 + 单多跳预判
+query/lexicon.py       三张词表 + 一张禁止表（启动期自检）
+retrieval/hybrid.py    §7.1/§7.2 两路 prefetch（同一个 filter 对象）+ RRF + 父片去重
+retrieval/rerank.py    §7.3 精排（≤32/批、共享 deadline、三种降级原因）
+retrieval/gate.py      §8.1/§8.2/§8.4 三段门控 + 五态 verdict + 澄清选项
+retrieval/multihop.py  §8.3 黑板 + 三个停止条件 + 断链部分结论
+retrieval/pipeline.py  编排：顺序约束（版本兜底在精排之前）+ 审计快照
+retrieval/texts.py     回 PG 取正文（向量库不存正文，附录 B）
+```
+
+### 两路同 filter 是结构性的，不是约定
+
+`build_batch_body()` 只 dump 一次 filter，两路拿到**同一个 dict 对象**；
+`test_both_routes_get_the_same_filter_object` 断言的是 `is` 而不是 `==`。
+两份内容相同的 dict 会在未来某次改动里漂移，同一个对象不会。
+这条判据刻意放在**纯逻辑层**——只在"恰好装了 Qdrant"时才跑的判据等于没有判据。
+
+### RRF 的常数不是 60
+
+实测（真 Qdrant 1.15.3）原生 `fusion=rrf` 的输出逐值等于 `Σ 1/(1 + 名次)`：
+`1.0 / 0.666667 / 0.5 / 0.2 / 0.166667 / 0.142857` 六个值全部对上。所以
+`RRF_K = 1` 是**对齐实现的常数**，不是调参旋钮。改成论文里的 60 会让
+"两路都第 1"和"一路第 1 一路第 30"几乎打平（0.9839 vs 1.0），门控的 top1 分数
+失去区分度。`test_local_rrf_matches_qdrant_native_fusion` 拿同一批数据跑原生融合
+与本地融合、比较顺序，改坏常数立刻红。
+
+为什么用 `/points/query/batch` 而不是原生 `fusion`：§7.6 要求每条候选带
+`dense_rank`/`sparse_rank`，原生融合只返回合成分数；§7.2 的并列规则也必须是
+我们能控制的。两者都是一次 HTTP，"少一跳网络"在这个选择里没有收益。
+
+### 精排的三条实测约束
+
+| 事实（实测） | 实现后果 |
+|---|---|
+| 33 条直接 `413 batch size 33 > maximum allowed batch size 32` | 必须分批（`TEI_MAX_BATCH=32`） |
+| 8 条 184ms / 20 条 355ms / 30 条 484ms（CPU） | 50 条会顶破 800ms 预算，所以分批 + **跨批共享 deadline** |
+| `raw_scores=false` 是 sigmoid 后的 0..1 | §8.1 的 0.20/0.40 必须按归一化分判，不能用 logits |
+
+降级分三个原因，不是一个：`rerank_timeout`（预算不够）、`rerank_unavailable`
+（服务挂了）、`rerank_partial`（打了一半）。三者的运维处置完全不同。降级时
+**不给候选填 0 分**——0 分会让门控判成"无相关"，而真相是"我们没打分"。
+
+### 门控五态与两个"替代 vs 补充"
+
+`pass` / `clarify` / `reject_none` / `reject_low` / `partial`（§8.4）。
+0.38–0.42 临界带里辅助条件是**替代**分数判定，不是补充：0.39 的多实体问题在
+辅助条件满足时按过线处理，否则 `reject_low`。早先写成"判完辅助条件再走
+`top1 < 0.40`"，那样 0.39 会被拒，辅助条件等于白判（实测撞过）。
+
+临界带相对门控阈值的位置由 `GateConfig.effective_borderline` **裁剪**，不在启动期
+硬绑：门控阈值按 §12.2 波谷法随模型重标定，硬绑会让"调阈值重标定"直接启动失败。
+
+### 多跳：每跳独立过阈
+
+三个停止条件谁先满足谁生效（§8.3）：本跳不过阈（断链）、证据齐了、跳数到 Max。
+断链时交出去的是"已查实的部分 + 断在哪一步"；第一跳就断则直接拒答（`facts` 为空）。
+
+覆盖检查有一个实测坑：实体归一后是 `住宿费限额`，而库里正文写的是 `住宿费标准`——
+拿归一后的词去正文里找永远找不到，多跳会空转到 Max Hops。所以 `QueryPlan` 同时带
+`entities`（归一后，给审计）与 `coverage_terms`（归一后 + 原文写法，给覆盖检查），
+同一实体的多种写法是"或"的关系。
+
+### 跑起来
+
+```
+make test-b3-logic   # 纯逻辑：RRF / 门控五态 / 精排四结局 / 多跳五停止原因
+make test-b3         # 集成：真 PG + 真 Qdrant + 真 TEI embedding + 真 rerank
+make b3-mutation     # 7 条关键判据逐条改坏，确认对应用例真的会红（跑完自动还原）
+```
+
 ## 还没做（留给后续卡）
 
-- Query 理解/检索/门控（B3）、生成/校验/SSE（B4）：路由挂到 `api/routers/` 下，
-  错误直接抛 `AppError`。
+- 生成/校验/SSE（B4）：`POST /api/v1/qa/stream` 挂在 `api/routers/` 下，接
+  `build_pipeline(...).run(...)` 的 `RetrievalSnapshot`（`verdict` + `decision.evidence`
+  + `score_snapshot()`），错误直接抛 `AppError`。
 - 审计保留期清理的定时触发：现在只有 `purge_expired()`，由定时任务/worker 调用。
-- 限额的执行（并发上限、30 秒预算）：配置已就位，执行点属于 B4 的流式接口。
-- 时间归一的"最近 N 天""今年以来"等窗口型说法：本卡只做了卡片点名的四种
+- 并发上限（§11.4 `QA_MAX_CONCURRENCY`）与 30 秒总预算的执行点属于 B4 的流式接口；
+  配置已就位。
+- 时间归一的"最近 N 天""今年以来"等窗口型说法：B2 只做了卡片点名的四种
   （去年/上个月/前年/三月）+ 绝对日期，其余落到"未限定时间"并说明。
+- 多跳的子问题拆分现在是"原问 + 缺口实体"，不是模型拆解：§8.3 说"根据缺口拆子问题"，
+  缺口由覆盖检查给出（实体 × 是否已被证据提到），拆解是确定性的。要用模型拆，
+  换掉 `pipeline._run_multihop` 里的 `sub_questioner` 即可，`run_multihop` 本身不动。
+- 门控的 0.20/0.40 与 0.38–0.42 目前是 `.env.example` 里的初始值，**换模型后要按
+  §12.2 波谷法重标定**（默认卡的模型定档说明已记这一条）。标定脚本还没写：
+  需要先有一份带标注的评测集（`eval/golden_50.jsonl` 的 `expected_doc_keys` 还是
+  TBD），且要能跑真精排拿分数分布。
 - 摄取侧没做的（都不是本卡的验收项）：碰撞后的人工处置界面、崩溃 worker 的任务
   回收（超时判失败，§4.4 提到但需要 worker 心跳落地）、文件读不到时的告警升级
   （现在只进 `ingest_jobs.error` 与日志）。
 - **A3 的 reclaim 还没接定时触发**：`make reclaim` 是手动/运维入口，
   `scripts/a3_ingest.py reclaim` 本身幂等，挂到 cron 或 worker 的每日一轮即可
   （worker 目前只跑同步 + 对账）。
-- **BM25 预分词的查询侧**：`bm25_text()` 已在 `scripts/qdrant_common.py`，
-  但检索卡（B3）的查询体力化必须自己调它——本卡只保证了入库侧，
-  两侧共用同一个函数是 B3 的落点（漏了会从 3/4 掉到 2/4，见上文实测）。
+- `test_ingest_scan_integration::test_unreadable_file_records_failed_job_without_touching_versions`
+  在容器里必红：容器以 root 跑，`chmod 0o000` 挡不住 root 读文件。这是 A1 用例的
+  环境假设问题（该用例假设"非 root 跑测试"），与检索链路无关。
