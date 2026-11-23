@@ -16,7 +16,7 @@ bbox 与页码来自 `chunks` 表，而不是测试里编的字面量。
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Iterator
 
 import pytest
 
@@ -86,20 +86,57 @@ def b4_pg(b3_pg):  # noqa: F811 - 复用 B3 的真 PG（同一份 schema，同�
     return b3_pg
 
 
+@pytest.fixture(autouse=True)
+def _cleanup_b4_rows(pool) -> "Iterator[None]":
+    """用例前后清掉 `b3test/` 命名空间里**本次留下的行**。
+
+    为什么 B4 必须自己有一份：B3 的 `_cleanup_b3_rows` 只在 `api/tests/b3/` 目录
+    生效（`conftest.py` 的作用域是目录）。B4 复用 `b3test/` 前缀造数，如果不自己清，
+    残留行会被下一次**全库对拍**的用例（`test_filter_parity` 的 WHERE 里没有
+    doc_key 条件）当成陌生数据，于是那些用例一起报红，而报错信息指向别人的代码。
+    实测撞过：跑完 B4 之后库里有 14 个 `b3test/*` 文档。
+
+    按前缀清而不是按用例名清：`unique()` 生成的名字带随机后缀，用例自己也不知道
+    下次会叫什么；前缀是唯一稳定的分组依据。
+    """
+    _purge(pool)
+    try:
+        yield
+    finally:
+        _purge(pool)
+
+
+def _purge(pool) -> None:
+    with pool.connection() as connection:
+        with connection.cursor() as cur:
+            cur.execute("DELETE FROM vector_drift_log WHERE doc_key LIKE %s", (f"{NS}/%",))
+            cur.execute("DELETE FROM vector_sync_tasks WHERE doc_key LIKE %s", (f"{NS}/%",))
+            cur.execute("DELETE FROM chunks WHERE doc_key LIKE %s", (f"{NS}/%",))
+            cur.execute("DELETE FROM doc_versions WHERE doc_key LIKE %s", (f"{NS}/%",))
+            cur.execute("DELETE FROM ingest_jobs WHERE doc_key LIKE %s", (f"{NS}/%",))
+            cur.execute("DELETE FROM documents WHERE doc_key LIKE %s", (f"{NS}/%",))
+            cur.execute("DELETE FROM qa_log WHERE model = %s", ("scripted",))
+        connection.commit()
+
+
 def build_qa_service(
     *,
     b3_pg,
     settings,
     embedder,  # noqa: ARG001 - 只为拿它做 skip 判定
-    retriever: Any,
-    reranker: Any,
+    retriever_client: Any,
+    reranker_client: Any,
     llm: LlmClient | None,
 ) -> QaService:
     """按 B3 的真链路 + 给定的生成替身装一条问答链路。
 
     走 `build_pipeline(settings, pg)` 而不是自己 new 五个对象：装配只有一处，
     少传一个参数就会表现成"召回少了几条"而没有报错（见 `pipeline.build_pipeline`
-    的说明）。检索侧的 `retriever` / `reranker` 用 fixture 里的（它们指向真服务）。
+    的说明）。检索侧的两个客户端由调用方从 fixture 传进来（它们指向真服务）。
+
+    参数名带 `_client` 后缀而不是叫 `retriever` / `reranker`：本模块从
+    `api.tests.b3.conftest` 导入的同名 fixture 会被参数遮蔽，ruff 的 F811 会报
+    "重定义"，而那条警告在这里没有信息量——改个名就没有歧义了。
     """
     from api.retrieval.pipeline import QueryEmbedder
 
@@ -107,8 +144,8 @@ def build_qa_service(
     # 用 conftest 里已经建好的客户端替换掉工厂新建的那两个，避免重复建连接池。
     pipeline.retriever.close()
     pipeline.reranker.close()
-    pipeline.retriever = retriever
-    pipeline.reranker = reranker
+    pipeline.retriever = retriever_client
+    pipeline.reranker = reranker_client
     pipeline.embedder = QueryEmbedder(
         base_url=settings.embedding_base_url,
         model=settings.embedding_model,

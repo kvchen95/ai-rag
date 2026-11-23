@@ -81,7 +81,7 @@ def test_pass_path_citations_come_from_the_real_chunk_rows(
         )
     )
     service = build_qa_service(
-        b3_pg=b3_pg, settings=settings, embedder=embedder, retriever=retriever, reranker=reranker, llm=llm
+        b3_pg=b3_pg, settings=settings, embedder=embedder, retriever_client=retriever, reranker_client=reranker, llm=llm
     )
     sent = []
     try:
@@ -136,7 +136,7 @@ def test_pass_path_audit_row_passes_the_real_table_constraints(
         )
     )
     service = build_qa_service(
-        b3_pg=b3_pg, settings=settings, embedder=embedder, retriever=retriever, reranker=reranker, llm=llm
+        b3_pg=b3_pg, settings=settings, embedder=embedder, retriever_client=retriever, reranker_client=reranker, llm=llm
     )
     try:
         outcome = service.run("住宿费标准是多少", FIN)
@@ -184,7 +184,7 @@ def test_irrelevant_question_rejects_without_calling_the_model(
         generation='{"status":"answered","answer":"不应被调用[1]","citations":[1],"claims":[]}'
     )
     service = build_qa_service(
-        b3_pg=b3_pg, settings=settings, embedder=embedder, retriever=retriever, reranker=reranker, llm=llm
+        b3_pg=b3_pg, settings=settings, embedder=embedder, retriever_client=retriever, reranker_client=reranker, llm=llm
     )
     sent = []
     try:
@@ -219,7 +219,7 @@ def test_rejected_audit_row_also_satisfies_the_table_constraints(
         chunks=[make_chunk(chunk_id=f"ch_{name}_a", text="住宿费标准：每人每天 500 元。")],
     )
     service = build_qa_service(
-        b3_pg=b3_pg, settings=settings, embedder=embedder, retriever=retriever, reranker=reranker, llm=None
+        b3_pg=b3_pg, settings=settings, embedder=embedder, retriever_client=retriever, reranker_client=reranker, llm=None
     )
     try:
         outcome = service.run("如何申报个人所得税专项附加扣除", FIN)
@@ -265,7 +265,7 @@ def test_hallucinated_number_degrades_to_original_text(
         )
     )
     service = build_qa_service(
-        b3_pg=b3_pg, settings=settings, embedder=embedder, retriever=retriever, reranker=reranker, llm=llm
+        b3_pg=b3_pg, settings=settings, embedder=embedder, retriever_client=retriever, reranker_client=reranker, llm=llm
     )
     sent = []
     try:
@@ -306,7 +306,7 @@ def test_no_llm_configured_is_the_system_tier(
         chunks=[make_chunk(chunk_id=f"ch_{name}_a", text="住宿费标准：每人每天 500 元。")],
     )
     service = build_qa_service(
-        b3_pg=b3_pg, settings=settings, embedder=embedder, retriever=retriever, reranker=reranker, llm=None
+        b3_pg=b3_pg, settings=settings, embedder=embedder, retriever_client=retriever, reranker_client=reranker, llm=None
     )
     sent = []
     try:
@@ -348,7 +348,7 @@ def test_every_frame_is_valid_sse_and_done_is_last(
         )
     )
     service = build_qa_service(
-        b3_pg=b3_pg, settings=settings, embedder=embedder, retriever=retriever, reranker=reranker, llm=llm
+        b3_pg=b3_pg, settings=settings, embedder=embedder, retriever_client=retriever, reranker_client=reranker, llm=llm
     )
     sent = []
     try:
