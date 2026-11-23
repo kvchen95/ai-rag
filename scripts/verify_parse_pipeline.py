@@ -206,11 +206,15 @@ def main() -> int:
                 print(f"         bad pixel rect for {chunk_id}: {rect}")
         check(pixel_ok, "bbox maps to in-page pixel rectangles at 200 DPI")
 
+        # --- 版面夹具：合并单元格 / OCR / 页眉页脚 ---
+        print("\n[4] 版面能力（合并单元格、OCR 兜底、页眉页脚）")
+        _check_layout_fixtures(samples_root)
+
         # --- 清理 ---
         if args.keep:
-            print(f"\n[4] --keep: 保留 {len(written_ids)} 行（记得手动清理）")
+            print(f"\n[5] --keep: 保留 {len(written_ids)} 行（记得手动清理）")
         else:
-            print("\n[4] 清理")
+            print("\n[5] 清理")
             conn.execute("DELETE FROM chunks WHERE chunk_id = ANY(%s)", (written_ids,))
             conn.execute(
                 "DELETE FROM doc_versions WHERE version_id LIKE %s", (DOC_PREFIX + "%",)
@@ -220,6 +224,109 @@ def main() -> int:
             check(True, f"cleaned {len(written_ids)} chunk(s) and their version rows")
 
     return report()
+
+
+def _check_layout_fixtures(samples_root: Path) -> None:
+    """版面能力的真实断言：合并单元格保真、OCR 兜底真能出片、页眉页脚真被剔除。
+
+    为什么放在验收脚本里而不是只放 pytest：这三件事都容易"看起来实现了"——
+    合并单元格的 `col_span` 可能被写死成 1、OCR 可能跑了但被图区域扣光、
+    页眉页脚可能一条都没删而报告照样打 `PASS 14/14`。这里直接读真实产物。
+    """
+    from api.parse.ocr import OcrConfig, build_ocr_engine  # noqa: PLC0415
+    from api.parse.reader import ReaderConfig  # noqa: PLC0415
+
+    layout_root = samples_root / "layout"
+    if not layout_root.is_dir():
+        # 夹具不在 samples/ 下（make_layout_samples 默认写到别处）：
+        # 当场生成到临时目录，别让"没夹具"变成"跳过检查"。
+        import tempfile  # noqa: PLC0415
+
+        sys.path.insert(0, str(REPO_ROOT / "scripts"))
+        import make_layout_samples  # noqa: PLC0415
+
+        layout_root = Path(tempfile.mkdtemp(prefix="a2-layout-")) / "layout"
+        layout_root.mkdir(parents=True, exist_ok=True)
+        # 直接按名字生成需要的三份夹具（不跑 CLI：`main()` 读 sys.argv）
+        for name in (
+            "layout/merged-table-demo.pdf",
+            "layout/header-demo.pdf",
+            "layout/scanned-demo.pdf",
+        ):
+            target = layout_root.parent / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(make_layout_samples.build(name))
+
+    # --- 合并单元格：colspan 必须真的出现在 HTML 里 ---
+    merged = layout_root / "merged-table-demo.pdf"
+    if check(merged.is_file(), "merged-table fixture exists"):
+        outcome = parse_document(
+            merged,
+            doc_key=DOC_PREFIX + "merged",
+            version_id=DOC_PREFIX + "merged#abcdef123456",
+            acl=Acl(is_public=True),
+        )
+        table_chunks = [chunk for chunk in outcome.chunks if chunk.chunk_type == "table"]
+        check(len(table_chunks) == 1, f"merged table -> {len(table_chunks)} table chunk(s)")
+        if table_chunks:
+            chunk = table_chunks[0]
+            spans = {int(cell["col_span"]) for cell in (chunk.table_cells or [])}
+            check(3 in spans, f"merged header keeps col_span=3 (spans seen: {sorted(spans)})")
+            check(
+                'colspan="3"' in (chunk.table_html or ""),
+                "merged header renders as colspan=3 in table_html",
+            )
+            check(_table_three_ways_agree(chunk), "merged table three representations agree")
+
+    # --- 页眉页脚：真被剔除且报告如实计数 ---
+    header = layout_root / "header-demo.pdf"
+    if check(header.is_file(), "header-demo fixture exists"):
+        outcome = parse_document(
+            header,
+            doc_key=DOC_PREFIX + "header",
+            version_id=DOC_PREFIX + "header#abcdef123456",
+            acl=Acl(is_public=True),
+        )
+        report = outcome.as_report()
+        dropped = sum(page["regions"]["header_footer_lines"] for page in report["pages"])
+        check(dropped > 0, f"header/footer lines were dropped ({dropped} across pages)")
+        body = " ".join(chunk.content_text for chunk in outcome.chunks)
+        check("Page 1 of 3" not in body, "running page numbers are not in any chunk")
+        check("Section 1. Scope" in body, "per-page section headings are kept (not dropped)")
+
+    # --- OCR 兜底：开了就必须真出片，且带来源标记 ---
+    scanned = layout_root / "scanned-demo.pdf"
+    engine, reason = build_ocr_engine(OcrConfig(enabled=True))
+    if not check(scanned.is_file(), "scanned-demo fixture exists"):
+        return
+    if engine is None:
+        # 装不上就不许"静默通过"：把原因打出来，并断言"关着的时候不 OCR"
+        print(f"         (ocr engine unavailable: {reason})")
+        off = parse_document(
+            scanned,
+            doc_key=DOC_PREFIX + "scanned-off",
+            version_id=DOC_PREFIX + "scanned-off#abcdef123456",
+            acl=Acl(is_public=True),
+        )
+        page2 = next(page for page in off.doc.pages if page.page_num == 2)
+        check(not page2.ocr_applied, "OCR is off by default on the scanned page")
+        return
+    on = parse_document(
+        scanned,
+        doc_key=DOC_PREFIX + "scanned-on",
+        version_id=DOC_PREFIX + "scanned-on#abcdef123456",
+        acl=Acl(is_public=True),
+        reader_config=ReaderConfig(ocr=OcrConfig(enabled=True)),
+        ocr_engine=engine,
+    )
+    page2 = next(page for page in on.doc.pages if page.page_num == 2)
+    check(page2.ocr_applied, "scanned page 2 goes through OCR when enabled")
+    page2_chunks = [chunk for chunk in on.chunks if chunk.page_num == 2]
+    check(len(page2_chunks) > 0, f"OCR page produced {len(page2_chunks)} chunk(s)")
+    check(
+        all("source:ocr" in chunk.notes for chunk in page2_chunks),
+        "OCR chunks are marked source:ocr",
+    )
 
 
 def _ensure_version(conn, *, doc_key: str, version_id: str, path: Path) -> None:
