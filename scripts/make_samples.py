@@ -107,9 +107,14 @@ def build_pdf(pages: list[list[str]]) -> bytes:
     # 1:CATALOG 2:PAGES 3:FONT 然后每页 2 个对象（Page, Contents）
     catalog_id = 1
     pages_id = 2
-    # font_id 实际是 3（上面 add 的顺序），下面用变量而不是字面量，改结构时不会错
     objects.insert(0, b"")  # 占位 catalog
     objects.insert(1, b"")  # 占位 pages
+    # **`add()` 返回的是"插入占位符之前"的序号**：上面两次 insert 把字体对象整体后移两格，
+    # 所以 /Font 里的引用必须用移位后的号（3）。用 `font_id` 原值会让 /F1 指向 Catalog：
+    # pdfplumber 读正文不看字体资源，照样能抽出文字；pdf.js 按字体画字，结果是整页空白
+    # ——"能解析"和"能显示"在这里是两件事。下面这句断言把号算错当场变成异常。
+    font_id = 3
+    assert objects[font_id - 1].startswith(b"<< /Type /Font"), "font 对象号位移了"
 
     page_ids: list[int] = []
     for lines in pages:
