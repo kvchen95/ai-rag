@@ -1,0 +1,22 @@
+# local dev secrets and runtime state
+.env
+.env.local
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# node
+web/node_modules/
+# NOTE: web/dist is committed on purpose so `docker compose up -d` serves UI without a build.
+# Rebuild with `make web-build`.
+
+# data / generated artifacts
+data/
+figures/*.webp.tmp
+*.log
+
+# os
+.DS_Store

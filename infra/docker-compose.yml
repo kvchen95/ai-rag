@@ -26,7 +26,7 @@ services:
       start_period: 10s
 
   qdrant:
-    image: qdrant/qdrant:v1.13.4
+    image: qdrant/qdrant:v1.15.3
     container_name: ai-rag-qdrant
     restart: unless-stopped
     environment:
@@ -43,46 +43,57 @@ services:
       retries: 10
       start_period: 10s
 
-  # All-in-docker CPU model services (default). First start downloads model weights.
+  # All-in-docker CPU model services (default): Hugging Face TEI (text-embeddings-inference).
+  # Same image, two roles. Weights are cached in the model_cache volume (/data), so a
+  # restart does not re-download. First start downloads weights (~100MB / ~1.1GB).
   embedding:
-    image: michaelf34/infinity:0.0.76
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.6
     container_name: ai-rag-embedding
     restart: unless-stopped
     environment:
       <<: *common-env
+      HF_HOME: /data
+      # Optional HF mirror, e.g. https://hf-mirror.com (leave empty for default endpoint)
+      HF_ENDPOINT: ${HF_ENDPOINT:-https://huggingface.co}
     command: >
-      v2 --model-id ${EMBEDDING_MODEL:-BAAI/bge-m3}
-      --port 7997 --host 0.0.0.0
+      --model-id ${EMBEDDING_MODEL:-BAAI/bge-small-zh-v1.5}
+      --port 8000
+      --max-client-batch-size 32
+      --auto-truncate
     ports:
-      - "${EMBEDDING_PORT:-7997}:7997"
+      - "${EMBEDDING_PORT:-7997}:8000"
     volumes:
-      - model_cache:/app/.cache
+      - model_cache:/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:7997/health || exit 1"]
-      interval: 20s
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/health >/dev/null || exit 1"]
+      interval: 15s
       timeout: 10s
       retries: 20
-      start_period: 180s
+      start_period: 300s
 
   rerank:
-    image: michaelf34/infinity:0.0.76
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.6
     container_name: ai-rag-rerank
     restart: unless-stopped
     environment:
       <<: *common-env
+      HF_HOME: /data
+      HF_ENDPOINT: ${HF_ENDPOINT:-https://huggingface.co}
     command: >
-      v2 --model-id ${RERANK_MODEL:-BAAI/bge-reranker-v2-m3}
-      --port 7998 --host 0.0.0.0
+      --model-id ${RERANK_MODEL:-BAAI/bge-reranker-base}
+      --port 8000
+      --max-client-batch-size 32
+      --auto-truncate
     ports:
-      - "${RERANK_PORT:-7998}:7998"
+      - "${RERANK_PORT:-7999}:8000"
     volumes:
-      - model_cache:/app/.cache
+      - model_cache:/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:7998/health || exit 1"]
-      interval: 20s
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/health >/dev/null || exit 1"]
+      interval: 15s
       timeout: 10s
       retries: 20
-      start_period: 180s
+      start_period: 420s
 
   api:
     build:
@@ -96,12 +107,13 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-ai_rag}:${POSTGRES_PASSWORD:-ai_rag_dev_password}@postgres:5432/${POSTGRES_DB:-ai_rag}
       QDRANT_URL: http://qdrant:6333
       QDRANT_COLLECTION: ${QDRANT_COLLECTION:-kb_chunks}
-      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://embedding:7997/v1}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://embedding:8000/v1}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-local}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-m3}
-      RERANK_BASE_URL: ${RERANK_BASE_URL:-http://rerank:7998/v1}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-small-zh-v1.5}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-512}
+      RERANK_BASE_URL: ${RERANK_BASE_URL:-http://rerank:8000}
       RERANK_API_KEY: ${RERANK_API_KEY:-local}
-      RERANK_MODEL: ${RERANK_MODEL:-BAAI/bge-reranker-v2-m3}
+      RERANK_MODEL: ${RERANK_MODEL:-BAAI/bge-reranker-base}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-}
@@ -151,12 +163,13 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-ai_rag}:${POSTGRES_PASSWORD:-ai_rag_dev_password}@postgres:5432/${POSTGRES_DB:-ai_rag}
       QDRANT_URL: http://qdrant:6333
       QDRANT_COLLECTION: ${QDRANT_COLLECTION:-kb_chunks}
-      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://embedding:7997/v1}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://embedding:8000/v1}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-local}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-m3}
-      RERANK_BASE_URL: ${RERANK_BASE_URL:-http://rerank:7998/v1}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-small-zh-v1.5}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-512}
+      RERANK_BASE_URL: ${RERANK_BASE_URL:-http://rerank:8000}
       RERANK_API_KEY: ${RERANK_API_KEY:-local}
-      RERANK_MODEL: ${RERANK_MODEL:-BAAI/bge-reranker-v2-m3}
+      RERANK_MODEL: ${RERANK_MODEL:-BAAI/bge-reranker-base}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-}
@@ -188,7 +201,7 @@ services:
       - "${WEB_PORT:-5173}:80"
     volumes:
       - ../web/dist:/usr/share/nginx/html:ro
-      - ./web/nginx.default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - api
     healthcheck:
