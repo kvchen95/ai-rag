@@ -1,0 +1,1064 @@
+{
+  "schema": "eval.calibration.v1",
+  "generated_at": "2026-11-23T22:09:14.770595+00:00",
+  "meta": {
+    "source": "夹具演练（详细设计.md 切片入库，生产同一条写入/检索路径）",
+    "doc_key": "evalfix/design-doc",
+    "version_id": "evalfix/design-doc#6275b7a7d730",
+    "chunks": 108,
+    "golden": "/app/eval/golden_50.jsonl",
+    "indexed_points": 108,
+    "points_active": 108,
+    "points_left": 0,
+    "cleanup": {
+      "chunks_left": 0,
+      "versions_left": 0,
+      "documents_left": 0
+    }
+  },
+  "groups": {
+    "answerable": {
+      "n": 33,
+      "n_with_score": 0,
+      "n_none": 33,
+      "mean": null,
+      "p10": null,
+      "median": null,
+      "p90": null,
+      "min": null,
+      "max": null
+    },
+    "refusable": {
+      "n": 14,
+      "n_with_score": 0,
+      "n_none": 14,
+      "mean": null,
+      "p10": null,
+      "median": null,
+      "p90": null,
+      "min": null,
+      "max": null
+    },
+    "clarify": {
+      "n": 3,
+      "n_with_score": 0,
+      "n_none": 3,
+      "mean": null,
+      "p10": null,
+      "median": null,
+      "p90": null,
+      "min": null,
+      "max": null
+    }
+  },
+  "histogram": [
+    {
+      "low": 0.0,
+      "high": 0.05,
+      "answerable": 33,
+      "refusable": 14,
+      "clarify": 3
+    },
+    {
+      "low": 0.05,
+      "high": 0.1,
+      "answerable": 0,
+      "refusable": 0,
+      "clarify": 0
+    },
+    {
+      "low": 0.1,
+      "high": 0.15,
+      "answerable": 0,
+      "refusable": 0,
+      "clarify": 0
+    },
+    {
+      "low": 0.15,
+      "high": 0.2,
+      "answerable": 0,
+      "refusable": 0,
+      "clarify": 0
+    },
+    {
+      "low": 0.2,
+      "high": 0.25,
+      "answerable": 0,
+      "refusable": 0,
+      "clarify": 0
+    },
+    {
+      "low": 0.25,
+      "high": 0.3,
+      "answerable": 0,
+      "refusable": 0,
+      "clarify": 0
+    },
+    {
+      "low": 0.3,
+      "high": 0.35,
+      "answerable": 0,
+      "refusable": 0,
+      "clarify": 0
+    },
+    {
+      "low": 0.35,
+      "high": 0.4,
+      "answerable": 0,
+      "refusable": 0,
+      "clarify": 0
+    },
+    {
+      "low": 0.4,
+      "high": 0.45,
+      "answerable": 0,
+      "refusable": 0,
+      "clarify": 0
+    },
+    {
+      "low": 0.45,
+      "high": 0.5,
+      "answerable": 0,
+      "refusable": 0,
+      "clarify": 0
+    },
+    {
+      "low": 0.5,
+      "high": 0.55,
+      "answerable": 0,
+      "refusable": 0,
+      "clarify": 0
+    },
+    {
+      "low": 0.55,
+      "high": 0.6,
+      "answerable": 0,
+      "refusable": 0,
+      "clarify": 0
+    },
+    {
+      "low": 0.6,
+      "high": 0.65,
+      "answerable": 0,
+      "refusable": 0,
+      "clarify": 0
+    },
+    {
+      "low": 0.65,
+      "high": 0.7,
+      "answerable": 0,
+      "refusable": 0,
+      "clarify": 0
+    },
+    {
+      "low": 0.7,
+      "high": 0.75,
+      "answerable": 0,
+      "refusable": 0,
+      "clarify": 0
+    },
+    {
+      "low": 0.75,
+      "high": 0.8,
+      "answerable": 0,
+      "refusable": 0,
+      "clarify": 0
+    },
+    {
+      "low": 0.8,
+      "high": 0.85,
+      "answerable": 0,
+      "refusable": 0,
+      "clarify": 0
+    },
+    {
+      "low": 0.85,
+      "high": 0.9,
+      "answerable": 0,
+      "refusable": 0,
+      "clarify": 0
+    },
+    {
+      "low": 0.9,
+      "high": 0.95,
+      "answerable": 0,
+      "refusable": 0,
+      "clarify": 0
+    },
+    {
+      "low": 0.95,
+      "high": 1.0,
+      "answerable": 0,
+      "refusable": 0,
+      "clarify": 0
+    }
+  ],
+  "sweep": [
+    {
+      "threshold": 0.2,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.21,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.22,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.23,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.24,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.25,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.26,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.27,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.28,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.29,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.3,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.31,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.32,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.33,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.34,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.35,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.36,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.37,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.38,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.39,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.4,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.41,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.42,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.43,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.44,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.45,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.46,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.47,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.48,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.49,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.5,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.51,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.52,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.53,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.54,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.55,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.56,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.57,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.58,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.59,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    },
+    {
+      "threshold": 0.6,
+      "tp": 0,
+      "fn": 33,
+      "fp": 0,
+      "tn": 14,
+      "tpr": 0.0,
+      "fpr": 0.0,
+      "youden": 0.0
+    }
+  ],
+  "recommendation": {
+    "available": false,
+    "reason": "应答题或拒答题没有有效 top1，无法标定"
+  },
+  "points": [
+    {
+      "qid": "B01",
+      "category": "basic_table",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "B02",
+      "category": "basic_table",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "B03",
+      "category": "basic_table",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "B04",
+      "category": "basic_table",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "B05",
+      "category": "basic_table",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "B06",
+      "category": "basic_table",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "B07",
+      "category": "basic_table",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "B08",
+      "category": "basic_table",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "B09",
+      "category": "basic_table",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "B10",
+      "category": "basic_table",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "B11",
+      "category": "basic_table",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "B12",
+      "category": "basic_table",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "B13",
+      "category": "basic_table",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "B14",
+      "category": "basic_table",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "B15",
+      "category": "basic_table",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "T01",
+      "category": "basic_table",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "T02",
+      "category": "basic_table",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "T03",
+      "category": "basic_table",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "T04",
+      "category": "basic_table",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "T05",
+      "category": "basic_table",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "C01",
+      "category": "chart",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "C02",
+      "category": "chart",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "C03",
+      "category": "chart",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "C04",
+      "category": "chart",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "C05",
+      "category": "chart",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "C06",
+      "category": "chart",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "C07",
+      "category": "chart",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "C08",
+      "category": "chart",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "C09",
+      "category": "chart",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "C10",
+      "category": "chart",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "M01",
+      "category": "temporal_multihop",
+      "expected": "partial",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "检索无候选"
+    },
+    {
+      "qid": "M02",
+      "category": "temporal_multihop",
+      "expected": "pass",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "检索无候选"
+    },
+    {
+      "qid": "M03",
+      "category": "temporal_multihop",
+      "expected": "partial",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "M04",
+      "category": "temporal_multihop",
+      "expected": "clarify",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "M05",
+      "category": "temporal_multihop",
+      "expected": "clarify",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "TR01",
+      "category": "trap",
+      "expected": "reject_none",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "检索无候选"
+    },
+    {
+      "qid": "TR02",
+      "category": "trap",
+      "expected": "reject_none",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "TR03",
+      "category": "trap",
+      "expected": "reject_none",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "TR04",
+      "category": "trap",
+      "expected": "reject_none",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "TR05",
+      "category": "trap",
+      "expected": "reject_none",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "TR06",
+      "category": "trap",
+      "expected": "clarify",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "TR07",
+      "category": "trap",
+      "expected": "reject_none",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "TR08",
+      "category": "trap",
+      "expected": "reject_none",
+      "verdict": "clarify",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "指代「这份」有 0 个候选，未检索"
+    },
+    {
+      "qid": "TR09",
+      "category": "trap",
+      "expected": "reject_none",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "TR10",
+      "category": "trap",
+      "expected": "reject_none",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "TR11",
+      "category": "trap",
+      "expected": "reject_none",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "TR12",
+      "category": "trap",
+      "expected": "reject_none",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "TR13",
+      "category": "trap",
+      "expected": "reject_none",
+      "verdict": "reject_none",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "top1=0.000 < 0.2（精排降级，分数不可用）"
+    },
+    {
+      "qid": "TR14",
+      "category": "trap",
+      "expected": "reject_none",
+      "verdict": "clarify",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "指代「这个」有 0 个候选，未检索"
+    },
+    {
+      "qid": "TR15",
+      "category": "trap",
+      "expected": "reject_none",
+      "verdict": "clarify",
+      "top1": 0.0,
+      "top1_none": true,
+      "reason": "指代「这个」有 0 个候选，未检索"
+    }
+  ]
+}
