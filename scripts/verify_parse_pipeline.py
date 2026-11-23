@@ -46,7 +46,15 @@ from api.parse.tables import cells_from_html, parse_md  # noqa: E402
 from api.parse.model import expand_to_matrix  # noqa: E402
 
 DOC_PREFIX = "verify-parse/"
-SAMPLES = ("policy/travel-cn.pdf", "policy/expense-cn.pdf", "hr/leave-2025.pdf")
+# 三份制度样本（纯正文，验六项随行信息与 bbox）+ 一份带表格的版面样本。
+# 为什么必须带上表格样本：`_check_stored_tables` 只在**真的写了一张表**时才有东西
+# 可对；只跑三份正文样本，"表格三表示入库后仍一致"这条会以"no table chunks"空过。
+SAMPLES = (
+    "policy/travel-cn.pdf",
+    "policy/expense-cn.pdf",
+    "hr/leave-2025.pdf",
+    "layout/table-demo.pdf",
+)
 
 RESULTS: list[tuple[bool, str]] = []
 
@@ -83,12 +91,14 @@ def version_id_for(doc_key: str, path: Path) -> str:
 INSERT_SQL = """
 INSERT INTO chunks (
     chunk_id, doc_key, version_id, chunk_type, parent_id, page_num, bbox,
-    image_path, content_text, table_html, table_md, effective_date, effective_year,
+    image_path, content_text, table_html, table_md, table_cells, notes,
+    effective_date, effective_year,
     date_confidence, is_public, allowed_depts, allowed_roles, token_count, status
 ) VALUES (
     %(chunk_id)s, %(doc_key)s, %(version_id)s, %(chunk_type)s, %(parent_id)s,
     %(page_num)s, %(bbox)s::jsonb, %(image_path)s, %(content_text)s,
-    %(table_html)s, %(table_md)s, %(effective_date)s, %(effective_year)s,
+    %(table_html)s, %(table_md)s, %(table_cells)s::jsonb, %(notes)s,
+    %(effective_date)s, %(effective_year)s,
     %(date_confidence)s, %(is_public)s, %(allowed_depts)s, %(allowed_roles)s,
     %(token_count)s, 'pending'
 )
@@ -152,7 +162,17 @@ def main() -> int:
                 row = chunk.as_row()
                 conn.execute(
                     INSERT_SQL,
-                    {**row, "bbox": json.dumps(row["bbox"], ensure_ascii=False)},
+                    {
+                        **row,
+                        "bbox": json.dumps(row["bbox"], ensure_ascii=False),
+                        # table_cells 是 jsonb：psycopg 不会把 list[dict] 自动转成 jsonb
+                        # （会给 int[]/record 之类），必须显式序列化。
+                        "table_cells": (
+                            json.dumps(row["table_cells"], ensure_ascii=False)
+                            if row["table_cells"] is not None
+                            else None
+                        ),
+                    },
                 )
                 written_ids.append(chunk.chunk_id)
         conn.commit()
@@ -206,9 +226,15 @@ def main() -> int:
                 print(f"         bad pixel rect for {chunk_id}: {rect}")
         check(pixel_ok, "bbox maps to in-page pixel rectangles at 200 DPI")
 
+        # --- 表格三表示：**从库里读回来**再对一次 ---
+        # 只在内存里对（解析后立刻比）测不出"入库丢一列"：实测 001 少了
+        # table_cells 列，`as_row()` 静默丢掉它，而脚本照样 PASS——因为比对用的是
+        # 内存里的 Chunk。这里改成读回 jsonb 再重建矩阵，三份表示缺一份就红。
+        _check_stored_tables(conn, written_ids)
+
         # --- 版面夹具：合并单元格 / OCR / 页眉页脚 ---
         print("\n[4] 版面能力（合并单元格、OCR 兜底、页眉页脚）")
-        _check_layout_fixtures(samples_root)
+        _check_layout_fixtures(conn, samples_root, written_ids)
 
         # --- 清理 ---
         if args.keep:
@@ -226,12 +252,16 @@ def main() -> int:
     return report()
 
 
-def _check_layout_fixtures(samples_root: Path) -> None:
+def _check_layout_fixtures(conn, samples_root: Path, written_ids: list[str]) -> None:
     """版面能力的真实断言：合并单元格保真、OCR 兜底真能出片、页眉页脚真被剔除。
 
     为什么放在验收脚本里而不是只放 pytest：这三件事都容易"看起来实现了"——
     合并单元格的 `col_span` 可能被写死成 1、OCR 可能跑了但被图区域扣光、
     页眉页脚可能一条都没删而报告照样打 `PASS 14/14`。这里直接读真实产物。
+
+    `conn` / `written_ids` 传进来是为了**把 OCR 切片真写进库再读回**：`source:ocr`
+    只在内存 `Chunk.notes` 上时，入库后 `notes` 列不存在（001 没有这列），下游
+    看不出这条证据是识别出来的。内存断言测不出这件事。
     """
     from api.parse.ocr import OcrConfig, build_ocr_engine  # noqa: PLC0415
     from api.parse.reader import ReaderConfig  # noqa: PLC0415
@@ -327,6 +357,99 @@ def _check_layout_fixtures(samples_root: Path) -> None:
         all("source:ocr" in chunk.notes for chunk in page2_chunks),
         "OCR chunks are marked source:ocr",
     )
+
+    # --- 来源标记必须真的入库：内存里有、库里没有等于没标 ---
+    # 写的是 `scanned-on#` 这个版本；写完读回 `notes` 列。001 没有 notes 列时
+    # 这一段会直接报 UndefinedColumn（不是静默丢），因为 as_row() 把它放进 INSERT。
+    doc_key = DOC_PREFIX + "scanned-on"
+    version_id = doc_key + "#abcdef123456"
+    _ensure_version(conn, doc_key=doc_key, version_id=version_id, path=scanned)
+    for chunk in on.chunks:
+        row = chunk.as_row()
+        conn.execute(
+            INSERT_SQL,
+            {
+                **row,
+                "bbox": json.dumps(row["bbox"], ensure_ascii=False),
+                "table_cells": (
+                    json.dumps(row["table_cells"], ensure_ascii=False)
+                    if row["table_cells"] is not None
+                    else None
+                ),
+            },
+        )
+        written_ids.append(chunk.chunk_id)
+    conn.commit()
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT page_num, notes FROM chunks WHERE version_id = %s ORDER BY page_num, chunk_id",
+            (version_id,),
+        )
+        stored = cur.fetchall()
+    ocr_pages = {page_num for page_num, notes in stored if "source:ocr" in (notes or [])}
+    check(
+        ocr_pages == {2},
+        f"notes['source:ocr'] survived the DB round trip on page(s) {sorted(ocr_pages)}",
+    )
+    text_pages = {page_num for page_num, notes in stored if "source:ocr" not in (notes or [])}
+    check(
+        1 in text_pages,
+        "page 1 (real text layer) is not marked as OCR",
+    )
+
+
+def _check_stored_tables(conn, written_ids: list[str]) -> None:
+    """从库里读回表格切片，用**库里的三份表示**重建矩阵并互相比对。
+
+    这一条是本脚本里唯一能发现"入库丢列"的断言：别的断言都拿内存里的 `Chunk`
+    比对，而 `as_row()` 少写一列不会让内存对象变样。实测过：001 没有 `table_cells`
+    列时，脚本对三表示一致照样打 PASS。
+    """
+    from api.parse.model import TableCell, expand_to_matrix  # noqa: PLC0415
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT chunk_id, table_html, table_md, table_cells
+            FROM chunks
+            WHERE chunk_id = ANY(%s) AND chunk_type = 'table'
+            ORDER BY chunk_id
+            """,
+            (written_ids,),
+        )
+        rows = cur.fetchall()
+    if not rows:
+        # SAMPLES 里固定带一份表格样本：跑完一条表格切片都没有，说明"表格入库后
+        # 三表示仍一致"根本没验到。不许静默通过。
+        check(False, "no table chunk was written: the round-trip assertion never ran")
+        return
+    for chunk_id, html, md, cells_raw in rows:
+        if cells_raw is None:
+            check(False, f"stored {chunk_id}: table_cells is NULL (004 迁移的列没写进去)")
+            continue
+        if not (html and md):
+            check(False, f"stored {chunk_id}: table_html/table_md missing")
+            continue
+        cells = [
+            TableCell(
+                row=int(raw["row"]),
+                col=int(raw["col"]),
+                text=str(raw["text"]),
+                is_header=bool(raw["is_header"]),
+                row_span=int(raw["row_span"]),
+                col_span=int(raw["col_span"]),
+            )
+            for raw in cells_raw
+        ]
+        md_matrix = parse_md(md)
+        from_cells = expand_to_matrix(cells, len(md_matrix), len(md_matrix[0]))
+        from_html_cells, rows_n, cols_n = cells_from_html(html)
+        from_html = expand_to_matrix(from_html_cells, rows_n, cols_n)
+        check(
+            from_html == from_cells == md_matrix,
+            f"stored {chunk_id}: html / cells / md still agree after a DB round trip",
+        )
 
 
 def _ensure_version(conn, *, doc_key: str, version_id: str, path: Path) -> None:

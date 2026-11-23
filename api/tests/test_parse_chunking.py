@@ -144,7 +144,13 @@ def test_validate_reports_the_total_count() -> None:
 
 
 def test_as_row_matches_the_database_columns() -> None:
-    """`as_row()` 的键必须与 001 迁移的列名逐字一致——它直接喂 INSERT。"""
+    """`as_row()` 的键必须与迁移的列名逐字一致——它直接喂 INSERT。
+
+    `table_cells` 与 `notes` 在 004 迁移里补上了（001 漏了）：前者是 §3.3
+    "三份表示"的第三份（校验阶段对齐数字用），后者是"这条证据的来源"。
+    它们曾经只在内存对象上，`as_row()` 静默丢掉——那时验收脚本里
+    "表格三表示一致"只对内存成立，入库剩两份。
+    """
     row = _chunk().as_row()
     assert set(row) == {
         "chunk_id",
@@ -158,6 +164,8 @@ def test_as_row_matches_the_database_columns() -> None:
         "content_text",
         "table_html",
         "table_md",
+        "table_cells",
+        "notes",
         "effective_date",
         "effective_year",
         "date_confidence",

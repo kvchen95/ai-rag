@@ -49,6 +49,7 @@ docker compose exec -T api python scripts/qdrant_init.py --recreate     # 维度
 | `001_init.sql` | 五张表 + 视图 + 索引/约束 | DA1 |
 | `002_ingest_job_status.sql` | `ingest_jobs` 状态枚举 CHECK、`running` 必须有 `started_at`、终态必须有 `finished_at`、`failed` 必须带 `error`、同一版本最多一个未结束任务 | A1 |
 | `003_vector_sync.sql` | `doc_versions.deprecated_at`（回收窗口起点）+ `vector_sync_tasks`（向量库期望状态）+ `vector_drift_log`（漂移账） | A3 |
+| `004_chunk_extras.sql` | `chunks.table_cells`（jsonb 单元格矩阵，§3.3 的第三份表示）+ `chunks.notes`（`source:ocr` / `continued_of:pageN` / `may_exceed`） | A2 |
 
 ### 造一个干净库
 
@@ -143,7 +144,7 @@ v_active_chunks   — 视图：version 与 chunk 双 active 的切片 = 可检�
 
 ---
 
-## 4. 与附录 A/B 的差异（4 处，均有理由）
+## 4. 与附录 A/B 的差异（6 处，均有理由）
 
 | # | 差异 | 为什么 |
 |---|---|---|
@@ -151,6 +152,8 @@ v_active_chunks   — 视图：version 与 chunk 双 active 的切片 = 可检�
 | 2 | `qa_log` 增加 `user_id` / `user_depts` / `user_roles` / `is_admin` | §11.2 明确要求审计里带"身份快照"，附录 A.4 漏了。没有身份快照就无法事后回答"这条答案是谁以什么权限看到的" |
 | 3 | `doc_versions` 增加 `created_at` | 判定"最新入库版本"与回收顺序需要；纯技术列，非业务语义 |
 | 4 | `chunks.parent_id` **不加自引用外键**；`doc_versions.superseded_by` **不加外键** | 批量装载时父子顺序不该由约束强制；旧版 `purge` 后 `superseded_by` 仍需保留指向供审计追查 |
+| 5 | `chunks` 增加 `table_cells jsonb`（004） | §3.3 写明"表格在库里存三份东西"，其中第三份是单元格矩阵（"校验阶段对齐数字用它，比在 HTML 里找子串可靠"）。附录 A.3 只有 `table_html` / `table_md`——**附录漏了第三份**。缺了它，数值校验只能正则拆 HTML，正是 §3.3 要避免的做法 |
+| 6 | `chunks` 增加 `notes text[] NOT NULL DEFAULT '{}'`（004） | §3.2 要求标出"这段文字是识别出来的"（OCR 有错字，下游的数值校验要据此放宽或拒绝），§3.3 要求续表/超长表格带标记。附录 A.3 没有任何来源字段，标记只活在解析进程的内存对象里，入库即丢 |
 
 ---
 

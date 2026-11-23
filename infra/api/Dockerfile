@@ -41,6 +41,12 @@ FROM base AS dev
 COPY infra/api/requirements-dev.txt /tmp/requirements-dev.txt
 RUN pip install -r /tmp/requirements-dev.txt
 
+# 解析依赖（pdfplumber / pypdfium2 / Pillow）只装在 dev stage：
+# `api/tests/test_parse_*.py` 要 import 它们，而 prod 镜像不解析任何 PDF
+# （解析是离线摄取步骤，由 worker/脚本跑）。见 requirements-parse.txt 的说明。
+COPY infra/api/requirements-parse.txt /tmp/requirements-parse.txt
+RUN pip install -r /tmp/requirements-parse.txt
+
 
 FROM base AS prod
 

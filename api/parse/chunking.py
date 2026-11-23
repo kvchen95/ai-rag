@@ -156,7 +156,13 @@ class Chunk:
         return len(self.content_text)
 
     def as_row(self) -> dict[str, Any]:
-        """落库形状（列名与 001 迁移一致）。`require_complete()` 必须先过。"""
+        """落库形状（列名与 001/004 迁移一致）。`require_complete()` 必须先过。
+
+        为什么 `table_cells` 与 `notes` 也在这张行里：它们是"§3.3 的三份表示"之
+        第三份与"这条证据的来源"。只放在内存对象上等于入库即丢——校验阶段要拿
+        矩阵对齐数字（而不是正则拆 HTML），下游要能看出"这段文字是 OCR 认的"。
+        004 迁移为此补了这两列。
+        """
         self.require_complete()
         return {
             "chunk_id": self.chunk_id,
@@ -170,6 +176,8 @@ class Chunk:
             "content_text": self.content_text,
             "table_html": self.table_html,
             "table_md": self.table_md,
+            "table_cells": self.table_cells,
+            "notes": list(self.notes),
             "effective_date": self.effective_date,
             "effective_year": self.effective_year,
             "date_confidence": self.date_confidence,

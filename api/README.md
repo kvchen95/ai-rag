@@ -424,6 +424,110 @@ make test-a3                                      # 63 个集成用例
 每 10 轮一次全量对账）。没有它，翻牌在库里生效而向量库永远不知道——所以它不是
 可选的运维便利，是 §4.2"翻牌后一分钟内必须同步完"的必要条件。
 
+## 版面解析 / 表格 / 图表 / 父子切片（A2：§3.2–§3.5）
+
+一份 PDF 进 `parse_document()`，出一批**待转正切片**（`status=pending`，翻牌归 A3）。
+分四层，每层只依赖下一层，各自可单测：
+
+```
+pipeline.py   切片：父子两级 + 六项随行信息 + 图改译对账的仲裁点
+  reader.py   一页 -> PageLayout：四类区域、页眉页脚、跨页续表、OCR 兜底
+    layout.py 抽行 / 判分栏 / 找表格 / 找图 / 段落聚类 / 页眉页脚判定
+      model.py + geometry.py   Line / Region / PageLayout / DocLayout，坐标换算
+```
+
+### 坐标：模型内只存一个空间
+
+模型里的矩形**一律是阅读空间**（未旋转、左上原点、文字横着读的那个空间），
+对外输出的 `bbox` **一律是显示空间归一化坐标**，两者只经 `PageSpace` 换算一次
+（`Region.bbox()` / `PageLayout.bbox_for()` 是唯一出口）。为什么不是"模型存显示空间、
+需要时转阅读空间"：那要在每个聚类函数里各转一次，漏转一处只在旋转页上出错——
+最难被测试发现的一类 bug。`test_rotated_page_bbox_matches_the_unrotated_page` 与
+`verify_parse_pipeline.py` 的 200 DPI 像素换算（A4 = 1654×2339）是这条的可执行判据。
+
+### 表格：一份存档、两份派生
+
+`TableData` 是**同一个对象**的三个投影（`cells` 派生出 `html` 与 `md`），不是三次解析。
+"三表示一致"的可执行定义是往返：`table_html` 反解出的矩阵 == `table_cells` 展开的矩阵，
+`table_md` 再解析出的矩阵 == 同一个。合并单元格按"左上角为值、其余格复制该值"展开，
+空单元格填 `-`，`col_span`/`row_span` 原样保留在 `table_cells` 里（校验阶段靠它对齐数字）。
+
+跨页续表**只标不并**（`continued=True` + `continued_of:pageN`）：把第 2 页的行并进第 1 页
+那条切片，`page_num`/`bbox` 就与 `content_text` 不一致，用户点角标会跳到不含该数字的位置——
+切开的表是两条独立证据，错的 bbox 是**假溯源**。
+
+### 图表：转译 + 对账，对不上就不入库
+
+裁片（无损 WebP，`assert_min_dpi` 挡 <200 DPI）→ VLM 转译（Markdown 给人看 / `JSON:` 段
+给对账）→ 对账四条：数值在轴范围内、饼图求和 ∈[99,101]、数值能在图上文字或柱高比例里对上、
+类别名在图里真实出现过。任一条不过 → `FigureFailure` 进 `doc.figure_failures` 与
+`ParseOutcome.rejected_figures`，**这张图不产切片**。没配 VLM 同理（`vlm_unavailable`），
+而不是"空转译当空文本入库"——空转译的图切片会让检索命中一条没有内容的证据。
+
+失败的图占的版面**仍算已占用**：那里是刻度与类别标签（`100`/`50`/`0`/`Transport`），
+单独变成正文切片就是一批脱离上下文、能命中问句却拿不出依据的数字碎片。
+
+### 切片：父子两级 + 六项随行信息
+
+| 项 | 来源 | 缺了会怎样 |
+|---|---|---|
+| `page_num` | 区域 | 引用不能跳页 |
+| `bbox` | `Region.bbox(space)`（子片取所覆盖行的并集，不是整段） | 高亮框画不出来/框一大块 |
+| `chunk_type` | 区域类型 | 取文本时选错列 |
+| `effective_date` + `date_confidence` | 切片文本里的日期，文档级兜底 | 过期条款混进时间过滤 |
+| `is_public` + `allowed_depts` + `allowed_roles` | 调用方 `Acl`（**必须显式给**） | 越权 / 谁都看不到 |
+| `version_id` | A1 的 `version_id_for(doc_key, sha256)` | 检索入口做不了版本兜底 |
+
+`Chunk.require_complete()` 是这六项的可执行判据（`validate_chunks` 一次报全所有缺项）。
+子片 256–512 字、重叠 64 字；父片按章节/段落累加到 ≤2048 字，单段超长再切。切片编号
+`ch_`+12 位十六进制，由 `sha256(version_id|page|kind|index|part)` 派生——**确定性**（重跑
+同一文件得同一批编号）且**文件系统安全**（它要进 `figures/{chunk_id}.webp`：`version_id`
+里的 `/` 与 `#` 拼进路径会 404）。
+
+### OCR 兜底（默认关）
+
+`OcrConfig(enabled=True)` 才跑，且只跑"没有文字层但有位图"的页（位图 ≥2% 页面，
+只排除水印/logo）。走的页 `PageLayout.ocr_applied=True`，识别出来的 `Line.source="ocr"`、
+带 `confidence`、坐标已按渲染缩放比从像素换回 pt，**不猜着修**（`CNY 5o0` 不改成 `CNY 500`）。
+来源会继续往下传到切片：`Chunk.notes` 里 `source:ocr` / `source:mixed`——只在 `Line`
+上标记等于没标记，入库后 `Line` 就没了，A3 与检索侧只看得到 `Chunk`。
+
+缺 engine 时 `ocr_skipped_reason=engine_unavailable` 并进 `warnings`，不静默降级。
+
+### 验收脚本
+
+```bash
+make samples-layout    # 生成 8 份版面夹具（stdlib 手写 PDF，字节确定）
+make verify-parse      # 真 PG：三份制度样本 + 两份版面夹具 -> 解析 -> 写入 -> 读回断言 -> 清理
+make a2-mutation       # 27 条判据逐个改坏，确认对应用例真的会红（跑完自动还原）
+make test-a2           # A2 的 12 个用例文件（单元 + 夹具级 e2e + 落库往返）
+```
+
+实测：`make test-a2` 278 passed；`make verify-parse` 36/36 断言；`make a2-mutation`
+27/27 检出（两条落库判据需要真 PG，缺 DSN 时脚本**显式判失败**而不是把 skip 当检出）。
+
+`verify_parse_pipeline.py` 的断言覆盖本卡两条验收：**bbox 可映射原页**（归一化矩形换算出
+页内像素矩形，含 A4@200DPI 边界）、**表格三表示一致可重建**（HTML→矩阵、MD→矩阵，
+且必须**从库里读回来之后**仍成立），外加三件容易"看起来实现了"的事：合并单元格的
+`col_span` 真在 HTML 里、页眉页脚真被剔除且报告**如实计数**（`header_footer_lines`，
+页眉页脚行不在 `regions` 里，只统计 `regions` 会让"删了 3 行页眉"显示成 0）、
+OCR 开了就真出片且 `source:ocr` 进了库。
+
+### 落库：三份表示与来源标记都要活到库里（004 迁移）
+
+`table_cells` 与 `notes` 是 004 补的两列（001 漏了）。为什么这件事必须有一个**落库往返**
+的判据：内存里的 `Chunk` 有这两个字段，`as_row()` 少写一列不会让它变样，而校验阶段的
+读法完全不同——
+
+| 场景 | 只有 html + md | 有 table_cells |
+|---|---|---|
+| 校验"500 这个数字在哪一格" | 正则拆 HTML、还要自己还原合并单元格 | 直接用矩阵与 `col_span` |
+| 下游判断"这段文字是 OCR 认的" | 无处可查 | `notes @> '{source:ocr}'` |
+
+`api/tests/test_parse_persist_integration.py` 与 `verify_parse_pipeline.py` 的
+`_check_stored_tables` / notes 往返就是这条的可执行判据，且各自都被变异测试覆盖
+（`as-row-table-cells` / `as-row-notes` 把 `as_row()` 改回丢列，两条用例都会红）。
+
 ## 还没做（留给后续卡）
 
 - Query 理解/检索/门控（B3）、生成/校验/SSE（B4）：路由挂到 `api/routers/` 下，
@@ -432,7 +536,7 @@ make test-a3                                      # 63 个集成用例
 - 限额的执行（并发上限、30 秒预算）：配置已就位，执行点属于 B4 的流式接口。
 - 时间归一的"最近 N 天""今年以来"等窗口型说法：本卡只做了卡片点名的四种
   （去年/上个月/前年/三月）+ 绝对日期，其余落到"未限定时间"并说明。
-- 摄取侧没做的（都不是本卡的验收项）：PDF 解析与切片（A2）、崩溃 worker 的任务
+- 摄取侧没做的（都不是本卡的验收项）：碰撞后的人工处置界面、崩溃 worker 的任务
   回收（超时判失败，§4.4 提到但需要 worker 心跳落地）、文件读不到时的告警升级
   （现在只进 `ingest_jobs.error` 与日志）。
 - **A3 的 reclaim 还没接定时触发**：`make reclaim` 是手动/运维入口，

@@ -1,0 +1,23 @@
+# A2 解析链路的额外依赖（pdfplumber / pypdfium2 / Pillow）。
+#
+# 为什么不并进 infra/api/requirements.txt：
+#   api 服务本身（在线问答、审计、摄取 API）不 import `api.parse`——解析是离线
+#   摄取步骤，由 worker/脚本跑。把 pdfplumber 塞进 api 运行镜像会让在线服务的
+#   镜像多背 ~30MB 与一层 pdfminer 依赖，而它一个页面都不解析。
+#
+# 谁需要它：
+#   * `scripts/verify_parse_pipeline.py`、`scripts/a2_mutation_check.py`（宿主/CI）
+#   * 以后把解析接进摄取 worker 时，worker 镜像装这一份
+#
+# 版本取实测可用的一组（python 3.11/3.12 均可）：
+#   pdfplumber 0.11.4 —— 解析文字层、表格线、位图框
+#   pypdfium2 5.15.2  —— 唯一能出整页位图的（pdfplumber 的 Page 没有 render）
+#   Pillow 13.0.0     —— 裁片、无损 WebP 编码、DPI 校验
+#
+# OCR 引擎**故意不在这里**：rapidocr-onnxruntime 带 ~100MB onnx 运行时，多数部署
+# 的样本有文字层。缺它时 `build_ocr_engine()` 返回 None 并把原因写进
+# `PageLayout.ocr_skipped_reason`（不静默降级）。需要 OCR 的部署额外装：
+#   pip install rapidocr-onnxruntime==1.4.4
+pdfplumber==0.11.4
+pypdfium2==5.15.2
+Pillow==13.0.0

@@ -17,7 +17,7 @@ API_TEST_NETWORK ?= ai-rag_default
 API_TEST_DSN ?= postgresql+psycopg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)
 
 .DEFAULT_GOAL := help
-.PHONY: help dev up up-models down logs ps build pull config health wait reset qdrant-init psql smoke web-build prints-env test-api test-api-db api-dev-image db-migrate db-status index-rebuild index-rebuild-dry samples scan doc verify-scan-api promote rollback vector-sync reconcile reconcile-dry reclaim reclaim-dry ingest-status verify-a3 verify-a3-api verify-a3-migration test-a3 test-a3-vectors test-a3-flip test-a3-sync
+.PHONY: help dev up up-models down logs ps build pull config health wait reset qdrant-init psql smoke web-build prints-env test-api test-api-db api-dev-image db-migrate db-status index-rebuild index-rebuild-dry samples scan doc verify-scan-api promote rollback vector-sync reconcile reconcile-dry reclaim reclaim-dry ingest-status verify-a3 verify-a3-api verify-a3-migration test-a3 test-a3-vectors test-a3-flip test-a3-sync samples-layout verify-parse a2-mutation test-a2
 
 help:
 	@echo "ai-rag local dev — targets"
@@ -43,6 +43,12 @@ help:
 	@echo "  make scan        # 扫 samples/：added/changed/skipped/failed"
 	@echo "  make doc DOC_KEY=policy/travel-cn  # 查文档入库状态"
 	@echo "  make verify-scan-api  # 实测 /api/v1/ingest/scan 的 200/404/409"
+	@echo ""
+	@echo "  A2（§3.2–§3.5）— 版面解析 / 表格 / 图表 / 父子切片"
+	@echo "  make samples-layout  # 生成 8 份版面夹具（合并单元格/双栏/旋转/扫描页/图表）"
+	@echo "  make verify-parse    # 真 PG 验收：解析->切片->写入->读回（36 条断言）"
+	@echo "  make a2-mutation     # 27 条判据逐个改坏，确认对应用例真的会红"
+	@echo "  make test-a2         # A2 的 12 个用例文件（含落库往返）"
 	@echo ""
 	@echo "  A3（§3.6、§4）— 双向量入库 / 翻牌 / 同步 / 回收"
 	@echo "  make promote VERSION_ID='policy/travel-cn#a91f'  # 索引+翻牌+同步+对账"
@@ -168,6 +174,33 @@ verify-a3-api:
 # 顺带回归 001 的 ux_active_version / activated_at 约束没被 003 弄坏。宿主跑。
 verify-a3-migration:
 	@python3 scripts/verify_a3_migration.py
+
+# --- A2：版面解析 / 表格 / 图表 / 父子切片（§3.2–§3.5）-----------------------
+# 8 份版面夹具（stdlib 手写 PDF，字节确定）。测试会自己现造到 tmp，这条是给人看的。
+samples-layout:
+	@python3 scripts/make_layout_samples.py --root samples
+
+# 真 PG 验收：解析 -> 切片 -> 写入 -> 读回断言（含表格三表示往返、OCR 来源标记）。宿主跑。
+# DSN 优先取 $DATABASE_URL，可用 --dsn 覆盖。
+verify-parse:
+	@python3 scripts/verify_parse_pipeline.py $(if $(DSN),--dsn "$(DSN)",)
+
+# 27 条判据逐个改坏，确认对应用例真的会红（跑完自动还原）。
+# 需要 pdfplumber/pypdfium2/Pillow；两条落库判据还需要真 PG（AI_RAG_TEST_DATABASE_URL）。
+a2-mutation:
+	@python3 scripts/a2_mutation_check.py
+
+# A2 用例：单元 + 夹具级 e2e + 落库往返（集成用例没 DSN 就 skip，不假装跑过）。
+test-a2: api-dev-image
+	@$(DOCKER) run --rm --network $(API_TEST_NETWORK) -e RUN_MIGRATIONS=0 \
+		-e AI_RAG_TEST_DATABASE_URL="$(API_TEST_DSN)" \
+		$(API_DEV_IMAGE) pytest -c api/pytest.ini api/tests/test_parse_chunking.py \
+		api/tests/test_parse_dates.py api/tests/test_parse_figure_render.py \
+		api/tests/test_parse_figures.py api/tests/test_parse_geometry.py \
+		api/tests/test_parse_layout.py api/tests/test_parse_merged_table.py \
+		api/tests/test_parse_ocr.py api/tests/test_parse_pipeline_e2e.py \
+		api/tests/test_parse_persist_integration.py \
+		api/tests/test_parse_tables.py api/tests/test_parse_zero_width.py
 
 # --- schema / index（DA1）-----------------------------------------------------
 # 迁移只在 api 容器里跑：宿主没有 psycopg，容器里装了（见 infra/api/requirements.txt）。

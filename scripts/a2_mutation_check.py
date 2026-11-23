@@ -21,6 +21,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -33,7 +34,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 @dataclass(frozen=True, slots=True)
 class Mutation:
-    """一条变异：改哪个文件、改什么、跑哪些用例、期望红的原因。"""
+    """一条变异：改哪个文件、改什么、跑哪些用例、期望红的原因。
+
+    `needs_db` 的变异跑的是集成用例：没有真 PG 时它们会 **skip**，而 skip 的 rc
+    也是 0。把 skip 当"检出"会让脚本在最需要它的时候（CI 没库）谎报全绿，所以
+    这类变异在缺 DSN 时直接判失败并说明原因。
+    """
 
     key: str
     path: str
@@ -41,6 +47,7 @@ class Mutation:
     new: str
     tests: tuple[str, ...]
     why: str
+    needs_db: bool = False
 
 
 MUTATIONS: tuple[Mutation, ...] = (
@@ -237,6 +244,24 @@ MUTATIONS: tuple[Mutation, ...] = (
         why="不把来源传下去 → 下游分不清文字层与识别结果",
     ),
     Mutation(
+        key="as-row-table-cells",
+        path="api/parse/chunking.py",
+        old='            "table_cells": self.table_cells,',
+        new='            "table_cells": None,',
+        tests=("api/tests/test_parse_persist_integration.py",),
+        why="as_row 丢掉矩阵 → §3.3 的第三份表示入库即丢，校验只能正则拆 HTML",
+        needs_db=True,
+    ),
+    Mutation(
+        key="as-row-notes",
+        path="api/parse/chunking.py",
+        old='            "notes": list(self.notes),',
+        new='            "notes": [],',
+        tests=("api/tests/test_parse_persist_integration.py",),
+        why="as_row 丢掉来源标记 → 下游看不出这段文字是 OCR 认的",
+        needs_db=True,
+    ),
+    Mutation(
         key="chunk-id-safe",
         path="api/parse/chunking.py",
         old='    return f"ch_{digest[:12]}"',
@@ -248,11 +273,23 @@ MUTATIONS: tuple[Mutation, ...] = (
 
 
 def run_mutation(mutation: Mutation, workdir: Path) -> tuple[bool, str]:
-    """返回 (是否如期变红, 说明)。"""
+    """返回 (是否如期变红, 说明)。
+
+    **两种"绿"要分清楚**：一是用例真的通过（判据没被覆盖），二是用例被 **skip**
+    （集成用例没有 DSN 就跳过）。两者 rc 都是 0，只看 rc 会把"没验到"当成
+    "验过了"。所以这里要求 stdout 里出现 `failed`，并且显式禁止 skip ——
+    `--no-header` 之外再加 `-p no:cacheprovider` 无所谓，关键是 skip 会被
+    `--strict-markers` 之外的检查拦下：见下面的 `skipped` 判定。
+    """
     target = workdir / mutation.path
     original = target.read_text(encoding="utf-8")
     if mutation.old not in original:
         return False, f"锚点未找到（{mutation.path}）：{mutation.old[:60]!r}"
+    if mutation.needs_db and not _db_dsn():
+        return False, (
+            "这条变异需要真 PG（集成用例会 skip），但没设 AI_RAG_TEST_DATABASE_URL/"
+            "DATABASE_URL —— 不把 skip 当检出"
+        )
     try:
         target.write_text(original.replace(mutation.old, mutation.new, 1), encoding="utf-8")
         proc = subprocess.run(  # noqa: S603
@@ -260,13 +297,38 @@ def run_mutation(mutation: Mutation, workdir: Path) -> tuple[bool, str]:
             cwd=workdir,
             capture_output=True,
             text=True,
+            env=_pytest_env(mutation),
         )
         if proc.returncode == 0:
-            return False, "变异后测试仍然全绿 —— 这条判据没有被任何用例覆盖"
+            skipped = "skipped" in proc.stdout
+            return False, (
+                "变异后只用例被 skip 了（没有真 PG）—— 不算检出"
+                if skipped
+                else "变异后测试仍然全绿 —— 这条判据没有被任何用例覆盖"
+            )
         tail = [line for line in proc.stdout.splitlines() if "FAILED" in line or "passed" in line]
         return True, tail[-1][:120] if tail else f"rc={proc.returncode}"
     finally:
         target.write_text(original, encoding="utf-8")
+
+
+def _db_dsn() -> str | None:
+    """集成用例认的那个 DSN（与 api/tests/conftest.py 的 `pg_dsn` 口径一致）。"""
+    return os.getenv("AI_RAG_TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
+
+
+def _pytest_env(mutation: Mutation) -> dict[str, str]:
+    """子进程环境：需要真库的变异把 DSN 传下去，其余沿用当前环境。
+
+    不传 DSN 的话集成用例会 skip，rc 仍然是 0 —— 脚本会把"没验到"读成"没红"，
+    进而报 `MUTATIONS NOT DETECTED`，看起来像判据失效，实际是环境没接上。
+    """
+    env = dict(os.environ)
+    if mutation.needs_db:
+        dsn = _db_dsn()
+        if dsn:
+            env["AI_RAG_TEST_DATABASE_URL"] = dsn
+    return env
 
 
 def main() -> int:
