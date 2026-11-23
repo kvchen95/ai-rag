@@ -1,5 +1,8 @@
 fastapi==0.115.6
 uvicorn[standard]==0.32.1
 psycopg[binary]==3.2.3
+psycopg-pool==3.2.4
+pydantic-settings==2.7.1
 httpx==0.28.1
-qdrant-client==1.12.1
+# 与服务端 qdrant/qdrant:v1.15.3 对齐（1.12 会报兼容性告警）
+qdrant-client==1.15.1

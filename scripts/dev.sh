@@ -30,7 +30,11 @@ Commands:
   health       Check containers + Qdrant + PG + API + Web (+ models if running)
   smoke        End-to-end smoke: embedding -> Qdrant dense+BM25 -> RRF -> rerank
   config       Validate compose config
-  qdrant-init  Create the kb_chunks collection (dense 512 + bm25 sparse, IDF)
+  qdrant-init  Create/verify the kb_chunks collection (dense 512 + bm25 sparse, IDF) + payload indexes
+  db-migrate   Apply db/migrations/*.sql (same runner the api entrypoint uses)
+  db-status    Show the migration ledger (applied / pending / drifted)
+  index-rebuild      Rebuild Qdrant dense+bm25 from PG content_text
+  index-rebuild-dry  Show the rebuild plan without writing anything
   psql         Open a psql shell inside the postgres container
   reset        Stop and remove volumes (destructive, asks confirmation)
 USAGE
@@ -119,24 +123,15 @@ cmd_smoke() { load_env; python3 "$ROOT_DIR/scripts/smoke.py" "$@"; }
 
 cmd_qdrant_init() {
   load_env
-  echo "== creating Qdrant collection ${QDRANT_COLLECTION:-kb_chunks} (dense 512 + bm25 IDF) =="
-  local url="http://127.0.0.1:${QDRANT_HTTP_PORT:-6333}"
-  local name="${QDRANT_COLLECTION:-kb_chunks}"
-  local existing
-  existing=$(http_code "$url/collections/$name")
-  if [[ "$existing" == "200" ]]; then
-    echo "collection $name already exists (leaving it untouched)"
-    return 0
-  fi
-  local dim="${EMBEDDING_DIM:-512}"
-  curl -fsS -X PUT "$url/collections/$name" \
-    -H 'Content-Type: application/json' \
-    -d "{
-      \"vectors\": {\"dense\": {\"size\": $dim, \"distance\": \"Cosine\"}},
-      \"sparse_vectors\": {\"bm25\": {\"modifier\": \"idf\"}}
-    }" && echo
-  curl -fsS "$url/collections/$name" && echo
+  # 集合形状与 payload 索引只在一处定义：scripts/qdrant_common.py。
+  "${COMPOSE[@]}" exec -T api python scripts/qdrant_init.py "$@"
 }
+
+cmd_db_migrate() { load_env; "${COMPOSE[@]}" exec -T api python scripts/db_migrate.py "$@"; }
+
+cmd_db_status() { load_env; "${COMPOSE[@]}" exec -T api python scripts/db_migrate.py --status "$@"; }
+
+cmd_index_rebuild() { load_env; "${COMPOSE[@]}" exec -T api python scripts/qdrant_rebuild.py "$@"; }
 
 cmd_psql() { load_env; "${COMPOSE[@]}" exec postgres psql -U "${POSTGRES_USER:-ai_rag}" -d "${POSTGRES_DB:-ai_rag}"; }
 
@@ -160,7 +155,11 @@ main() {
     wait) cmd_wait ;;
     health) cmd_health ;;
     config) load_env; "${COMPOSE[@]}" config >/dev/null && echo "compose config OK ($ENV_FILE)" ;;
-    qdrant-init) cmd_qdrant_init ;;
+    qdrant-init) cmd_qdrant_init "${@:2}" ;;
+    db-migrate) cmd_db_migrate "${@:2}" ;;
+    db-status) cmd_db_status "${@:2}" ;;
+    index-rebuild) cmd_index_rebuild "${@:2}" ;;
+    index-rebuild-dry) cmd_index_rebuild --dry-run "${@:2}" ;;
     smoke) cmd_smoke ;;
     psql) cmd_psql ;;
     reset) cmd_reset ;;

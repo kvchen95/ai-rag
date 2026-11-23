@@ -28,16 +28,34 @@ docker compose ps
 
 | 服务 | 镜像 | 宿主机端口 | 说明 |
 |---|---|---|---|
-| postgres | postgres:16-alpine | 5432 | PG 是唯一真相，数据卷 `ai_rag_pg_data` |
+| postgres | pgvector/pgvector:pg16 | 5432 | PG 是唯一真相，数据卷 `ai_rag_pg_data`；镜像带 pgvector（`chunks.embedding_dense vector(512)` 需要） |
 | qdrant | qdrant/qdrant:v1.15.3 | 6333 (HTTP) / 6334 (gRPC) | 稠密 + BM25 稀疏同集合，卷 `ai_rag_qdrant_data` |
 | embedding | ghcr.io/huggingface/text-embeddings-inference:cpu-1.6 | 7997 | BAAI/bge-small-zh-v1.5，512 维，OpenAI 兼容 `/v1/embeddings` |
-| rerank | 同上 | 7998 | BAAI/bge-reranker-base，TEI 原生 `POST /rerank {"query","texts"}` |
+| rerank | 同上 | 7999 | BAAI/bge-reranker-base，TEI 原生 `POST /rerank {"query","texts"}` |
 | api | build `infra/api`（占位 FastAPI） | 8000 | `/healthz` 实测 PG + Qdrant |
 | worker | build `infra/worker`（占位轮询进程） | — | 每 30s 打一次 PG/Qdrant 心跳，健康标记 `/tmp/worker.ready` |
 | web | nginx:1.27-alpine | 5173 | 静态 `web/dist`，并把 `/api/` 反代到 api:8000（SSE 不缓冲） |
 
 Qdrant 1.15.3 是**硬性下限**：自托管镜像要 1.15.3 起才支持服务端 `Qdrant/bm25` 稀疏推理；
 1.13.x / 1.15.1 会在 upsert 时报 `InferenceService is not initialized`。
+
+## Schema 与向量集合
+
+建表与集合初始化都不在 `initdb` 里（`initdb` 只在数据卷首次创建时执行，改 schema 时永远到不了老库）：
+
+```bash
+make db-migrate        # 应用 db/migrations/*.sql（api 容器启动时也会自动跑）
+make db-status         # 迁移台账
+make qdrant-init       # 建/校验 kb_chunks（dense 512/Cosine + bm25 IDF）+ payload 索引
+make index-rebuild-dry # 从 PG content_text 重建前的计划（条数/维度/批次）
+make index-rebuild     # 全量重建 Qdrant dense+bm25
+```
+
+口径、字段字典、与 `详细设计.md` 附录 A/B 的差异、重建 runbook 都在
+[`db/README.md`](../db/README.md)（DA1 交付）。这里只记两条硬约束：
+
+- PG 镜像必须是 `pgvector/pgvector:pg16`（`POSTGRES_IMAGE` 可覆盖）；`postgres:16-alpine` 没有 vector 扩展。
+- 换 embedding 模型/维度后集合不能混用，先 `qdrant_init.py --recreate` 再 `index-rebuild`。
 
 ## 模型服务
 

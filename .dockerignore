@@ -1,0 +1,17 @@
+# 构建上下文裁剪：镜像只需要 api/、db/、scripts/ 与 infra/api/ 下的依赖清单。
+# 不裁掉 node_modules / .git / 数据卷目录的话，每次 build 都要把几百 MB 传给 daemon。
+.git
+.gitignore
+.env
+.env.local
+**/__pycache__
+**/*.py[cod]
+.venv
+.pytest_cache
+web/node_modules
+web/dist
+data
+figures
+*.log
+.DS_Store
+infra/_stale_web_dir_rootown

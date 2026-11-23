@@ -5,7 +5,9 @@ x-common-env: &common-env
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # pgvector/pgvector:pg16 = postgres:16 + pgvector extension (needed by chunks.embedding_dense vector(512)).
+    # Plain postgres:16-alpine has no vector extension, so `CREATE EXTENSION vector` fails there.
+    image: ${POSTGRES_IMAGE:-pgvector/pgvector:pg16}
     container_name: ai-rag-postgres
     restart: unless-stopped
     environment:
@@ -127,6 +129,21 @@ services:
       RERANK_TOP_N_MIN: ${RERANK_TOP_N_MIN:-5}
       RERANK_TOP_N_MAX: ${RERANK_TOP_N_MAX:-8}
       EVIDENCE_MAX_CHARS: ${EVIDENCE_MAX_CHARS:-6000}
+      # API 运行时参数（业务阈值/模型名在上面，必须有值；这些有代码默认值）
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-1}
+      DB_POOL_MIN: ${DB_POOL_MIN:-1}
+      DB_POOL_MAX: ${DB_POOL_MAX:-8}
+      DB_CONNECT_TIMEOUT_S: ${DB_CONNECT_TIMEOUT_S:-3}
+      QDRANT_TIMEOUT_S: ${QDRANT_TIMEOUT_S:-5}
+      EMBEDDING_TIMEOUT_S: ${EMBEDDING_TIMEOUT_S:-10}
+      RERANK_TIMEOUT_S: ${RERANK_TIMEOUT_S:-10}
+      LLM_TIMEOUT_S: ${LLM_TIMEOUT_S:-30}
+      HEALTH_PROBE_TIMEOUT_MS: ${HEALTH_PROBE_TIMEOUT_MS:-1500}
+      QA_BUDGET_S: ${QA_BUDGET_S:-30}
+      MAX_QUESTION_CHARS: ${MAX_QUESTION_CHARS:-500}
+      QA_MAX_CONCURRENCY: ${QA_MAX_CONCURRENCY:-8}
+      AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-365}
       AUTH_MODE: ${AUTH_MODE:-fixed_jwt}
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-dev-only-change-me}
       AUTH_JWT_ALG: ${AUTH_JWT_ALG:-HS256}
