@@ -218,28 +218,79 @@ button:focus-visible, .citation-ref:focus-visible, .citation-chip:focus-visible,
 .pdf-jump input { width: 84px; }
 
 .pdf-canvas-wrap { flex: 1; overflow: auto; padding: 16px; background: #e9edf3; }
+.pdf-placeholder {
+  max-width: 520px; margin: 48px auto; padding: 18px 20px; background: #fff;
+  border: 1px dashed #b8c4d6; border-radius: 10px; font-size: 13px; line-height: 1.7; color: #475467;
+}
 .pdf-page {
-  position: relative; width: min(100%, 720px); min-height: 760px; margin: 0 auto;
+  position: relative; width: min(100%, 720px); margin: 0 auto;
   background: #fff; border: 1px solid #d0d5dd; box-shadow: 0 2px 10px rgba(16,24,40,0.08);
 }
-.pdf-page-header {
-  display: flex; justify-content: space-between; gap: 10px; padding: 14px 18px;
+.pdf-page-head {
+  display: flex; justify-content: space-between; gap: 10px; padding: 10px 14px;
   border-bottom: 1px solid #eaecf0; font-size: 12px; color: #475467; background: #fcfcfd;
 }
 .pdf-page-num { font-family: var(--mono); }
-.pdf-page-body { position: relative; padding: 28px 34px 40px; min-height: 680px; }
-.pdf-line { margin: 0 0 14px; line-height: 1.8; font-size: 14px; color: #1d2939; }
+.pdf-rendering { color: #175cd3; }
+.pdf-page-frame { position: relative; }
+.pdf-page-frame canvas { display: block; width: 100%; height: auto; }
 .muted { color: var(--muted); }
 .bbox-layer { position: absolute; inset: 0; pointer-events: none; }
 .bbox-highlight {
   position: absolute; border: 2px solid rgba(245, 158, 11, 0.95);
-  background: rgba(253, 230, 138, 0.28); border-radius: 2px;
+  background: rgba(253, 230, 138, 0.32); border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.35), 0 2px 8px rgba(245, 158, 11, 0.25);
 }
+.bbox-degraded {
+  margin: 12px 14px 16px; padding: 10px 12px; border-radius: 8px;
+  background: #fffaeb; border: 1px solid #fedf89; color: #7a2e0e; font-size: 13px; line-height: 1.6;
+}
+.bbox-degraded-title { font-weight: 600; }
+.bbox-degraded-body { color: #854a0e; }
+.bbox-degraded-snippet { margin: 6px 0 0; padding-left: 10px; border-left: 3px solid #f5c04a; color: #713f12; }
+.pdf-error {
+  margin: 14px 16px 0; padding: 12px 14px; border-radius: 10px;
+  background: #fef3f2; border: 1px solid #fecdca; color: #b42318; font-size: 13px; line-height: 1.6;
+}
+.pdf-error-title { font-weight: 600; }
+.pdf-error-hint { color: #912018; font-size: 12px; margin-top: 4px; }
 
 .pdf-footer { padding: 12px 16px; border-top: 1px solid var(--border); background: #fff; font-size: 13px; }
 .pdf-selection { display: flex; flex-direction: column; gap: 4px; line-height: 1.5; }
 .pdf-snippet { color: #475467; }
 .pdf-bbox-note { font-family: var(--mono); font-size: 11px; color: #667085; word-break: break-all; }
+.figure-panel {
+  margin-top: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: #fbfdff;
+  display: flex; flex-direction: column; gap: 6px; font-size: 12px;
+}
+.figure-title { font-weight: 600; color: #344054; }
+.figure-image { max-width: 100%; border-radius: 6px; border: 1px solid var(--border); background: #fff; }
+.figure-caption { color: #475467; line-height: 1.6; }
+.figure-forbidden { background: #fef3f2; border-color: #fecdca; color: #b42318; }
+
+.settings-bar {
+  display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end;
+  padding: 10px 12px; background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow); font-size: 12px;
+}
+.field { display: flex; flex-direction: column; gap: 4px; color: var(--muted); }
+.field select, .field input {
+  border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; background: #fff;
+  color: var(--text); font-size: 13px;
+}
+.field-token { flex-direction: row; align-items: flex-end; gap: 6px; flex-wrap: wrap; }
+.field-token label { align-self: center; }
+.field-token input { min-width: 260px; }
+.token-paste { min-width: 180px; }
+.token-state { font-size: 12px; color: var(--muted); align-self: center; }
+.field-scope { flex: 1; min-width: 240px; }
+.mono { font-family: var(--mono); font-size: 12px; }
+.pill-warn { background: #fffaeb; color: #b54708; }
+.msg-verdict { font-family: var(--mono); font-size: 11px; color: #175cd3; }
+.msg-scope-note { margin-top: 6px; font-size: 12px; color: #667085; }
+.link-button {
+  border: 0; background: none; padding: 0; color: #175cd3; text-decoration: underline; font-size: 13px;
+}
 
 @media (max-width: 1100px) {
   .workspace { grid-template-columns: 1fr; }

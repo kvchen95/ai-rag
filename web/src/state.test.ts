@@ -153,4 +153,110 @@ describe('stream reducer', () => {
     const msg = state.messages.find((m) => m.id === 'a1');
     expect(msg?.text).toBe('');
   });
+
+  it('does not accept tokens after a fallback (terminal message guard)', () => {
+    let state = runEvents('r7', 'a7', [
+      { type: 'step', hop: 0, phase: 'retrieval', elapsed_ms: 1 },
+      { type: 'fallback', code: 'model_timeout', message: '稍后重试', docs: [] },
+    ]);
+    state = reduce(state, { type: 'sse_event', runId: 'r7', event: { type: 'token', delta: 'LATE' } });
+    const msg = state.messages.find((m) => m.id === 'a7');
+    expect(msg?.text).toBe('稍后重试');
+    expect(msg?.text).not.toContain('LATE');
+  });
+
+  it('keeps the first done when a duplicate done arrives', () => {
+    let state = runEvents('r8', 'a8', [
+      { type: 'token', delta: 'ok' },
+      { type: 'done', latency_ms: 100, hop_count: 1, verdict: 'pass' },
+    ]);
+    const before = state;
+    state = reduce(state, {
+      type: 'sse_event',
+      runId: 'r8',
+      event: { type: 'done', latency_ms: 999, hop_count: 3, verdict: 'unverifiable' },
+    });
+    expect(state).toBe(before);
+    expect(state.lastDone?.verdict).toBe('pass');
+  });
+
+  it('counts malformed and unknown events instead of crashing', () => {
+    let state = reduce(initialState, { type: 'user_submit', question: 'Q', runId: 'r9', messageId: 'a9' });
+    for (const event of [null, { type: 'tool_call' }, { type: 'citations', items: 'not-array' }]) {
+      state = reduce(state, { type: 'sse_event', runId: 'r9', event: event as unknown as SseEvent });
+    }
+    expect(state.droppedFrames).toBeGreaterThanOrEqual(2);
+    expect(state.status).toBe('retrieving');
+  });
+
+  it('shows a notice when the stream ends without any content', () => {
+    const state = runEvents('r10', 'a10', [
+      { type: 'done', latency_ms: 5, hop_count: 0, verdict: 'pass' },
+    ]);
+    const msg = state.messages.find((m) => m.id === 'a10');
+    expect(msg?.text).toBe('（服务未返回正文）');
+    expect(msg?.status).toBe('done');
+  });
+
+  it('keeps fallback code and done code apart, plus uncovered list', () => {
+    const state = runEvents('r11', 'a11', [
+      { type: 'fallback', code: 'unverifiable', message: '本次不作结论，附原文', docs: [] },
+      {
+        type: 'done',
+        latency_ms: 30,
+        hop_count: 2,
+        verdict: 'partial',
+        code: 'low_confidence',
+        uncovered: ['二线城市上限'],
+      },
+    ]);
+    const msg = state.messages.find((m) => m.id === 'a11');
+    expect(msg?.fallback?.code).toBe('unverifiable');
+    expect(msg?.verdict).toBe('partial');
+    expect(state.lastDone?.uncovered).toEqual(['二线城市上限']);
+  });
+
+  it('keeps clarify options with their refill parameters', () => {
+    const state = runEvents('r12', 'a12', [
+      {
+        type: 'clarify',
+        question: '看哪一份？',
+        options: [
+          { label: '差旅管理办法', value: 'policy/travel-cn', doc_key: 'policy/travel-cn', page_hint: 47 },
+        ],
+      },
+      { type: 'done', latency_ms: 10, hop_count: 1, verdict: 'clarify' },
+    ]);
+    const msg = state.messages.find((m) => m.id === 'a12');
+    expect(msg?.clarify?.options[0]).toMatchObject({ value: 'policy/travel-cn', doc_key: 'policy/travel-cn' });
+    expect(msg?.status).toBe('done');
+  });
+
+  it('stores only the fixed UiError copy on HTTP failure', () => {
+    let state = reduce(initialState, { type: 'user_submit', question: 'Q', runId: 'r13', messageId: 'a13' });
+    state = reduce(state, {
+      type: 'sse_error',
+      runId: 'r13',
+      error: { kind: 'forbidden', message: '无权查看该文档', httpStatus: 403 },
+    });
+    expect(state.status).toBe('failed');
+    expect(state.error).toEqual({ kind: 'forbidden', message: '无权查看该文档', httpStatus: 403 });
+    expect(state.messages.find((m) => m.id === 'a13')?.text).toBe('无权查看该文档');
+  });
+
+  it('does not resurrect an interrupted run with a late done', () => {
+    let state = runEvents('r14', 'a14', [
+      { type: 'step', hop: 0, phase: 'generate', elapsed_ms: 1 },
+      { type: 'token', delta: '半截' },
+    ]);
+    state = reduce(state, { type: 'sse_interrupted', runId: 'r14' });
+    state = reduce(state, {
+      type: 'sse_event',
+      runId: 'r14',
+      event: { type: 'done', latency_ms: 99, hop_count: 0, verdict: 'pass' },
+    });
+    const msg = state.messages.find((m) => m.id === 'a14');
+    expect(msg?.status).toBe('interrupted');
+    expect(state.lastDone).toBeNull();
+  });
 });

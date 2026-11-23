@@ -23,7 +23,7 @@ from api.config import Settings, get_settings
 from api.errors import install_error_handlers
 from api.middleware import RequestContextMiddleware
 from api.observability import configure_logging, get_logger, log_event
-from api.routers import health, ingest, qa
+from api.routers import health, ingest, qa, samples
 
 logger = get_logger("api.main")
 
@@ -77,6 +77,8 @@ def create_app(
     app.include_router(health.router)
     app.include_router(ingest.router)
     app.include_router(qa.router)
+    # 引用溯源要的两个只读接口（附录 C.1 的样本直出 + 切片图）：F2 的角标点回依赖它们。
+    app.include_router(samples.router)
     return app
 
 

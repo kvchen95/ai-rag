@@ -1,4 +1,4 @@
-import type { CitationItem, SseEvent } from './types';
+import type { CitationItem, SseEvent, UiError } from './types';
 
 export interface MockScenario {
   id: string;
@@ -58,9 +58,10 @@ export const scenarios: MockScenario[] = [
           type: 'clarify',
           question: '请确认差旅城市级别，以便给出准确标准：',
           options: [
-            { label: '一线城市', value: 'tier1' },
-            { label: '二线城市', value: 'tier2' },
-            { label: '其他城市', value: 'other' },
+            // value 与 B4 一致：点选后回填的是 doc_key（附录 C.1 的 scope.doc_keys）。
+            { label: '只看《差旅管理办法》', value: 'policy/travel-cn', doc_key: 'policy/travel-cn' },
+            { label: '只看《费用报销制度》', value: 'policy/expense-cn', doc_key: 'policy/expense-cn' },
+            { label: '全部有权限文档', value: '' },
           ],
         },
       },
@@ -91,6 +92,36 @@ export const scenarios: MockScenario[] = [
         },
       },
       { delayMs: 760, event: { type: 'done', latency_ms: 760, hop_count: 1, verdict: 'reject_none' } },
+    ],
+  },
+  {
+    id: 'figure_slice',
+    name: '图表切片（真资源）',
+    description: '合成帧，但引用指向演示库里真实的图表切片：WebP + 说明 + 高亮框',
+    events: [
+      { delayMs: 100, event: { type: 'step', hop: 0, phase: 'retrieval', elapsed_ms: 110 } },
+      { delayMs: 380, event: { type: 'step', hop: 0, phase: 'verify', elapsed_ms: 400 } },
+      { delayMs: 520, event: { type: 'token', delta: '住宿标准见版面裁图' } },
+      { delayMs: 600, event: { type: 'token', delta: '[1]。' } },
+      {
+        delayMs: 720,
+        event: {
+          type: 'citations',
+          items: [
+            {
+              n: 1,
+              doc_key: 'policy/travel-cn',
+              doc_name: 'travel-cn.pdf',
+              page_num: 1,
+              // 与演示库里 ch_fig_f2_1 的 bbox 一致（scripts/f2_demo_seed.py 写进去的）。
+              bbox: [[0.121, 0.0633, 0.6491, 0.1904]],
+              snippet: '【F2 演示夹具】住宿标准段落的版面裁图（非 VLM 转译）。',
+              chunk_id: 'ch_fig_f2_1',
+            },
+          ],
+        },
+      },
+      { delayMs: 800, event: { type: 'done', latency_ms: 800, hop_count: 0, verdict: 'pass' } },
     ],
   },
   {
@@ -125,7 +156,7 @@ export function playMockSse(
   scenarioId: string,
   handlers: {
     onEvent: (event: SseEvent) => void;
-    onError: (error: string) => void;
+    onError: (error: UiError) => void;
     onInterrupted?: () => void;
   },
 ): MockStreamHandle {
@@ -149,8 +180,11 @@ export function playMockSse(
       if (cancelled) return;
       try {
         handlers.onEvent(event);
-      } catch (err) {
-        handlers.onError(err instanceof Error ? err.message : String(err));
+      } catch {
+        handlers.onError({
+          kind: 'protocol',
+          message: '回放器内部错误，已停止',
+        });
         finish();
         return;
       }
