@@ -33,6 +33,8 @@ BASE_ENV: dict[str, object] = {
     "RERANK_TOP_N_MAX": 8,
     "MAX_HOPS": 3,
     "EVIDENCE_MAX_CHARS": 6000,
+    # 身份：fixed_jwt 模式下没有 secret 等于不验签，所以它也是必填项（§5.1）。
+    "AUTH_JWT_SECRET": "dev-only-test-secret",
 }
 
 

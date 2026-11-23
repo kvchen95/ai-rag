@@ -85,14 +85,30 @@ class Settings(BaseSettings):
     # --- 健康检查 ---
     health_probe_timeout_ms: int = Field(default=1500, gt=0)
 
+    # --- 摄取（A1：样本扫描 / ingest_jobs 状态机）---
+    # 样本目录：开发期摄取不是"上传接口"，是扫目录（§3.1）。给默认值是因为它属于
+    # 基础设施参数（换个部署位置不该改代码的语义），但目录不存在时扫描必须报错而不是
+    # 静悄悄返回 0 条——见 api/ingest/fingerprint.py 与 /ingest/scan 的 500/空结果区分。
+    ingest_samples_dir: str = "samples"
+    # 重试上限：口径是"1 次尝试 + N 次重试"（§4.4「失败重试三次转人工清单」）。
+    ingest_max_retries: int = Field(default=3, ge=0, le=10)
+
     # --- 身份（§5.1 / B2 卡实现解析，这里只做配置承载）---
-    auth_mode: str = "fixed_jwt"
+    # AUTH_MODE 决定凭证怎么来：fixed_jwt 验签；mock_header 只给本地开发用。
+    # 两种模式的必填项由下面的跨字段校验分别盯着，避免"某模式下少配一项也能起"。
+    auth_mode: Literal["fixed_jwt", "mock_header"] = "fixed_jwt"
     auth_jwt_secret: SecretStr = SecretStr("")
-    auth_jwt_alg: str = "HS256"
+    auth_jwt_alg: Literal["HS256", "HS384", "HS512"] = "HS256"
     auth_jwt_user_id_claim: str = "sub"
     auth_jwt_depts_claim: str = "user_depts"
     auth_jwt_roles_claim: str = "user_roles"
     auth_jwt_admin_claim: str = "admin"
+    # 开发夹具身份（AUTH_MODE=mock_header 时使用）。给空默认值而不是造一个假用户：
+    # 默认身份一旦写进代码，生产也会有一个"谁都能当"的账号。
+    auth_mock_user_id: str = ""
+    auth_mock_depts: str = ""
+    auth_mock_roles: str = ""
+    auth_mock_admin: bool = False
 
     @field_validator("qdrant_url", "embedding_base_url", "rerank_base_url")
     @classmethod
@@ -131,7 +147,22 @@ class Settings(BaseSettings):
             base = self.llm_base_url if gw == "LLM" else self.vlm_base_url
             if base.strip() and not model.strip():
                 raise ValueError(f"{gw}_MODEL is required when {gw}_BASE_URL is set")
+        # 身份模式的必填项分别盯着：缺了就在启动时点名，而不是等第一个请求 401。
+        # 用空 secret 验签等于不验签——这是最容易被忽略的一种"配好了但没生效"。
+        if (
+            self.auth_mode == "fixed_jwt"
+            and not self.auth_jwt_secret.get_secret_value()
+        ):
+            raise ValueError("AUTH_JWT_SECRET is required when AUTH_MODE=fixed_jwt")
+        # mock_header 不校验 AUTH_MOCK_* 是否有值：身份来自请求头，
+        # 环境变量只是给 `scripts/` 与 curl 用的便利夹具。要求它必填，
+        # 会让"只想用请求头试一下"的场景卡在启动阶段。
         return self
+
+    @property
+    def auth_signs_tokens(self) -> bool:
+        """是否真的在验签。`mock_header` 只该出现在开发环境。"""
+        return self.auth_mode == "fixed_jwt"
 
     # --- 派生量 ---
 
@@ -175,6 +206,21 @@ class Settings(BaseSettings):
                 "qdrant_collection": self.qdrant_collection,
                 "audit_retention_days": self.audit_retention_days,
             },
+        }
+
+    def public_ingest_config(self) -> dict[str, Any]:
+        """摄取侧的配置指纹（非生产返回）。
+
+        `scan_lock_key` 也在这里：advisory lock 的数值属于实现细节，但验证脚本需要
+        用它来制造"另一个进程持锁"的场景。让服务自己报，脚本就不必抄一份数值
+        （抄了之后改 key 不会红，脚本只会静静失去测并发的能力）。
+        """
+        from api.ingest.scan import SCAN_LOCK_KEY  # 局部导入：config 不该依赖 ingest 包
+
+        return {
+            "samples_dir": self.ingest_samples_dir,
+            "max_retries": self.ingest_max_retries,
+            "scan_lock_key": SCAN_LOCK_KEY,
         }
 
 

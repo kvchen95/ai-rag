@@ -42,6 +42,10 @@ POINT_NAMESPACE = uuid.UUID("6f3d3c1e-2b8a-5a0e-9c7d-1a2b3c4d5e6f")
 # Payload indexes required by 附录 B: doc_key, version_id, is_public, allowed_depts,
 # allowed_roles, effective_year, chunk_type, status. chunk_id / parent_id / page_num
 # are not filter fields but are indexed/kept for joins back to PG and citations.
+#
+# effective_date / date_confidence 是 §5.3 时间过滤必需的：只按年份过滤会把
+# 「三月」这种月度窗口退化成整年，而且会把 date_confidence=inferred 的切片一起召回
+# （§5.2 明确"只认显式时间"）。两者缺一个，Qdrant 侧与 PG 侧的过滤语义就对不上。
 PAYLOAD_INDEXES: dict[str, str] = {
     "doc_key": "keyword",
     "version_id": "keyword",
@@ -53,6 +57,8 @@ PAYLOAD_INDEXES: dict[str, str] = {
     "allowed_depts": "keyword",   # array<keyword>: Qdrant matches "any element"
     "allowed_roles": "keyword",
     "effective_year": "integer",
+    "effective_date": "integer",
+    "date_confidence": "keyword",
     "page_num": "integer",
 }
 
@@ -74,7 +80,13 @@ def collection_spec(dim: int = DEFAULT_DIM) -> dict[str, Any]:
 
 
 def build_payload(row: dict[str, Any], status: str | None = None) -> dict[str, Any]:
-    """Filter fields + identifiers stored with each point (正文不进向量库)."""
+    """Filter fields + identifiers stored with each point (正文不进向量库).
+
+    时间三件套一起写：`effective_date` 决定区间过滤精度（月/日窗口），
+    `date_confidence` 决定这条切片能不能在时间过滤里被召回（§5.2 只认 explicit），
+    `effective_year` 保留给年份粒度与旧查询。少写任一项，检索侧的时间条件就会
+    静默变成"永远不匹配"或"匹配整年"，而这类错在功能测试里看不出来。
+    """
     payload: dict[str, Any] = {
         "chunk_id": row["chunk_id"],
         "doc_key": row["doc_key"],
@@ -85,9 +97,12 @@ def build_payload(row: dict[str, Any], status: str | None = None) -> dict[str, A
         "allowed_roles": list(row.get("allowed_roles") or []),
         "chunk_type": row["chunk_type"],
         "page_num": int(row["page_num"]),
+        "date_confidence": row.get("date_confidence") or "inferred",
     }
     if row.get("effective_year") is not None:
         payload["effective_year"] = int(row["effective_year"])
+    if row.get("effective_date") is not None:
+        payload["effective_date"] = int(row["effective_date"])
     if row.get("parent_id"):
         payload["parent_id"] = row["parent_id"]
     return payload

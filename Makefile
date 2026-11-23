@@ -125,3 +125,22 @@ test-api-db: api-dev-image
 	@$(DOCKER) run --rm --network $(API_TEST_NETWORK) -e RUN_MIGRATIONS=0 \
 		-e AI_RAG_TEST_DATABASE_URL="$(API_TEST_DSN)" $(API_DEV_IMAGE) \
 		pytest -c api/pytest.ini
+
+# --- B2: 身份 / 前置过滤 / 时间归一 -------------------------------------------
+# 变异测试：把关键判据改坏，确认对应用例真的会红（跑完自动还原）。
+# 需要真 PG + 真 Qdrant，所以接进 compose 网络。
+test-api-parity: api-dev-image
+	@$(DOCKER) run --rm --network $(API_TEST_NETWORK) -e RUN_MIGRATIONS=0 \
+		-e AI_RAG_TEST_DATABASE_URL="$(API_TEST_DSN)" \
+		-e QDRANT_URL="http://qdrant:6333" $(API_DEV_IMAGE) \
+		pytest -c api/pytest.ini api/tests/test_filter_parity.py
+
+b2-mutation: api-dev-image
+	@$(DOCKER) run --rm --network $(API_TEST_NETWORK) -e RUN_MIGRATIONS=0 \
+		-e AI_RAG_TEST_DATABASE_URL="$(API_TEST_DSN)" \
+		-e QDRANT_URL="http://qdrant:6333" $(API_DEV_IMAGE) \
+		python scripts/b2_mutation_check.py
+
+# 执行计划：灌 20000 行 → 打四种身份形态的过滤计划 → 清理。
+b2-explain:
+	@bash scripts/b2_explain.sh

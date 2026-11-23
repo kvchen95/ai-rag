@@ -43,7 +43,8 @@ import qdrant_common as qc
 
 DEFAULT_SQL_ACTIVE = """
 SELECT chunk_id, doc_key, version_id, chunk_type, parent_id, page_num,
-       effective_year, is_public, allowed_depts, allowed_roles, content_text,
+       effective_year, effective_date, date_confidence,
+       is_public, allowed_depts, allowed_roles, content_text,
        'active'::text AS status   -- view is active-only by definition
 FROM v_active_chunks
 {where}
@@ -53,7 +54,8 @@ ORDER BY doc_key, version_id, page_num, chunk_id
 # --all-status: everything that is not purged (e.g. a pending version being staged)
 DEFAULT_SQL_ALL = """
 SELECT c.chunk_id, c.doc_key, c.version_id, c.chunk_type, c.parent_id, c.page_num,
-       c.effective_year, c.is_public, c.allowed_depts, c.allowed_roles, c.content_text, c.status
+       c.effective_year, c.effective_date, c.date_confidence,
+       c.is_public, c.allowed_depts, c.allowed_roles, c.content_text, c.status
 FROM chunks c
 JOIN doc_versions v ON v.version_id = c.version_id
 WHERE v.status <> 'purged' AND c.status <> 'purged'
