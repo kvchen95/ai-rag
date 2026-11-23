@@ -17,7 +17,7 @@ API_TEST_NETWORK ?= ai-rag_default
 API_TEST_DSN ?= postgresql+psycopg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)
 
 .DEFAULT_GOAL := help
-.PHONY: help dev up up-models down logs ps build pull config health wait reset qdrant-init psql smoke web-build prints-env test-api test-api-db api-dev-image db-migrate db-status index-rebuild index-rebuild-dry samples scan doc verify-scan-api promote rollback vector-sync reconcile reconcile-dry reclaim reclaim-dry ingest-status verify-a3 verify-a3-api test-a3 test-a3-vectors test-a3-flip test-a3-sync
+.PHONY: help dev up up-models down logs ps build pull config health wait reset qdrant-init psql smoke web-build prints-env test-api test-api-db api-dev-image db-migrate db-status index-rebuild index-rebuild-dry samples scan doc verify-scan-api promote rollback vector-sync reconcile reconcile-dry reclaim reclaim-dry ingest-status verify-a3 verify-a3-api verify-a3-migration test-a3 test-a3-vectors test-a3-flip test-a3-sync
 
 help:
 	@echo "ai-rag local dev — targets"
@@ -163,6 +163,11 @@ verify-a3:
 # 契约实测：promote 的 404/409/422、reconcile 的 409。需要先起一个 api。
 verify-a3-api:
 	@python3 scripts/verify_a3_api.py
+
+# 003 迁移在**全新库**上可复现：建 ai_rag_a3verify -> apply -> 逐条约束验 -> drop。
+# 顺带回归 001 的 ux_active_version / activated_at 约束没被 003 弄坏。宿主跑。
+verify-a3-migration:
+	@python3 scripts/verify_a3_migration.py
 
 # --- schema / index（DA1）-----------------------------------------------------
 # 迁移只在 api 容器里跑：宿主没有 psycopg，容器里装了（见 infra/api/requirements.txt）。
