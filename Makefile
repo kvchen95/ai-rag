@@ -230,7 +230,8 @@ test-a2: api-dev-image
 		api/tests/test_parse_layout.py api/tests/test_parse_merged_table.py \
 		api/tests/test_parse_ocr.py api/tests/test_parse_pipeline_e2e.py \
 		api/tests/test_parse_persist_integration.py \
-		api/tests/test_parse_tables.py api/tests/test_parse_zero_width.py
+		api/tests/test_parse_tables.py api/tests/test_parse_zero_width.py \
+		api/tests/test_parse_degenerate_bbox.py
 
 # --- schema / index（DA1）-----------------------------------------------------
 # 迁移只在 api 容器里跑：宿主没有 psycopg，容器里装了（见 infra/api/requirements.txt）。

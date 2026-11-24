@@ -48,6 +48,11 @@ RUN pip install -r /tmp/requirements-dev.txt
 COPY infra/api/requirements-parse.txt /tmp/requirements-parse.txt
 RUN pip install -r /tmp/requirements-parse.txt
 
+# A2 的 e2e 用例要真解析 PDF（含零面积 bbox 回归用例）。只在 compose 挂载宿主
+# 源码时才看得到 samples/ 的话，`make test-a2` 会把它们静默 skip——判据就没牙了。
+# 只进 dev stage，在线上的 prod 镜像保持轻量。
+COPY samples /app/samples
+
 
 FROM base AS prod
 

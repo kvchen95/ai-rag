@@ -255,7 +255,18 @@ def extract_lines(chars: Sequence[dict[str, Any]], page_num: int) -> list[Line]:
     且本设计不做竖排重排：它们的字符会各自成行、仍可被检索到，但阅读顺序不保证。
     这是一个**已知限制**，写在 `api/README.md` 里，不假装能处理。
     """
-    usable = [char for char in chars if char.get("text", "").strip()]
+    # 零面积字符不参与建行：真实研报（华泰中芯国际 page 5）里有 size=0 的
+    # Helvetica 字符被从 PDF 内嵌流当文字层抽出来，坐标全在 (0, -0.08)、
+    # x1==x0 且 bottom==top。它们会聚成一条宽高都为 0 的 Line，最终产出
+    # bbox=[0,0,0,0] 的切片，让整份文档在 validate_chunks 终态失败。
+    # 校验器（_valid_bbox 要求严格递增）是对的，脏数据要在这里就丢掉。
+    usable = [
+        char
+        for char in chars
+        if char.get("text", "").strip()
+        and float(char["x1"]) > float(char["x0"])
+        and float(char["bottom"]) > float(char["top"])
+    ]
     if not usable:
         return []
     return sort_in_columns(_group_by_row(usable, page_num))
