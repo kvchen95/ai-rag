@@ -52,6 +52,34 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_GOLDEN = REPO_ROOT / "eval" / "golden_50.jsonl"
 DEFAULT_OUT_DIR = REPO_ROOT / "eval" / "reports"
 
+# 按脚本路径运行（`python3 eval/run_eval.py`）时，Python 只把 `eval/` 放进
+# sys.path，`api` 包不可导入——于是本可以在宿主直接签发 token 的路径永远走不到，
+# 只能去容器里跑。这里把仓库根补进去，宿主运行与容器内运行行为一致。
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+
+def load_dotenv(path: Path) -> dict[str, str]:
+    """读仓库根 `.env`（没有就返回空）。只做 `KEY=VALUE`，不引第三方依赖。
+
+    为什么要读：`.env` 里可能有 `AUTH_JWT_SECRET` 与 `DATABASE_URL`。容器内跑时它们
+    由 compose 注入，宿主跑时没人注入——不读 `.env` 的话，"已经配好了"和"没配"在
+    脚本看来完全一样，报错还会指向错误的原因。
+    """
+    values: dict[str, str] = {}
+    if not path.exists():
+        return values
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key:
+            values[key] = value
+    return values
+
 ANSWERABLE_VERDICTS = ("pass", "partial")
 REFUSAL_VERDICTS = ("reject_none", "reject_low")
 GATE_PASSED_VERDICTS = ("pass", "partial", "unverifiable")
@@ -91,11 +119,25 @@ def mint_hs256(secret: str, claims: dict[str, Any]) -> str:
     return f"{header}.{payload}.{b64url(signature)}"
 
 
+def _seed_env_from_dotenv() -> list[str]:
+    """把 `.env` 里进程还没设的键补进 os.environ。返回补了哪些键（不含值）。
+
+    只补不覆盖：命令行导出或 compose 注入的值优先，`.env` 是兜底。
+    """
+    filled: list[str] = []
+    for key, value in load_dotenv(REPO_ROOT / ".env").items():
+        if key not in os.environ and value:
+            os.environ[key] = value
+            filled.append(key)
+    return filled
+
+
 def build_token(args: argparse.Namespace) -> tuple[str, str]:
     """返回 (token, 来源说明)。优先用服务自己的 `mint_dev_token`，保证 claim 名与配置一致。"""
     if args.token:
         return args.token, "命令行 --token"
-    try:  # 在 api 容器内跑时走这条：不碰 secret，也不猜 claim 名
+    _seed_env_from_dotenv()
+    try:  # 在 api 容器内跑、或宿主上 `api` 可导入时走这条：不碰 secret，也不猜 claim 名
         from api.config import get_settings
         from api.identity import mint_dev_token
 
@@ -108,7 +150,7 @@ def build_token(args: argparse.Namespace) -> tuple[str, str]:
             admin=args.admin,
         )
         return token, f"api.identity.mint_dev_token（{settings.auth_mode}）"
-    except Exception as exc:  # noqa: BLE001 - 宿主环境没有 api 包是正常情况
+    except Exception as exc:  # noqa: BLE001 - 宿主环境缺依赖或没配 secret 都可能走到这里
         if args.jwt_secret or os.getenv("AUTH_JWT_SECRET"):
             secret = args.jwt_secret or os.getenv("AUTH_JWT_SECRET") or ""
             claim_user = os.getenv("AUTH_JWT_USER_ID_CLAIM", "sub")
@@ -129,8 +171,13 @@ def build_token(args: argparse.Namespace) -> tuple[str, str]:
             )
             return token, "本地 HS256（--jwt-secret/AUTH_JWT_SECRET）"
         raise SystemExit(
-            f"拿不到身份凭证：api 包不可导入（{type(exc).__name__}: {exc}），"
-            "且没有 --token / --jwt-secret / AUTH_JWT_SECRET。"
+            f"拿不到身份凭证（{type(exc).__name__}: {exc}）。三种解法任选其一：\n"
+            "  1. 在容器内跑（推荐，secret 与 DSN 由 compose 注入）：\n"
+            "     docker compose exec -T api python eval/run_eval.py\n"
+            "  2. 宿主跑但给 secret：\n"
+            "     AUTH_JWT_SECRET=<与 compose 同值> python3 eval/run_eval.py --dsn <PG DSN>\n"
+            f"     或在 {REPO_ROOT / '.env'} 里加一行 AUTH_JWT_SECRET=...\n"
+            "  3. 已有 token：--token <Bearer token>"
         )
 
 
