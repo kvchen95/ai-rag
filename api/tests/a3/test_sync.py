@@ -348,7 +348,13 @@ def test_record_drift_dedupes_open_entries(conn) -> None:
     conn.commit()
     assert first is not None
     assert second is None, "second open drift for the same place must be deduped"
-    total = conn.execute("SELECT count(*) FROM vector_drift_log").fetchone()[0]
+    # 只数本用例命名空间的行。真库里存在 promote 留下的历史 drift 账（已 fixed），
+    # 全库 count 会把它们一起算进来误红；这里的命名空间每个用例前后由 _cleanup_rows
+    # 清空，所以基线恒为 0，重复插入一条 open drift 仍会让这个数变成 2 -> 红。
+    total = conn.execute(
+        "SELECT count(*) FROM vector_drift_log WHERE doc_key LIKE %s",
+        (f"{doc_key('drift')}%",),
+    ).fetchone()[0]
     assert total == 1
 
 
