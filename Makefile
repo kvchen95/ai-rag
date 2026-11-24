@@ -17,7 +17,7 @@ API_TEST_NETWORK ?= ai-rag_default
 API_TEST_DSN ?= postgresql+psycopg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)
 
 .DEFAULT_GOAL := help
-.PHONY: help dev up up-models down logs ps build pull config health wait reset qdrant-init psql smoke web-build prints-env test-api test-api-db api-dev-image db-migrate db-status index-rebuild index-rebuild-dry samples scan doc verify-scan-api promote rollback vector-sync reconcile reconcile-dry reclaim reclaim-dry ingest-status verify-a3 verify-a3-api verify-a3-migration test-a3 test-a3-vectors test-a3-flip test-a3-sync samples-layout verify-parse a2-mutation test-a2 test-b4-logic test-b4 verify-b4 b4-mutation
+.PHONY: help dev up up-models down logs ps build pull config health wait reset qdrant-init psql smoke web-build prints-env test-api test-api-db api-dev-image db-migrate db-status index-rebuild index-rebuild-dry samples scan doc verify-scan-api promote rollback vector-sync reconcile reconcile-dry reclaim reclaim-dry ingest-status verify-a3 verify-a3-api verify-a3-migration test-a3 test-a3-vectors test-a3-flip test-a3-sync samples-layout verify-parse a2-mutation test-a2 test-b4-logic test-b4 verify-b4 b4-mutation promote-all eval eval-trap test
 
 help:
 	@echo "ai-rag local dev — targets"
@@ -140,6 +140,42 @@ promote:
 	@test -n "$(VERSION_ID)" || (echo "usage: make promote VERSION_ID='policy/travel-cn#a91f'" && exit 1)
 	@$(COMPOSE) exec -T api python scripts/a3_ingest.py promote "$(VERSION_ID)"
 
+# 一次性转正所有 pending 版本（开发/评测用）。逐个调用 promote，任一失败即停。
+# 为什么需要它：11 份样本手敲 11 次 VERSION_ID 既慢又容易漏，而漏掉的文档
+# 在评测里表现为"某类题全拒答"，排查时很难第一时间想到是没转正。
+promote-all:
+	@$(COMPOSE) exec -T api python - <<'PY'
+	import json, subprocess, sys
+	from api.clients.pg import PgDatabase
+	from api.config import get_settings
+	settings = get_settings()
+	db = PgDatabase(settings.database_url)
+	with db.connection() as conn:
+	    rows = conn.execute(
+	        "SELECT version_id, doc_key FROM doc_versions WHERE status = 'pending' ORDER BY doc_key"
+	    ).fetchall()
+	if not rows:
+	    print("没有待转正的版本")
+	    sys.exit(0)
+	print(f"待转正 {len(rows)} 个版本")
+	failed = []
+	for version_id, doc_key in rows:
+	    r = subprocess.run(
+	        [sys.executable, "scripts/a3_ingest.py", "promote", version_id],
+	        capture_output=True, text=True,
+	    )
+	    ok = r.returncode == 0
+	    print(f"  {'OK ' if ok else 'FAIL'} {doc_key}")
+	    if not ok:
+	        failed.append((doc_key, (r.stderr or r.stdout).strip().splitlines()[-1:]))
+	if failed:
+	    print("\n失败的版本：")
+	    for doc_key, err in failed:
+	        print(f"  {doc_key}: {err}")
+	    sys.exit(1)
+	print("全部转正完成")
+	PY
+
 # 24h 内回滚到旧版。
 rollback:
 	@test -n "$(VERSION_ID)" || (echo "usage: make rollback VERSION_ID='policy/travel-cn#a91f'" && exit 1)
@@ -225,6 +261,19 @@ index-rebuild:
 	@$(COMPOSE) exec -T api python scripts/qdrant_rebuild.py
 
 # Build the frontend inside Docker so the host needs no node/pnpm.
+# 跑黄金 50 题评测（容器内跑，凭证与 DSN 由 compose 注入）。
+# 退出码：0 全过 / 1 不达标 / 2 有不可测项（不得据此发布）/ 3 评测器失败。
+eval:
+	@$(COMPOSE) exec -T api python eval/run_eval.py
+
+# 只看陷阱题（改门控后最快的回归）。
+eval-trap:
+	@$(COMPOSE) exec -T api python eval/run_eval.py --category trap
+
+# 后端全量测试（容器内跑，依赖齐全）。
+test:
+	@$(COMPOSE) exec -T api python -m pytest api/tests -q
+
 web-build:
 	@docker run --rm -v "$(CURDIR)/web:/app" -w /app node:24-bookworm-slim \
 		sh -c "corepack enable && pnpm install --frozen-lockfile && pnpm build"

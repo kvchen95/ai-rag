@@ -7,6 +7,8 @@
 // 服务端响应体的任何一个字都不进界面——那里可能有堆栈、SQL、路径。响应体只用来
 // 取 `error.code` 与 `request_id`（两个都是机器可读的白名单值）。
 
+import { Observable, type Subscriber } from 'rxjs';
+
 import { SseParser, type RawFrame } from './sse';
 import type { ErrorKind, SseEvent, SseEventType, UiError } from './types';
 import { SSE_EVENT_TYPES, USER_MESSAGES } from './types';
@@ -188,6 +190,74 @@ export async function streamQa(
   } finally {
     reader.releaseLock();
   }
+}
+
+/**
+ * `streamQa` 的 Observable 版本（详细设计 §10.5.2）。
+ *
+ * 为什么不直接把 `streamQa` 改成 Observable：它已经有调用方和测试，改动面越大
+ * 回归风险越高。这里加一层适配，让新代码用流、旧代码继续用回调，两条路都留着
+ * 直到 §10.5 的增量改造把调用方迁完。
+ *
+ * 三条语义与回调版一致，但由 Observable 的契约保证而不是靠调用方记得：
+ * - **取消**：`unsubscribe()` 会 abort 底层 fetch，不必自己管 AbortController；
+ * - **完成**：流结束时 `complete()`，不需要额外的 `onDone` 回调；
+ * - **错误**：HTTP 层错误走 `error()`，调用方在 `subscribe` 的错误回调里处理。
+ *
+ * `signal` 参数保留：调用方若已有 AbortController（比如 hook 里要同时中断多条），
+ * 仍然可以传进来，两条取消路径都生效（谁先触发都行）。
+ */
+export function streamQa$(
+  request: QaRequest,
+  token: string,
+  options: { signal?: AbortSignal } = {},
+): Observable<SseEvent> {
+  return new Observable<SseEvent>((subscriber: Subscriber<SseEvent>) => {
+    // 内部自己的 controller：unsubscribe 时用它 abort，与外部 signal 互不干扰。
+    const controller = new AbortController();
+    const onExternalAbort = () => controller.abort();
+    if (options.signal) {
+      if (options.signal.aborted) controller.abort();
+      else options.signal.addEventListener('abort', onExternalAbort, { once: true });
+    }
+
+    let dropped = 0;
+    streamQa(
+      request,
+      token,
+      {
+        onEvent: (event) => subscriber.next(event),
+        onDropped: (count) => {
+          dropped += count;
+        },
+      },
+      controller.signal,
+    )
+      .then(() => {
+        if (dropped > 0) {
+          // 丢弃计数只做记录，不作为错误：畸形帧不该让整条流失败（§10.4）。
+          console.warn(`[sse] dropped ${dropped} malformed frame(s)`);
+        }
+        subscriber.complete();
+      })
+      .catch((error: unknown) => {
+        if ((error as { name?: string }).name === 'AbortError') {
+          // 主动取消不是错误：完成而不是 error，避免调用方把它当故障上报。
+          subscriber.complete();
+          return;
+        }
+        subscriber.error(error);
+      })
+      .finally(() => {
+        options.signal?.removeEventListener('abort', onExternalAbort);
+      });
+
+    // 返回的清理函数在 unsubscribe 时执行：这是"收尾只有一个出口"的落点。
+    return () => {
+      options.signal?.removeEventListener('abort', onExternalAbort);
+      controller.abort();
+    };
+  });
 }
 
 async function readErrorMeta(response: Response): Promise<{ code?: string; requestId?: string }> {

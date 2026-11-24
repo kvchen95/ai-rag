@@ -212,13 +212,27 @@ def doc_key_for(rel_path: str) -> str:
     return _WS.sub("-", key)
 
 
+# 以 `_` 开头的目录不参与扫描。用来放"要留着但不入库"的文件：
+# 损坏的 PDF、待人工核对的扫描件、体积太大暂不处理的年报。
+# 约定优于配置：不需要在 .env 里维护排除列表，也不需要给每份文件加标记。
+_EXCLUDED_DIR_PREFIX = "_"
+
+
 def iter_sample_paths(root: Path) -> Iterator[Path]:
-    """递归列出 `samples/` 下的 PDF，按路径排序（同一批样本每次顺序一致）。"""
+    """递归列出 `samples/` 下的 PDF，按路径排序（同一批样本每次顺序一致）。
+
+    `_` 开头的目录整棵跳过（`samples/_excluded/` 等）。这条规则让"移出去"成为
+    唯一需要的动作——不用改配置、不用改代码，把文件挪进 `_` 目录即退出扫描。
+    """
     if not root.is_dir():
         return
     for path in sorted(root.rglob("*")):
-        if path.is_file() and path.suffix.lower() == ".pdf":
-            yield path
+        if not path.is_file() or path.suffix.lower() != ".pdf":
+            continue
+        rel_parts = path.relative_to(root).parts[:-1]
+        if any(part.startswith(_EXCLUDED_DIR_PREFIX) for part in rel_parts):
+            continue
+        yield path
 
 
 def list_samples(root: Path) -> list[SampleFile]:

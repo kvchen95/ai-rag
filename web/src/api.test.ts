@@ -78,3 +78,72 @@ describe('URL 构造', () => {
     expect(chunkFigureUrl('a/b')).toBe('/api/v1/chunks/a%2Fb/figure');
   });
 });
+
+describe('streamQa$ (Observable 版本)', () => {
+  it('unsubscribe 会 abort 底层 fetch —— 这是"收尾只有一个出口"的落点', async () => {
+    let aborted = false;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = ((_url: string, init?: RequestInit) => {
+      init?.signal?.addEventListener('abort', () => {
+        aborted = true;
+      });
+      // 永不 resolve 的流：模拟"连接还开着"
+      return new Promise<Response>(() => {});
+    }) as typeof fetch;
+
+    try {
+      const { streamQa$ } = await import('./api');
+      const sub = streamQa$({ question: 'x' }, 't').subscribe({ next: () => {} });
+      sub.unsubscribe();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(aborted).toBe(true);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('取消时走 complete 而不是 error —— 主动中断不是故障', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (() => {
+      return Promise.reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+    }) as typeof fetch;
+
+    try {
+      const { streamQa$ } = await import('./api');
+      const seen: string[] = [];
+      await new Promise<void>((resolve) => {
+        streamQa$({ question: 'x' }, 't').subscribe({
+          complete: () => {
+            seen.push('complete');
+            resolve();
+          },
+          error: () => {
+            seen.push('error');
+            resolve();
+          },
+        });
+      });
+      expect(seen).toEqual(['complete']);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('HTTP 错误走 error 通道，调用方能在 subscribe 里拿到 QaHttpError', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (() =>
+      Promise.resolve(new Response('{"code":"forbidden"}', { status: 403 }))) as typeof fetch;
+
+    try {
+      const { streamQa$, QaHttpError } = await import('./api');
+      const err = await new Promise<unknown>((resolve) => {
+        streamQa$({ question: 'x' }, 't').subscribe({
+          error: (e) => resolve(e),
+        });
+      });
+      expect(err).toBeInstanceOf(QaHttpError);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});

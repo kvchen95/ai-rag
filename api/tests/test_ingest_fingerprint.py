@@ -156,3 +156,26 @@ def test_doc_key_pinyin_is_bounded() -> None:
     key = doc_key_for("reports/中芯国际集成电路制造有限公司2024年年度报告全文.pdf")
     leaf = key.split("/")[-1]
     assert len(leaf.split("-")) <= 12, f"音节日数过多: {leaf}"
+
+def test_iter_sample_paths_skips_underscore_dirs(tmp_path) -> None:
+    """`_` 开头的目录整棵跳过：把文件挪进去就是"移出扫描"的全部动作。"""
+    from api.ingest.fingerprint import iter_sample_paths
+
+    (tmp_path / "ok").mkdir()
+    (tmp_path / "ok" / "a.pdf").write_bytes(b"%PDF-1.4")
+    (tmp_path / "_excluded").mkdir()
+    (tmp_path / "_excluded" / "broken.pdf").write_bytes(b"%PDF-1.4")
+    (tmp_path / "_excluded" / "nested").mkdir()
+    (tmp_path / "_excluded" / "nested" / "deep.pdf").write_bytes(b"%PDF-1.4")
+
+    got = [p.relative_to(tmp_path).as_posix() for p in iter_sample_paths(tmp_path)]
+    assert got == ["ok/a.pdf"]
+
+
+def test_iter_sample_paths_keeps_underscore_files(tmp_path) -> None:
+    """只排除目录，不排除文件：`_draft.pdf` 是正常样本，只是名字带下划线。"""
+    from api.ingest.fingerprint import iter_sample_paths
+
+    (tmp_path / "_draft.pdf").write_bytes(b"%PDF-1.4")
+    got = [p.name for p in iter_sample_paths(tmp_path)]
+    assert got == ["_draft.pdf"]
