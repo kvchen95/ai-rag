@@ -215,6 +215,27 @@ services:
       VLM_BASE_URL: ${VLM_BASE_URL:-}
       VLM_API_KEY: ${VLM_API_KEY:-}
       VLM_MODEL: ${VLM_MODEL:-}
+      # B3/B4 的必填阈值：Settings() 对这些字段没有默认值，worker 也必须拿到，
+      # 否则重建镜像后 vector_sync_worker 启动即 ValidationError 崩溃重启。
+      GATE_REJECT_NONE: ${GATE_REJECT_NONE:-0.20}
+      GATE_REJECT_LOW: ${GATE_REJECT_LOW:-0.40}
+      GATE_BORDERLINE_LOW: ${GATE_BORDERLINE_LOW:-0.38}
+      GATE_BORDERLINE_HIGH: ${GATE_BORDERLINE_HIGH:-0.42}
+      MAX_HOPS: ${MAX_HOPS:-3}
+      RETRIEVAL_TOP_K: ${RETRIEVAL_TOP_K:-30}
+      RERANK_TOP_N_MIN: ${RERANK_TOP_N_MIN:-5}
+      RERANK_TOP_N_MAX: ${RERANK_TOP_N_MAX:-8}
+      RERANK_CANDIDATES_MAX: ${RERANK_CANDIDATES_MAX:-50}
+      RERANK_BUDGET_MS: ${RERANK_BUDGET_MS:-800}
+      PARENT_CHILD_KEEP: ${PARENT_CHILD_KEEP:-2}
+      CLARIFY_SCORE_DELTA: ${CLARIFY_SCORE_DELTA:-0.05}
+      CLARIFY_OPTIONS_MAX: ${CLARIFY_OPTIONS_MAX:-4}
+      SUSPECTED_DOCS_MAX: ${SUSPECTED_DOCS_MAX:-3}
+      EVIDENCE_MIN_PARAS: ${EVIDENCE_MIN_PARAS:-2}
+      EVIDENCE_MAX_CHARS: ${EVIDENCE_MAX_CHARS:-6000}
+      # fixed_jwt 是默认 AUTH_MODE：没有 secret 时 Settings() 直接拒绝启动。
+      AUTH_MODE: ${AUTH_MODE:-fixed_jwt}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-dev-only-change-me}
       # 向量同步（A3，§4.2）：轮询间隔与对账节奏。口径全部来自环境变量，
       # 不在 worker 里另写一份默认值（配置只有一个来源：api/config.py）。
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -257,7 +278,7 @@ services:
     environment:
       <<: *common-env
       APP_ENV: ${APP_ENV:-dev}
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:***@postgres:5432/${POSTGRES_DB:-ai_rag}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-ai_rag}:${POSTGRES_PASSWORD:-ai_rag_dev_password}@postgres:5432/${POSTGRES_DB:-ai_rag}
       QDRANT_URL: http://qdrant:6333
       QDRANT_COLLECTION: ${QDRANT_COLLECTION:-kb_chunks}
       EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://embedding:8000/v1}

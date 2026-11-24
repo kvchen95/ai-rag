@@ -16,6 +16,12 @@ RUN apt-get update \
 COPY infra/api/requirements.txt /tmp/requirements.txt
 RUN pip install --upgrade pip && pip install -r /tmp/requirements.txt
 
+# 摄取 worker 要真解析 PDF（api.parse.pipeline -> pdfplumber/pypdfium2/Pillow），
+# 这一份依赖只在 dev stage 装过，运行时镜像必须自己带上，否则 ingest-once
+# 一 import 就 ModuleNotFoundError。在线 api 镜像保持轻量，不装这些。
+COPY infra/api/requirements-parse.txt /tmp/requirements-parse.txt
+RUN pip install -r /tmp/requirements-parse.txt
+
 # 源码由 compose 挂载（../:/app），镜像里不放代码：改代码不用重建镜像。
 # 默认入口是 vector_sync 常驻循环（§4.2：翻牌后的期望状态必须有东西消费）。
 # 摄取 worker 由 compose 的独立 ingest-worker 服务跑（同一镜像，command 覆盖），

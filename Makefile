@@ -182,8 +182,11 @@ ingest-status:
 
 # 跑一轮摄取 job：领 queued -> parse -> 批量落 pending 切片 -> succeed；队列空就退出。
 # 不翻牌、不写 Qdrant（那是 promote 的事）；重复跑不会让 chunks 翻倍。
+# 一次性摄取必须用 ingest-worker（worker 镜像装了 pdfplumber/pypdfium2/Pillow）。
+# 早先这里 exec api，但 api 的 prod 镜像按设计不含解析依赖，一 import 就崩。
+# run --rm 起一个一次性容器，跑完就走；不碰常驻 worker 的 PID 与日志。
 ingest-once:
-	@$(COMPOSE) exec -T api python worker/ingest_worker.py --once
+	@$(COMPOSE) run --rm ingest-worker python worker/ingest_worker.py --once
 
 # 常驻摄取 worker 单独起一个服务：和 vector-sync 分开，日志/重启边界各自独立。
 ingest-worker:
