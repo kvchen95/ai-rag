@@ -103,6 +103,21 @@ def build_answer(prompt: str) -> dict[str, Any]:
 class Handler(BaseHTTPRequestHandler):
     server_version = "f2-stub-llm/0.1"
 
+    def do_GET(self) -> None:  # noqa: N802 - http.server 的命名约定
+        """健康检查与模型列表。compose healthcheck 与客户端探测都打这里。
+
+        为什么要有：没有 GET 端点时，healthcheck 只能用 TCP 探测，探不出
+        "进程活着但 handler 挂了"这种半死状态；而且 [OI] 客户端偶尔会先
+        拉一次 `/v1/models` 做能力探测，没有就会在真正请求前失败。
+        """
+        if self.path.rstrip("/") in ("/v1/models", "/models"):
+            self._json(200, {"object": "list", "data": [{"id": "stub-f2", "object": "model"}]})
+            return
+        if self.path.rstrip("/") in ("/health", "/healthz"):
+            self._json(200, {"status": "ok"})
+            return
+        self._json(404, {"error": "not found"})
+
     def do_POST(self) -> None:  # noqa: N802 - http.server 的命名约定
         length = int(self.headers.get("content-length") or 0)
         raw = self.rfile.read(length).decode("utf-8", "replace")

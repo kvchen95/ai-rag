@@ -265,6 +265,26 @@ services:
       retries: 10
       start_period: 5s
 
+  # 本地模型替身（无余额时验证检索/门控/引用链路）。仅开发用，不参与生产。
+  # 用宿主网络：api 容器通过 host.docker.internal 访问；Linux 下 extra_hosts 已处理。
+  stub-llm:
+    image: python:3.11-slim
+    container_name: ai-rag-stub-llm
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+    volumes:
+      - ../scripts:/scripts:ro
+    command: ["python", "/scripts/f2_stub_llm.py", "--port", "8099", "--host", "0.0.0.0"]
+    ports:
+      - "${STUB_LLM_PORT:-8099}:8099"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://127.0.0.1:8099/v1/models',timeout=3)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
 volumes:
   pg_data:
     name: ai_rag_pg_data
