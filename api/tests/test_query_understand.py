@@ -269,6 +269,40 @@ def test_out_of_scope_questions_are_flagged() -> None:
     assert is_out_of_scope("住宿费标准是多少") is None
 
 
+# R2b 根因回归：研报域"券商预测"是库内事实（明明写在研报里的预测数字），
+# 不是 §6.3 那种"本系统永远没有的东西"。裸"预测"标记会把它短路成
+# "超出库范围，未检索"，7 道应答题 after_dedup=0。这 7 条原题必须能走到检索。
+_BROKER_FORECAST_QUESTIONS = (
+    "中原证券给出的中芯国际2025年归母净利润预测是多少？",
+    "东方证券对中芯国际2025-2027年归母净利润的预测分别是多少？",
+    "东方证券预测的中芯国际2025年营业收入是多少（百万元）？",
+    "中原证券预测的中芯国际2025年营业收入是多少（百万元）？",
+    "光大证券预测的中芯国际2025年营业收入是多少（百万美元）？",
+    "国信证券预测的中芯国际2025年营业收入是多少（百万美元）？",
+    "多家券商对中芯国际2025年营收的预测分别是多少？口径是否一致？",
+)
+
+
+@pytest.mark.parametrize("question", _BROKER_FORECAST_QUESTIONS)
+def test_broker_forecast_is_not_out_of_scope(question: str) -> None:
+    """券商研报里的"预测"数字是本库核心内容，不能当超范围短路掉检索。
+
+    R2b 实测：这 7 题 out_of_scope=True → detail='超出库范围，未检索'、
+    filter={}、routes 0/0、after_dedup=0，与语料/时间过滤无关。
+    """
+    assert is_out_of_scope(question) is None, f"误命中超范围: {question}"
+    assert understand(question, now=NOW).out_of_scope is False
+
+
+def test_genuine_out_of_scope_still_short_circuits() -> None:
+    """变异守卫：删掉"预测"标记后，真正的超范围问句仍须短路。
+
+    用"股价"兜底的那条原用例不能退化；"预测未来股价"含"股价"仍被拦。
+    """
+    assert is_out_of_scope("帮我预测一下明年的股价") == "股价"
+    assert understand("帮我预测一下明年的股价", now=NOW).out_of_scope is True
+
+
 def test_out_of_scope_plan_short_circuits() -> None:
     plan = understand("帮我预测一下明年的股价", now=NOW)
     assert plan.out_of_scope is True
