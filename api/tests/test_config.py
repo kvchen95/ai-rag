@@ -34,6 +34,7 @@ MUST_BE_REQUIRED = (
     "rerank_top_n_max",
     "rerank_candidates_max",
     "rerank_budget_ms",
+    "rerank_text_max_chars",
     "parent_child_keep",
     "clarify_score_delta",
     "clarify_options_max",

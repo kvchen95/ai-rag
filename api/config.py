@@ -81,6 +81,9 @@ class Settings(BaseSettings):
     # 精排预算（§7.3"精排超时（> 800 毫秒）"）。超了就降级为按名次取前 N，
     # 并在审计里记 degrade=rerank_timeout。
     rerank_budget_ms: int = Field(gt=0)
+    # 精排输入正文的字符上限（§7.3 预算的另一半：实测 8 条真实切片 3.6–9.4s，
+    # 截到上限后 2.1s）。证据包仍用原文，这里只裁打分用的文本。
+    rerank_text_max_chars: int = Field(gt=0)
     # 精排候选上限（§7.5"上限 50，超了按名次截"）。
     rerank_candidates_max: int = Field(gt=0)
     # 同一父片最多保留几条（§7.2"同一父片最多保留两条子片"）。
@@ -255,6 +258,7 @@ class Settings(BaseSettings):
                 "top_n_max": self.rerank_top_n_max,
                 "candidates_max": self.rerank_candidates_max,
                 "rerank_budget_ms": self.rerank_budget_ms,
+                "text_max_chars": self.rerank_text_max_chars,
                 "parent_child_keep": self.parent_child_keep,
                 "max_hops": self.max_hops,
                 "evidence_max_chars": self.evidence_max_chars,

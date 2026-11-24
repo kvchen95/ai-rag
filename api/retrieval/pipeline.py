@@ -172,6 +172,7 @@ class RetrievalPipeline:
     parent_child_keep: int
     max_hops: int
     evidence_max_chars: int
+    rerank_text_max_chars: int | None = None
     multi_entity_threshold: int = 2
     _texts: dict[str, ChunkText] = field(default_factory=dict, repr=False)
 
@@ -211,6 +212,7 @@ class RetrievalPipeline:
             guarded,
             {cid: item.text for cid, item in texts.items()},
             budget_ms=self.rerank_budget_ms,
+            text_max_chars=self.rerank_text_max_chars,
             top_n_min=self.rerank_top_n_min,
             top_n_max=self.rerank_top_n_max,
             candidates_max=self.rerank_candidates_max,
@@ -564,6 +566,7 @@ def build_pipeline(settings: Any, pg: PgDatabase) -> RetrievalPipeline:
         parent_child_keep=settings.parent_child_keep,
         max_hops=settings.max_hops,
         evidence_max_chars=settings.evidence_max_chars,
+        rerank_text_max_chars=settings.rerank_text_max_chars,
     )
 
 

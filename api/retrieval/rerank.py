@@ -165,6 +165,17 @@ class Reranker:
         return scores
 
 
+def clip_for_rerank(text: str, max_chars: int | None) -> str:
+    """精排专用截短：只裁进模型的文本，绝不改证据包里的原文。
+
+    `max_chars=None`（未配置）时原样返回，保留纯逻辑用例与非 pipeline 调用方
+    的旧行为；配置值来自 `RERANK_TEXT_MAX_CHARS`，不在代码里写业务数字。
+    """
+    if max_chars is None or max_chars <= 0 or len(text) <= max_chars:
+        return text
+    return text[:max_chars]
+
+
 def rerank_candidates(
     reranker: Reranker,
     query: str,
@@ -175,6 +186,7 @@ def rerank_candidates(
     top_n_min: int,
     top_n_max: int,
     candidates_max: int,
+    text_max_chars: int | None = None,
 ) -> RerankOutcome:
     """精排 + 截断 + 降级。
 
@@ -187,6 +199,11 @@ def rerank_candidates(
     3. **取前 top_n_max / 至少 top_n_min**：候选不足下限时有多少给多少（§7.3）。
     4. 降级时**不编造分数**：`rerank_score` 保持 None，按融合名次取前 N。
        给降级的候选填一个 0.0 会让门控判成"无相关"，而真相是"我们没打分"。
+    5. **正文长度决定精排耗时**：8 条真实切片（长表格可达万字）在 TEI CPU 上
+       3.6–9.4s，同一批正文截到 400 字后稳定在 2.1s 左右（实测 best-of-3）。
+       800ms 预算对原始正文无论如何都不够，所以除了把预算调到
+       `RERANK_BUDGET_MS`，进精排的正文还要按 `RERANK_TEXT_MAX_CHARS` 截短。
+       证据包仍用原文（§9.1），截短只影响相关性打分，不影响引用回查。
     """
     ordered = list(candidates)[:candidates_max]
     if not ordered:
@@ -205,7 +222,10 @@ def rerank_candidates(
             degraded = True
             reason = "rerank_timeout"
             break
-        batch_texts = [texts.get(item.chunk_id, "") for item in batch]
+        batch_texts = [
+            clip_for_rerank(texts.get(item.chunk_id, ""), text_max_chars)
+            for item in batch
+        ]
         try:
             scores = reranker.score(query, batch_texts, timeout_s=remaining)
         except RerankTimeout:
@@ -257,5 +277,6 @@ __all__ = [
     "RerankOutcome",
     "RerankUnavailable",
     "Reranker",
+    "clip_for_rerank",
     "rerank_candidates",
 ]

@@ -242,6 +242,47 @@ def test_rerank_orders_by_score_and_windows() -> None:
     assert outcome.ordered[0].chunk_id == "c0"
 
 
+def test_rerank_input_text_is_clipped_to_configured_chars() -> None:
+    """真实表格切片可到万字；精排只看前 N 字，别让输入长度吃掉预算。
+
+    判据落在替身记录的**实际请求体**上：只断言分数或顺序，无法发现"代码里
+    根本没截断"这种变异（短文本下两种实现的输出完全一样）。
+    """
+    items = [cand(f"c{i}", score=None, fused_rank=i + 1) for i in range(2)]
+    texts = {items[0].chunk_id: "甲" * 1000, items[1].chunk_id: "乙" * 1000}
+    fake = FakeReranker(scores={"甲" * 400: 0.9, "乙" * 400: 0.8})
+    rerank_candidates(
+        fake,
+        "q",
+        items,
+        texts,
+        budget_ms=800,
+        top_n_min=1,
+        top_n_max=2,
+        candidates_max=50,
+        text_max_chars=400,
+    )
+    assert fake.calls == [["甲" * 400, "乙" * 400]]
+
+
+def test_rerank_input_unchanged_when_no_clip_configured() -> None:
+    """没配截断时不改正文：老调用方与纯逻辑用例仍按原文精排。"""
+    items = [cand(f"c{i}", score=None, fused_rank=i + 1) for i in range(2)]
+    texts = {items[0].chunk_id: "甲" * 1000, items[1].chunk_id: "乙" * 1000}
+    fake = FakeReranker(scores={"甲" * 20: 0.9, "乙" * 20: 0.8})
+    rerank_candidates(
+        fake,
+        "q",
+        items,
+        texts,
+        budget_ms=800,
+        top_n_min=1,
+        top_n_max=2,
+        candidates_max=50,
+    )
+    assert fake.calls == [["甲" * 1000, "乙" * 1000]]
+
+
 def test_unscored_candidates_never_get_a_zero_filled_score() -> None:
     """降级时不能给候选填 0 分：0 分会让门控判成"无相关"，
     而真相是"我们没打分"。填 0 等于伪造一个结论。"""
