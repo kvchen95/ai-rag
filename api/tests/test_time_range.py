@@ -227,3 +227,36 @@ def test_as_dict_is_json_ready() -> None:
 
 def test_years_property_covers_the_window() -> None:
     assert _range("2024年").years == (2024,)
+
+
+# --- 年份区间：明确记为"未限定时间"（B08 年份区间归一）--------------------
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "东方证券对中芯国际2025-2027年归母净利润的预测分别是多少？",  # B08 原题
+        "2025-2027年归母净利润的预测",
+        "2025—2027年的营收预测",
+        "2025～2027年的营收预测",
+        "2025年至2027年的营收预测",
+    ],
+)
+def test_year_range_is_recorded_as_unbounded_time(question: str) -> None:
+    """年份区间不等于单年闭区间：研报类文档的 effective_date 常为 NULL，
+    一旦归一出 window，过滤器就会追加 effective_date BETWEEN + explicit 条件，
+    把正确证据全筛掉（B08 会变回零候选）。明确记为"未限定时间"才安全。"""
+    result = normalise_time(question, now=NOW)
+    assert result.range is None
+    assert result.note is not None
+    assert "未限定时间" in result.note
+    assert "无法换算" not in result.note
+
+
+def test_year_range_without_nian_is_not_mistaken_for_an_illegal_month() -> None:
+    """变异守卫：'2025-2027' 曾被 _ABS_MONTH 截成 '2025-20'，谎报成
+    "无法换算的时间：2025-20 不是合法年月"——正则中间态外泄且错判。"""
+    result = normalise_time("2025-2027 归母净利润预测", now=NOW)
+    assert result.range is None
+    assert "无法换算" not in (result.note or "")
+    assert "2025-20" not in (result.note or "")
