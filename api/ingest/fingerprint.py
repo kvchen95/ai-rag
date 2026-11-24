@@ -32,6 +32,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -99,6 +100,10 @@ class BadSamplePath(ValueError):
     """样本路径不能被接受（绝对路径、跳出根目录、非 .pdf 等）。"""
 
 
+class DocKeyNeedsPinyin(RuntimeError):
+    """中文文件名需要 pypinyin 才能生成 ASCII 的 doc_key，但依赖缺失。"""
+
+
 @dataclass(frozen=True, slots=True)
 class SampleFile:
     """一个待摄取的样本。`rel_path` 相对 `samples/`，写进文档展示与日志。"""
@@ -123,15 +128,24 @@ def _to_ascii_slug(text: str) -> str:
     为什么不用"标题前 N 个汉字"：那只是把长中文名变短中文名，URL 里仍然是
     百分号编码。真正的问题是"非 ASCII 字符不适合做标识符"，截断没有解决它。
 
-    依赖缺失时回退到"保留原文"而不是报错：pypinyin 是可选依赖，解析链路
-    不应该因为一个 key 生成器装不上就跑不起来。
+    依赖缺失时的行为是**报错**，不是静默回退。理由来自一次实测：沙箱里没装
+    pypinyin 时，`doc_key` 悄悄变回了长中文名，而扫描、入库、检索全都照常跑通——
+    直到拿 key 去拼 URL 才发现要百分号编码。静默降级让"配好了"和"没配"看起来
+    完全一样，这类错误必须在第一次生成 key 时就炸出来。
+
+    确实要裁剪掉这个依赖的部署，设 `AI_RAG_ALLOW_CJK_DOC_KEY=1` 显式接受中文 key。
     """
     if not _CJK.search(text):
         return text.lower()
     try:
         from pypinyin import lazy_pinyin
-    except ImportError:  # pragma: no cover - 只在裁剪过的部署里发生
-        return text.lower()
+    except ImportError as exc:  # pragma: no cover - 只在裁剪过的部署里发生
+        if os.environ.get("AI_RAG_ALLOW_CJK_DOC_KEY") == "1":
+            return text.lower()
+        raise DocKeyNeedsPinyin(
+            "doc_key 生成需要 pypinyin 把中文转成 ASCII 标识符（pip install pypinyin）。"
+            "若确实要接受中文 doc_key，设 AI_RAG_ALLOW_CJK_DOC_KEY=1。"
+        ) from exc
     # 标点（`，`、`：`、`（）`、`——`）不是音节，拼音化后仍会留在串里，
     # 让 key 变成 `...ti-sheng-，`。先按"非字母数字非中文"切开，只取有内容的段。
     cleaned = re.sub(r"[^0-9A-Za-z\u3400-\u4dbf\u4e00-\u9fff]+", " ", text)

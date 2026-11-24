@@ -8,3 +8,6 @@ httpx==0.28.1
 PyJWT==2.10.1
 # 与服务端 qdrant/qdrant:v1.15.3 对齐（1.12 会报兼容性告警）
 qdrant-client==1.15.1
+# doc_key 生成：中文文件名转拼音，避免 URL 里全是百分号编码（§2.1）。
+# 缺失时代码会回退成保留中文，不会崩，但 key 就不再是 ASCII 标识符了。
+pypinyin==0.53.0
