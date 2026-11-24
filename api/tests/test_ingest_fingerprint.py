@@ -24,24 +24,24 @@ from api.ingest.fingerprint import (
 # (相对路径, 期望 doc_key, 理由)
 DOC_KEY_CASES = [
     ("policy/travel-cn.pdf", "policy/travel-cn", "子目录保留"),
-    ("policy/差旅管理办法-2025版.pdf", "policy/差旅管理办法", "段尾年份+版"),
-    ("policy/差旅管理办法-2025版-第2稿.pdf", "policy/差旅管理办法", "叠加修饰剥到稳定"),
-    ("policy/差旅管理办法（2）.pdf", "policy/差旅管理办法", "全角括号序号"),
-    ("policy/差旅管理办法(2).pdf", "policy/差旅管理办法", "半角括号序号"),
-    ("policy/差旅管理办法_v2.1.pdf", "policy/差旅管理办法", "v+次版本号"),
-    ("policy/差旅管理办法-修订.pdf", "policy/差旅管理办法", "修订后缀"),
-    ("policy/差旅管理办法-定稿.pdf", "policy/差旅管理办法", "定稿后缀"),
-    ("policy/差旅管理办法(副本).pdf", "policy/差旅管理办法", "括号副本"),
+    ("policy/差旅管理办法-2025版.pdf", "policy/cha-lv-guan-li-ban-fa", "段尾年份+版（中文转拼音）"),
+    ("policy/差旅管理办法-2025版-第2稿.pdf", "policy/cha-lv-guan-li-ban-fa", "叠加修饰剥到稳定"),
+    ("policy/差旅管理办法（2）.pdf", "policy/cha-lv-guan-li-ban-fa", "全角括号序号"),
+    ("policy/差旅管理办法(2).pdf", "policy/cha-lv-guan-li-ban-fa", "半角括号序号"),
+    ("policy/差旅管理办法_v2.1.pdf", "policy/cha-lv-guan-li-ban-fa", "v+次版本号"),
+    ("policy/差旅管理办法-修订.pdf", "policy/cha-lv-guan-li-ban-fa", "修订后缀"),
+    ("policy/差旅管理办法-定稿.pdf", "policy/cha-lv-guan-li-ban-fa", "定稿后缀"),
+    ("policy/差旅管理办法(副本).pdf", "policy/cha-lv-guan-li-ban-fa", "括号副本"),
     ("hr/leave-2025.pdf", "hr/leave", "年份"),
-    ("x/差旅-20250301.pdf", "x/差旅", "紧凑日期"),
-    ("x/差旅-2025-03-01.pdf", "x/差旅", "带横线日期"),
-    ("x/差旅-2025年3月.pdf", "x/差旅", "中文年月"),
+    ("x/差旅-20250301.pdf", "x/cha-lv", "紧凑日期"),
+    ("x/差旅-2025-03-01.pdf", "x/cha-lv", "带横线日期"),
+    ("x/差旅-2025年3月.pdf", "x/cha-lv", "中文年月"),
     ("Travel-CN.PDF", "travel-cn", "大小写归一（标识符不是展示名）"),
     ("a/b/c/deep name.pdf", "a/b/c/deep-name", "空白收连字符、多级目录"),
     # --- 反例：这些看起来像修饰，其实是主体的一部分，剥掉就合并了两份不同材料 ---
-    ("x/2024-差旅.pdf", "x/2024-差旅", "日期在中间是主体（2024 年度差旅办法）"),
+    ("x/2024-差旅.pdf", "x/2024-cha-lv", "日期在中间是主体（2024 年度差旅办法）"),
     ("x/2025.pdf", "x/2025", "整名都是数字时回退原名，不产出空 key（父目录保留）"),
-    ("x/第3版.pdf", "x/第3版", "整名都是修饰时同样回退原名"),
+    ("x/第3版.pdf", "x/di-3-ban", "整名都是修饰时同样回退原名"),
 ]
 
 
@@ -127,3 +127,32 @@ def test_list_samples_only_picks_pdfs_and_is_ordered(tmp_path) -> None:
     # 排序稳定：同一批样本每次扫描顺序一致，报告 diff 才有意义。
     assert [s.rel_path for s in samples] == ["a.pdf", "b/two.pdf", "c.PDF"]
     assert [s.doc_key for s in samples] == ["a", "b/two", "c"]
+
+
+def test_doc_key_transliterates_cjk_to_pinyin() -> None:
+    """中文文件名要变成 ASCII 标识符，否则 URL 里全是百分号编码。"""
+    key = doc_key_for("policy/差旅管理办法.pdf")
+    assert key == "policy/cha-lv-guan-li-ban-fa"
+    assert key.isascii(), "doc_key 必须是 ASCII，才能直接进 URL 路径参数"
+
+
+def test_doc_key_extracts_org_prefix() -> None:
+    """`【上海证券】…` 的机构名要单独成段，一眼能看出是哪家的报告。"""
+    key = doc_key_for("reports/【上海证券】中芯国际深度研究报告.pdf")
+    assert key.startswith("reports/shang-hai-zheng-quan-")
+    assert key.isascii()
+
+
+def test_doc_key_strips_punctuation_before_transliteration() -> None:
+    """标点不是音节：`…提升，持续…` 不能产出 `…ti-sheng-，` 这种尾巴。"""
+    key = doc_key_for("reports/【东方证券】产能利用率提升，持续推进工艺迭代.pdf")
+    assert "，" not in key and "：" not in key
+    assert key.isascii()
+    assert not key.endswith("-")
+
+
+def test_doc_key_pinyin_is_bounded() -> None:
+    """长标题不能产出无限长的 key——`make doc DOC_KEY=...` 要能敲进去。"""
+    key = doc_key_for("reports/中芯国际集成电路制造有限公司2024年年度报告全文.pdf")
+    leaf = key.split("/")[-1]
+    assert len(leaf.split("-")) <= 12, f"音节日数过多: {leaf}"

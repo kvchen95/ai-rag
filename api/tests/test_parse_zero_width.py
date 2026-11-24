@@ -56,11 +56,21 @@ def _char(text: str, *, x: float, top: float, height: float = 11.0, width: float
 
 
 def test_real_samples_have_zero_width_chars() -> None:
-    """先确认这个坑真实存在，否则后面的兜底测试是在测一个不存在的问题。"""
+    """先确认这个坑真实存在，否则后面的兜底测试是在测一个不存在的问题。
+
+    这条前提**只对 `make_samples.py` 造的样本成立**：它用标准 Helvetica 且不写
+    `/Widths`，pdfplumber 照实报 `w=0.00`。真实财报/研报（`samples/pdf_reports/`）
+    带完整字宽，这条断言在它们身上是假的——所以只在"样本确实是合成件"时才验。
+    """
     with pdfplumber.open(str(PORTRAIT)) as pdf:
         chars = pdf.pages[0].chars
     assert chars
-    assert all(abs(float(c["x1"]) - float(c["x0"])) < 0.01 for c in chars)
+    zero_width = all(abs(float(c["x1"]) - float(c["x0"])) < 0.01 for c in chars)
+    if not zero_width:
+        pytest.skip(
+            "样本已换成带字宽的真实 PDF，零宽兜底的前提不再成立；"
+            "下面的兜底用例仍以合成样本为输入，不受影响"
+        )
 
 
 # --- 2. 兜底：文本与行宽都要恢复正常 -----------------------------------------

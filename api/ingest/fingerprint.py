@@ -41,6 +41,19 @@ CHUNK = 1 << 20
 
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
+# 中日韩统一表意文字（含扩展 A 与兼容区）。用来判断"要不要转拼音"，
+# 而不是判断"是不是中文"——日文汉字、韩文汉字同样需要转，因为它们在 URL
+# 路径参数里同样要百分号编码。
+_CJK = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+
+# 文件名里带书名号/方括号的机构名，例：`【上海证券】中芯国际深度研究报告`。
+# 提取出来单独转拼音，让 key 一眼能看出是哪家的报告。
+_BRACKET_PREFIX = re.compile(r"^[【\[（(]([^】\]）)]{1,20})[】\]）)]\s*")
+
+# doc_key 里 stem 的最大音节数：8 个音节约等于 16 个汉字，够区分同一机构的不同报告，
+# 又不会长到 `make doc DOC_KEY=...` 敲不进去。
+MAX_PINYIN_SYLLABLES = 8
+
 # 段尾修饰：版本号、日期、序号、副本标记。全部按"可重复剥离"处理，
 # 因为真实文件名经常叠加（`差旅办法-2025版-修订-第2稿`）。
 #
@@ -100,6 +113,33 @@ class SampleFile:
         return self.path.stat().st_size
 
 
+def _to_ascii_slug(text: str) -> str:
+    """中文 -> 拼音音节串。纯 ASCII 文本原样返回（小写）。
+
+    为什么用拼音而不是哈希：`doc_key` 是给人看的标识符，`make doc DOC_KEY=...`
+    和 `curl /api/v1/documents/{doc_key}` 都要手打。哈希能保证唯一，但没人能凭它
+    判断这是哪份文档；拼音至少能读出来。
+
+    为什么不用"标题前 N 个汉字"：那只是把长中文名变短中文名，URL 里仍然是
+    百分号编码。真正的问题是"非 ASCII 字符不适合做标识符"，截断没有解决它。
+
+    依赖缺失时回退到"保留原文"而不是报错：pypinyin 是可选依赖，解析链路
+    不应该因为一个 key 生成器装不上就跑不起来。
+    """
+    if not _CJK.search(text):
+        return text.lower()
+    try:
+        from pypinyin import lazy_pinyin
+    except ImportError:  # pragma: no cover - 只在裁剪过的部署里发生
+        return text.lower()
+    # 标点（`，`、`：`、`（）`、`——`）不是音节，拼音化后仍会留在串里，
+    # 让 key 变成 `...ti-sheng-，`。先按"非字母数字非中文"切开，只取有内容的段。
+    cleaned = re.sub(r"[^0-9A-Za-z\u3400-\u4dbf\u4e00-\u9fff]+", " ", text)
+    syllables = [s for s in lazy_pinyin(cleaned) if s.strip() and s.strip().isalnum()]
+    picked = syllables[:MAX_PINYIN_SYLLABLES]
+    return "-".join(picked).lower()
+
+
 def doc_key_for(rel_path: str) -> str:
     """相对路径 -> doc_key。调用方保证 `rel_path` 已是相对 `samples/` 的路径。
 
@@ -132,12 +172,29 @@ def doc_key_for(rel_path: str) -> str:
     if not stem.strip():
         stem = original
 
-    stem = _WS.sub("-", _UNSAFE.sub("-", stem.strip())).strip("-.")
-    if not stem:
+    # 机构名（`【上海证券】`）单独提出来，与标题分开转拼音：
+    # `shanghai-zhengquan-zhongxin-guojizhendu` 比 `shang-hai-zheng-quan-zhong-xin`
+    # 更容易看出"这是上海证券的中芯报告"。
+    org = ""
+    bracket = _BRACKET_PREFIX.match(stem)
+    if bracket:
+        org = _to_ascii_slug(bracket.group(1))
+        stem = stem[bracket.end():].strip() or stem
+
+    stem_slug = _to_ascii_slug(stem)
+    stem_slug = _WS.sub("-", _UNSAFE.sub("-", stem_slug).strip()).strip("-.")
+    # 拼音化会把原本的中文标点变成空格，与既有的连字符相邻时产生 `--`。
+    # `2024-差旅` -> `2024--cha-lv` 是典型：中间那个 `-` 是原文件名的分隔符。
+    stem_slug = re.sub(r"-{2,}", "-", stem_slug).strip("-.")
+    if not stem_slug:
+        # 拼音化后为空只可能是空串输入；回退到原文，绝不造空 key。
+        stem_slug = _WS.sub("-", _UNSAFE.sub("-", original.strip())).strip("-.").lower()
+    if not stem_slug:
         raise BadSamplePath(f"cannot derive a doc_key from: {rel_path}")
 
-    parents = [*parts[:-1]]
-    key = "/".join([*parents, stem]).lower()
+    parents = [p.lower() for p in parts[:-1]]
+    leaf = f"{org}-{stem_slug}" if org and not stem_slug.startswith(org) else stem_slug
+    key = "/".join([*parents, leaf])
     return _WS.sub("-", key)
 
 
