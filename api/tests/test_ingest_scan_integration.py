@@ -39,8 +39,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 MIGRATE_SCRIPT = REPO_ROOT / "scripts" / "db_migrate.py"
 
 # 测试自己的命名空间：绝不碰真实样本的 doc_key（policy/travel-cn 等）。
-DOC_A = "itest/a-办法"
-DOC_B = "itest/b-办法"
+# 6c6cb7a 起 doc_key 走拼音归一化（pypinyin 是硬依赖），但 SAMPLE_* 保留中文原名。
+# 这两个常量曾经写死中文 key，重装依赖后 9 条用例连环红——期望值必须跟算法同源。
+DOC_A = "itest/a-ban-fa"
+DOC_B = "itest/b-ban-fa"
 SAMPLE_A = "itest/a-办法-2025版.pdf"
 SAMPLE_B = "itest/b-办法-2025版.pdf"
 
@@ -404,21 +406,27 @@ def test_reverting_content_back_to_previous_fingerprint_is_not_a_new_version(
 
 
 def test_unreadable_file_records_failed_job_without_touching_versions(
-    db: PgDatabase, samples: Path
+    db: PgDatabase, samples: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """§3.1「文件读不到 -> 记失败，不动已有版本」。
 
-    这里造"读不到"用的是**权限位**（0o000），不是删除文件：删了文件它就不再是
-    样本，走的是"目录里少了一个文件"的分支，而那不该报失败。
+    用 monkeypatch 让其中一份文件的 `file_hash` 抛 PermissionError，而不是 chmod
+    0o000：测试在 root 容器里跑，root 能读 000 文件，权限位在那里根本造不出
+    「读不到」，用例会静默变成假绿。
     """
+    import api.ingest.scan as scan_module  # noqa: PLC0415
+
     scan_samples(db, samples)
     before = _counts(db)
-    victim = samples / SAMPLE_A
-    victim.chmod(0o000)
-    try:
-        report = scan_samples(db, samples)
-    finally:
-        victim.chmod(0o644)
+    real_hash = scan_module.file_hash
+
+    def _unreadable(path, **kwargs):
+        if path.name == Path(SAMPLE_A).name:
+            raise PermissionError(13, "Permission denied", str(path))
+        return real_hash(path, **kwargs)
+
+    monkeypatch.setattr(scan_module, "file_hash", _unreadable)
+    report = scan_samples(db, samples)
 
     assert report.counts["fail"] == 1
     failed = report.failed[0]
@@ -459,10 +467,10 @@ def test_doc_key_collision_fails_both_files_and_keeps_others(
 
     assert report.counts == {"add": 1, "change": 0, "skip": 0, "fail": 2}
     assert report.as_dict()["reasons"] == {SkipReason.DOC_KEY_COLLISION.value: 2}
-    assert {item.doc_key for item in report.added} == {"itest/其它"}
+    assert {item.doc_key for item in report.added} == {"itest/qi-ta"}
     assert (
         db.fetch_one(
-            "SELECT count(*) AS n FROM documents WHERE doc_key = %s", ("itest/制度",)
+            "SELECT count(*) AS n FROM documents WHERE doc_key = %s", ("itest/zhi-du",)
         )["n"]
         == 0
     )
@@ -517,14 +525,14 @@ def test_job_lifecycle_with_retry_then_success(db: PgDatabase, samples: Path) ->
 def test_job_success_clears_previous_error(db: PgDatabase, samples: Path) -> None:
     scan_samples(db, samples)
     with db.session() as conn:
-        job = job_store.claim_next_job(conn)
+        job = job_store.claim_next_job(conn, doc_key=DOC_A)
         assert job is not None
         job_id = job["job_id"]
         conn.commit()
 
         job_store.fail_job(conn, job_id, "transient", max_retries=3)
         conn.commit()
-        claimed = job_store.claim_next_job(conn)
+        claimed = job_store.claim_next_job(conn, doc_key=DOC_A)
         assert claimed is not None
         conn.commit()
 
@@ -540,7 +548,9 @@ def test_job_success_clears_previous_error(db: PgDatabase, samples: Path) -> Non
 def test_cancel_only_applies_to_open_jobs(db: PgDatabase, samples: Path) -> None:
     scan_samples(db, samples)
     with db.session() as conn:
-        job = job_store.claim_next_job(conn)
+        # 必须按 DOC_A 定向领取：全局 claim 会领到库里别的（真实）queued job，
+        # 把别人的摄取任务判成 canceled——测试跑一次就污染一次生产队列。
+        job = job_store.claim_next_job(conn, doc_key=DOC_A)
         assert job is not None
         job_id = job["job_id"]
         conn.commit()

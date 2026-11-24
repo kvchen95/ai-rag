@@ -245,6 +245,68 @@ services:
       retries: 10
       start_period: 20s
 
+  # 摄取 worker 与 vector-sync worker 分开跑：两者失败模式不同（解析/落库 vs Qdrant 同步），
+  # 合成一个 PID 会让一方失败时另一方也被重启，日志也混在一起。
+  ingest-worker:
+    build:
+      context: ..
+      dockerfile: infra/worker/Dockerfile
+    container_name: ai-rag-ingest-worker
+    restart: unless-stopped
+    command: ["python", "worker/ingest_worker.py"]
+    environment:
+      <<: *common-env
+      APP_ENV: ${APP_ENV:-dev}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:***@postgres:5432/${POSTGRES_DB:-ai_rag}
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-kb_chunks}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://embedding:8000/v1}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-local}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-small-zh-v1.5}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-512}
+      RERANK_BASE_URL: ${RERANK_BASE_URL:-http://rerank:8000}
+      RERANK_API_KEY: ${RERANK_API_KEY:-local}
+      RERANK_MODEL: ${RERANK_MODEL:-BAAI/bge-reranker-base}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      SERVICE_NAME: ${SERVICE_NAME:-ai-rag-api}
+      DB_CONNECT_TIMEOUT_S: ${DB_CONNECT_TIMEOUT_S:-3}
+      DB_POOL_MIN: ${DB_POOL_MIN:-1}
+      DB_POOL_MAX: ${DB_POOL_MAX:-8}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-dev-only-change-me}
+      GATE_REJECT_NONE: ${GATE_REJECT_NONE:-0.20}
+      GATE_REJECT_LOW: ${GATE_REJECT_LOW:-0.40}
+      GATE_BORDERLINE_LOW: ${GATE_BORDERLINE_LOW:-0.38}
+      GATE_BORDERLINE_HIGH: ${GATE_BORDERLINE_HIGH:-0.42}
+      RETRIEVAL_TOP_K: ${RETRIEVAL_TOP_K:-30}
+      RERANK_TOP_N_MIN: ${RERANK_TOP_N_MIN:-5}
+      RERANK_TOP_N_MAX: ${RERANK_TOP_N_MAX:-8}
+      RERANK_CANDIDATES_MAX: ${RERANK_CANDIDATES_MAX:-50}
+      RERANK_BUDGET_MS: ${RERANK_BUDGET_MS:-800}
+      PARENT_CHILD_KEEP: ${PARENT_CHILD_KEEP:-2}
+      CLARIFY_SCORE_DELTA: ${CLARIFY_SCORE_DELTA:-0.05}
+      CLARIFY_OPTIONS_MAX: ${CLARIFY_OPTIONS_MAX:-4}
+      SUSPECTED_DOCS_MAX: ${SUSPECTED_DOCS_MAX:-3}
+      EVIDENCE_MIN_PARAS: ${EVIDENCE_MIN_PARAS:-2}
+      EVIDENCE_MAX_CHARS: ${EVIDENCE_MAX_CHARS:-6000}
+      MAX_HOPS: ${MAX_HOPS:-3}
+      # 摄取口径：样本目录、重试额度、轮询间隔、裁图落盘目录。
+      INGEST_SAMPLES_DIR: ${INGEST_SAMPLES_DIR:-samples}
+      INGEST_MAX_RETRIES: ${INGEST_MAX_RETRIES:-3}
+      INGEST_POLL_INTERVAL_S: ${INGEST_POLL_INTERVAL_S:-10}
+      FIGURES_DIR: ${FIGURES_DIR:-figures}
+    volumes:
+      - ../:/app
+      - app_data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/ingest-worker.ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
   web:
     image: nginx:1.27-alpine
     container_name: ai-rag-web

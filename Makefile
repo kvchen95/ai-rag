@@ -3,7 +3,7 @@ SHELL := /bin/bash
 DOCKER ?= docker
 ENV_FILE := $(if $(wildcard .env),.env,.env.example)
 COMPOSE := $(DOCKER) compose --env-file $(ENV_FILE) -f infra/docker-compose.yml
-CORE_SERVICES := postgres qdrant api worker web
+CORE_SERVICES := postgres qdrant api worker ingest-worker web
 MODEL_SERVICES := embedding rerank
 
 # api 测试镜像（Dockerfile 的 dev stage，装了 pytest）与集成测试用的 PG 地址
@@ -17,7 +17,7 @@ API_TEST_NETWORK ?= ai-rag_default
 API_TEST_DSN ?= postgresql+psycopg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)
 
 .DEFAULT_GOAL := help
-.PHONY: help dev up up-models down logs ps build pull config health wait reset qdrant-init psql smoke web-build prints-env test-api test-api-db api-dev-image db-migrate db-status index-rebuild index-rebuild-dry samples scan doc verify-scan-api promote rollback vector-sync reconcile reconcile-dry reclaim reclaim-dry ingest-status verify-a3 verify-a3-api verify-a3-migration test-a3 test-a3-vectors test-a3-flip test-a3-sync samples-layout verify-parse a2-mutation test-a2 test-b4-logic test-b4 verify-b4 b4-mutation promote-all eval eval-trap test pending
+.PHONY: help dev up up-models down logs ps build pull config health wait reset qdrant-init psql smoke web-build prints-env test-api test-api-db api-dev-image db-migrate db-status index-rebuild index-rebuild-dry samples scan doc verify-scan-api promote rollback vector-sync reconcile reconcile-dry reclaim reclaim-dry ingest-status verify-a3 verify-a3-api verify-a3-migration test-a3 test-a3-vectors test-a3-flip test-a3-sync samples-layout verify-parse a2-mutation test-a2 test-b4-logic test-b4 verify-b4 b4-mutation promote-all eval eval-trap test pending ingest-once ingest-worker
 
 help:
 	@echo "ai-rag local dev — targets"
@@ -57,6 +57,7 @@ help:
 	@echo "  make reconcile      # 两边对账并按 PG 修好（有残留则非零退出）"
 	@echo "  make reclaim-dry    # 看有多少旧版本过窗口（24h）"
 	@echo "  make ingest-status  # 版本/切片/同步/漂移一眼看（双 active 即非零）"
+	@echo "  make ingest-once    # 跑一轮摄取 job（parse→persist→succeed），队列空即退出"
 	@echo "  make verify-a3      # 端到端演练（真 PG/Qdrant/TEI，8 步）"
 	@echo "  make verify-a3-api  # promote/reconcile 的 404/409/422 契约实测"
 	@echo "  make test-a3        # A3 集成用例（需真 PG + Qdrant + embedding）"
@@ -178,6 +179,15 @@ reclaim:
 # 一眼看现状：版本/切片状态分布、待同步数、未修漂移、集合点数。双 active 即非零退出。
 ingest-status:
 	@$(COMPOSE) exec -T api python scripts/a3_ingest.py status
+
+# 跑一轮摄取 job：领 queued -> parse -> 批量落 pending 切片 -> succeed；队列空就退出。
+# 不翻牌、不写 Qdrant（那是 promote 的事）；重复跑不会让 chunks 翻倍。
+ingest-once:
+	@$(COMPOSE) exec -T api python worker/ingest_worker.py --once
+
+# 常驻摄取 worker 单独起一个服务：和 vector-sync 分开，日志/重启边界各自独立。
+ingest-worker:
+	@$(COMPOSE) up -d ingest-worker
 
 # 端到端演练（真 CLI/真 PG/真 Qdrant/真 TEI，8 步走完 §4）。宿主跑。
 verify-a3:

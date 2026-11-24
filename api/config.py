@@ -121,6 +121,9 @@ class Settings(BaseSettings):
     ingest_samples_dir: str = "samples"
     # 重试上限：口径是"1 次尝试 + N 次重试"（§4.4「失败重试三次转人工清单」）。
     ingest_max_retries: int = Field(default=3, ge=0, le=10)
+    # 常驻 worker 的空队列轮询间隔（秒）。和 vector_sync_interval_s 同属运维参数：
+    # 改它不改变"哪些材料可检索"，所以给默认值。
+    ingest_poll_interval_s: float = Field(default=10.0, gt=0)
 
     # --- 向量写入 / 同步 / 回收（A3：§3.6、§4.1-§4.3）---
     # 同步失败重试三次（§4.2）。和 ingest_max_retries 同口径：三次**重试**，
@@ -299,6 +302,7 @@ class Settings(BaseSettings):
         return {
             "samples_dir": self.ingest_samples_dir,
             "max_retries": self.ingest_max_retries,
+            "poll_interval_s": self.ingest_poll_interval_s,
             "scan_lock_key": SCAN_LOCK_KEY,
             "vector_sync": {
                 "max_attempts": self.vector_sync_max_attempts,

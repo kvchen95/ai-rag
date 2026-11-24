@@ -17,5 +17,7 @@ COPY infra/api/requirements.txt /tmp/requirements.txt
 RUN pip install --upgrade pip && pip install -r /tmp/requirements.txt
 
 # 源码由 compose 挂载（../:/app），镜像里不放代码：改代码不用重建镜像。
-# 入口是 vector_sync 常驻循环（§4.2：翻牌后的期望状态必须有东西消费）。
+# 默认入口是 vector_sync 常驻循环（§4.2：翻牌后的期望状态必须有东西消费）。
+# 摄取 worker 由 compose 的独立 ingest-worker 服务跑（同一镜像，command 覆盖），
+# 不塞进同一个 PID：两者的失败模式与日志完全不同，分开才好重启与排障。
 CMD ["python", "worker/vector_sync_worker.py"]

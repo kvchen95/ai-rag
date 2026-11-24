@@ -26,6 +26,7 @@ RUN pip install --upgrade pip && pip install -r /tmp/requirements.txt
 COPY api /app/api
 COPY db /app/db
 COPY scripts /app/scripts
+COPY worker /app/worker
 # 配置清单进镜像：api/tests 里有一条"代码要求的变量 .env.example 是否都写了"的
 # 检查，缺这个文件就只能在宿主上跑，容器里跑测试会静默少一条判据。
 COPY .env.example /app/.env.example
