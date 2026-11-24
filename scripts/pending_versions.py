@@ -13,16 +13,22 @@ from api.config import get_settings
 
 def main() -> int:
     db = PgDatabase(get_settings().database_url)
-    with db.connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT v.version_id, v.doc_key,
-                   (SELECT count(*) FROM chunks c WHERE c.version_id = v.version_id)
-            FROM doc_versions v
-            WHERE v.status = 'pending'
-            ORDER BY v.doc_key
-            """
-        ).fetchall()
+    # PgDatabase 的池由 lifespan 打开；独立脚本没有 lifespan，必须自己开/关，
+    # 否则 connection() 直接抛 PoolClosed（实测 make pending 因此 rc=2）。
+    db.open()
+    try:
+        with db.connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT v.version_id, v.doc_key,
+                       (SELECT count(*) FROM chunks c WHERE c.version_id = v.version_id)
+                FROM doc_versions v
+                WHERE v.status = 'pending'
+                ORDER BY v.doc_key
+                """
+            ).fetchall()
+    finally:
+        db.close()
     if not rows:
         print("没有待转正版本")
         return 0

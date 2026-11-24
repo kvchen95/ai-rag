@@ -20,15 +20,20 @@ from api.config import get_settings
 
 def main() -> int:
     db = PgDatabase(get_settings().database_url)
-    with db.connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT version_id, doc_key
-            FROM doc_versions
-            WHERE status = 'pending'
-            ORDER BY doc_key
-            """
-        ).fetchall()
+    # 独立脚本没有 FastAPI lifespan，连接池必须自己开/关；否则 PoolClosed。
+    db.open()
+    try:
+        with db.connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT version_id, doc_key
+                FROM doc_versions
+                WHERE status = 'pending'
+                ORDER BY doc_key
+                """
+            ).fetchall()
+    finally:
+        db.close()
     if not rows:
         print("没有待转正的版本")
         return 0
