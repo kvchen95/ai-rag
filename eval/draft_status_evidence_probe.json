@@ -1,0 +1,589 @@
+{
+  "summary": {
+    "n_questions": 20,
+    "questions_with_distinctive_facts_defined": 18,
+    "questions_with_any_distinctive_fact_in_pack": 0,
+    "questions_with_no_distinctive_fact_in_pack": 20,
+    "golden_doc_present": 8,
+    "golden_doc_absent": 12,
+    "truncated_true": 0,
+    "top1_min": 0.549555,
+    "top1_max": 0.980025
+  },
+  "detail": [
+    {
+      "qn": 3,
+      "golden_id": "B03",
+      "question": "东方证券给中芯国际的目标价是多少？",
+      "top1": 0.980025,
+      "used_chars": 2447,
+      "truncated": false,
+      "n_items": 8,
+      "golden_facts": [
+        "129.48"
+      ],
+      "distinctive_facts": [
+        "129.48"
+      ],
+      "distinctive_facts_in_pack": [],
+      "golden_docs": [
+        "pdf_reports/dong-fang-zheng-quan-chan-neng-li-yong-lv-ti-sheng-chi"
+      ],
+      "golden_docs_in_pack": [],
+      "pack_docs": [
+        "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+        "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu",
+        "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi"
+      ],
+      "model_answer": "未找到东方证券对中芯国际目标价的任何可验证依据，证据包中未包含东方证券的相关研报内容。"
+    },
+    {
+      "qn": 5,
+      "golden_id": "B05",
+      "question": "中芯国际2025年第一季度产能利用率是多少？环比变化多少？",
+      "top1": 0.802427,
+      "used_chars": 1833,
+      "truncated": false,
+      "n_items": 8,
+      "golden_facts": [
+        "89.6"
+      ],
+      "distinctive_facts": [
+        "89.6"
+      ],
+      "distinctive_facts_in_pack": [],
+      "golden_docs": [
+        "pdf_reports/dong-fang-zheng-quan-chan-neng-li-yong-lv-ti-sheng-chi"
+      ],
+      "golden_docs_in_pack": [],
+      "pack_docs": [
+        "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+        "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+        "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+        "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+      ],
+      "model_answer": "证据包中未找到中芯国际2025年第一季度产能利用率的具体数值及其环比变化数据，无法据此回答。"
+    },
+    {
+      "qn": 6,
+      "golden_id": "B06",
+      "question": "中芯国际2025年第一季度晶圆出货量是多少？环比变化多少？",
+      "top1": 0.887014,
+      "used_chars": 1866,
+      "truncated": false,
+      "n_items": 8,
+      "golden_facts": [
+        "15",
+        "229"
+      ],
+      "distinctive_facts": [
+        "229"
+      ],
+      "distinctive_facts_in_pack": [],
+      "golden_docs": [
+        "pdf_reports/dong-fang-zheng-quan-chan-neng-li-yong-lv-ti-sheng-chi"
+      ],
+      "golden_docs_in_pack": [],
+      "pack_docs": [
+        "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+        "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+        "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+      ],
+      "model_answer": "证据包中未找到中芯国际2025年第一季度晶圆出货量及环比变化的数据，无法依据证据包回答。"
+    },
+    {
+      "qn": 7,
+      "golden_id": "B07",
+      "question": "中原证券给出的中芯国际2025年归母净利润预测是多少？",
+      "top1": 0.910415,
+      "used_chars": 1881,
+      "truncated": false,
+      "n_items": 8,
+      "golden_facts": [
+        "25",
+        "50.75"
+      ],
+      "distinctive_facts": [
+        "50.75"
+      ],
+      "distinctive_facts_in_pack": [],
+      "golden_docs": [
+        "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+      ],
+      "golden_docs_in_pack": [
+        "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+      ],
+      "pack_docs": [
+        "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+        "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+        "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+        "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+      ],
+      "model_answer": "证据包中未找到中原证券对中芯国际2025年全年归母净利润的预测数据；现有证据只包含2025年第一季度已实现的归母净利润…"
+    },
+    {
+      "qn": 10,
+      "golden_id": "B10",
+      "question": "中芯国际2024年第四季度毛利率是多少？与指引区间的关系？",
+      "top1": 0.977822,
+      "used_chars": 1020,
+      "truncated": false,
+      "n_items": 8,
+      "golden_facts": [
+        "18",
+        "20",
+        "22.6"
+      ],
+      "distinctive_facts": [
+        "22.6"
+      ],
+      "distinctive_facts_in_pack": [],
+      "golden_docs": [
+        "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang"
+      ],
+      "golden_docs_in_pack": [],
+      "pack_docs": [
+        "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+        "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+        "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi"
+      ],
+      "model_answer": "证据包中未找到中芯国际2024年第四季度毛利率的具体数值，也未找到该季度毛利率与指引区间关系的可验证表述。现有证据仅为…"
+    },
+    {
+      "qn": 11,
+      "golden_id": "B11",
+      "question": "中芯国际2024年末整体产能是多少？环比增加多少？",
+      "top1": 0.549555,
+      "used_chars": 1000,
+      "truncated": false,
+      "n_items": 8,
+      "golden_facts": [
+        "24",
+        "63",
+        "948"
+      ],
+      "distinctive_facts": [
+        "948"
+      ],
+      "distinctive_facts_in_pack": [],
+      "golden_docs": [
+        "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang"
+      ],
+      "golden_docs_in_pack": [],
+      "pack_docs": [
+        "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+        "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+        "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi"
+      ],
+      "model_answer": "证据包中未提供中芯国际2024年末整体产能及环比增加的数据，未找到可验证依据。"
+    },
+    {
+      "qn": 14,
+      "golden_id": "B14",
+      "question": "中芯国际2024年第四季度8英寸和12英寸营收占比分别是多少？",
+      "top1": 0.978924,
+      "used_chars": 998,
+      "truncated": false,
+      "n_items": 8,
+      "golden_facts": [
+        "12",
+        "19.4",
+        "80.6"
+      ],
+      "distinctive_facts": [
+        "19.4",
+        "80.6"
+      ],
+      "distinctive_facts_in_pack": [],
+      "golden_docs": [
+        "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang"
+      ],
+      "golden_docs_in_pack": [],
+      "pack_docs": [
+        "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+        "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+        "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi"
+      ],
+      "model_answer": "未找到可验证依据：证据包中仅提及“12英寸业务稳增长，季度收入首超20亿美元”（2024.11.13）[1][2]，未…"
+    },
+    {
+      "qn": 15,
+      "golden_id": "B15",
+      "question": "国信证券统计的中芯国际2025年一季度折旧摊销金额是多少？",
+      "top1": 0.835006,
+      "used_chars": 4259,
+      "truncated": false,
+      "n_items": 8,
+      "golden_facts": [
+        "16.1"
+      ],
+      "distinctive_facts": [
+        "16.1"
+      ],
+      "distinctive_facts_in_pack": [],
+      "golden_docs": [
+        "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan"
+      ],
+      "golden_docs_in_pack": [],
+      "pack_docs": [
+        "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+        "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+        "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu",
+        "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+      ],
+      "model_answer": "证据包中未包含国信证券相关报告，也未找到中芯国际2025年一季度折旧摊销金额的可验证依据。"
+    },
+    {
+      "qn": 17,
+      "golden_id": "B17",
+      "question": "中芯国际2025年一季度资产负债率是多少？",
+      "top1": 0.789166,
+      "used_chars": 1881,
+      "truncated": false,
+      "n_items": 8,
+      "golden_facts": [
+        "32.81"
+      ],
+      "distinctive_facts": [
+        "32.81"
+      ],
+      "distinctive_facts_in_pack": [],
+      "golden_docs": [
+        "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+      ],
+      "golden_docs_in_pack": [
+        "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+      ],
+      "pack_docs": [
+        "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+        "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+        "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+        "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+      ],
+      "model_answer": "证据包中未提供中芯国际2025年一季度资产负债率数据，未找到可验证依据。"
+    },
+    {
+      "qn": 19,
+      "golden_id": "B19",
+      "question": "上海证券报告中中芯国际的最新收盘价和总股本分别是多少？",
+      "top1": 0.955251,
+      "used_chars": 2083,
+      "truncated": false,
+      "n_items": 8,
+      "golden_facts": [
+        "7,985.65",
+        "91.35"
+      ],
+      "distinctive_facts": [
+        "7,985.65",
+        "91.35"
+      ],
+      "distinctive_facts_in_pack": [],
+      "golden_docs": [
+        "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu"
+      ],
+      "golden_docs_in_pack": [
+        "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu"
+      ],
+      "pack_docs": [
+        "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+        "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+        "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+        "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu"
+      ],
+      "model_answer": "证据包中未找到上海证券报告披露的中芯国际最新收盘价和总股本数据。"
+    },
+    {
+      "qn": 21,
+      "golden_id": "C01",
+      "question": "东方证券预测的中芯国际2025年营业收入是多少（百万元）？",
+      "top1": 0.619064,
+      "used_chars": 4259,
+      "truncated": false,
+      "n_items": 8,
+      "golden_facts": [
+        "69,402"
+      ],
+      "distinctive_facts": [
+        "69,402"
+      ],
+      "distinctive_facts_in_pack": [],
+      "golden_docs": [
+        "pdf_reports/dong-fang-zheng-quan-chan-neng-li-yong-lv-ti-sheng-chi"
+      ],
+      "golden_docs_in_pack": [],
+      "pack_docs": [
+        "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+        "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+        "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu",
+        "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+      ],
+      "model_answer": "证据包中未找到东方证券对中芯国际2025年营业收入的预测数据，无法提供可验证依据。"
+    },
+    {
+      "qn": 22,
+      "golden_id": "C02",
+      "question": "中原证券预测的中芯国际2025年营业收入是多少（百万元）？",
+      "top1": 0.771497,
+      "used_chars": 1881,
+      "truncated": false,
+      "n_items": 8,
+      "golden_facts": [
+        "68,204"
+      ],
+      "distinctive_facts": [
+        "68,204"
+      ],
+      "distinctive_facts_in_pack": [],
+      "golden_docs": [
+        "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+      ],
+      "golden_docs_in_pack": [
+        "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+      ],
+      "pack_docs": [
+        "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+        "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+        "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+        "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+      ],
+      "model_answer": "证据包中未找到中原证券对中芯国际2025年营业收入（百万元）的预测数据。"
+    },
+    {
+      "qn": 23,
+      "golden_id": "C03",
+      "question": "中芯国际2024年营业收入是多少（百万元，A股口径）？",
+      "top1": 0.923987,
+      "used_chars": 1020,
+      "truncated": false,
+      "n_items": 8,
+      "golden_facts": [
+        "57,796"
+      ],
+      "distinctive_facts": [
+        "57,796"
+      ],
+      "distinctive_facts_in_pack": [],
+      "golden_docs": [
+        "pdf_reports/dong-fang-zheng-quan-chan-neng-li-yong-lv-ti-sheng-chi",
+        "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+      ],
+      "golden_docs_in_pack": [],
+      "pack_docs": [
+        "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+        "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+        "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi"
+      ],
+      "model_answer": "证据包中未找到可验证的“中芯国际2024年营业收入（百万元，A股口径）”数据；现有片段仅提及季度收入首超20亿美元、季…"
+    },
+    {
+      "qn": 27,
+      "golden_id": "C07",
+      "question": "国信证券预测的中芯国际2025年营业收入是多少（百万美元）？",
+      "top1": 0.707931,
+      "used_chars": 4259,
+      "truncated": false,
+      "n_items": 8,
+      "golden_facts": [
+        "9333"
+      ],
+      "distinctive_facts": [
+        "9333"
+      ],
+      "distinctive_facts_in_pack": [],
+      "golden_docs": [
+        "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan"
+      ],
+      "golden_docs_in_pack": [],
+      "pack_docs": [
+        "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+        "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+        "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu",
+        "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+      ],
+      "model_answer": "证据包中未找到国信证券对中芯国际2025年营业收入的预测数据，无法依据现有证据回答该问题。"
+    },
+    {
+      "qn": 28,
+      "golden_id": "C08",
+      "question": "中芯国际2024年经营活动现金流是多少（百万美元）？",
+      "top1": 0.687931,
+      "used_chars": 1000,
+      "truncated": false,
+      "n_items": 8,
+      "golden_facts": [
+        "3,176"
+      ],
+      "distinctive_facts": [
+        "3,176"
+      ],
+      "distinctive_facts_in_pack": [],
+      "golden_docs": [
+        "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji"
+      ],
+      "golden_docs_in_pack": [
+        "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji"
+      ],
+      "pack_docs": [
+        "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+        "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+        "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi"
+      ],
+      "model_answer": "未找到可验证依据：证据包中未包含中芯国际2024年经营活动现金流（百万美元）的相关数据。"
+    },
+    {
+      "qn": 30,
+      "golden_id": "C10",
+      "question": "中芯国际2023年和2024年的营业收入分别是多少（百万元）？",
+      "top1": 0.956214,
+      "used_chars": 1533,
+      "truncated": false,
+      "n_items": 3,
+      "golden_facts": [
+        "45,250",
+        "57,796"
+      ],
+      "distinctive_facts": [
+        "45,250",
+        "57,796"
+      ],
+      "distinctive_facts_in_pack": [],
+      "golden_docs": [
+        "pdf_reports/dong-fang-zheng-quan-chan-neng-li-yong-lv-ti-sheng-chi",
+        "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+      ],
+      "golden_docs_in_pack": [],
+      "pack_docs": [
+        "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu"
+      ],
+      "model_answer": "未找到可验证依据：证据包中仅包含目录页的表格清单（表1至表10）及“表4：晶圆厂制备及规划表（2023年12月20日）…"
+    },
+    {
+      "qn": 31,
+      "golden_id": "M01",
+      "question": "2025年一季度毛利率22.5%与公司此前给出的指引区间相比如何？",
+      "top1": 0.796816,
+      "used_chars": 1833,
+      "truncated": false,
+      "n_items": 8,
+      "golden_facts": [
+        "18",
+        "19",
+        "20",
+        "21"
+      ],
+      "distinctive_facts": [],
+      "distinctive_facts_in_pack": [],
+      "golden_docs": [
+        "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+        "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan"
+      ],
+      "golden_docs_in_pack": [
+        "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+        "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan"
+      ],
+      "pack_docs": [
+        "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+        "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+        "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+        "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+      ],
+      "model_answer": "证据包中未找到关于2025年一季度毛利率22.5%及公司此前给出的毛利率指引区间的可验证信息，无法进行比较。"
+    },
+    {
+      "qn": 32,
+      "golden_id": "M02",
+      "question": "从2024年四季度到2025年一季度，中芯国际产能利用率如何变化？",
+      "top1": 0.730818,
+      "used_chars": 992,
+      "truncated": false,
+      "n_items": 8,
+      "golden_facts": [
+        "24",
+        "85.5",
+        "89.6"
+      ],
+      "distinctive_facts": [
+        "85.5",
+        "89.6"
+      ],
+      "distinctive_facts_in_pack": [],
+      "golden_docs": [
+        "pdf_reports/dong-fang-zheng-quan-chan-neng-li-yong-lv-ti-sheng-chi",
+        "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang"
+      ],
+      "golden_docs_in_pack": [],
+      "pack_docs": [
+        "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+        "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan"
+      ],
+      "model_answer": "证据包中未找到关于中芯国际2024年四季度至2025年一季度产能利用率及其变化情况的可验证依据。"
+    },
+    {
+      "qn": 33,
+      "golden_id": "M03",
+      "question": "多家券商对中芯国际2025年营收的预测分别是多少？口径是否一致？",
+      "top1": 0.929372,
+      "used_chars": 1881,
+      "truncated": false,
+      "n_items": 8,
+      "golden_facts": [
+        "68,204",
+        "69,402",
+        "9,612"
+      ],
+      "distinctive_facts": [
+        "68,204",
+        "69,402",
+        "9,612"
+      ],
+      "distinctive_facts_in_pack": [],
+      "golden_docs": [
+        "pdf_reports/dong-fang-zheng-quan-chan-neng-li-yong-lv-ti-sheng-chi",
+        "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+        "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+      ],
+      "golden_docs_in_pack": [
+        "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+        "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+      ],
+      "pack_docs": [
+        "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+        "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+        "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+        "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+      ],
+      "model_answer": "未找到可验证依据：证据包没有给出多家券商对中芯国际2025年营收的具体预测数值，因此无法比较这些预测的口径是否一致；[…"
+    },
+    {
+      "qn": 34,
+      "golden_id": "M04",
+      "question": "中芯国际2025年二季度收入指引相比一季度是升还是降？幅度多少？",
+      "top1": 0.87865,
+      "used_chars": 1881,
+      "truncated": false,
+      "n_items": 8,
+      "golden_facts": [
+        "25"
+      ],
+      "distinctive_facts": [],
+      "distinctive_facts_in_pack": [],
+      "golden_docs": [
+        "pdf_reports/dong-fang-zheng-quan-chan-neng-li-yong-lv-ti-sheng-chi",
+        "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+        "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan"
+      ],
+      "golden_docs_in_pack": [
+        "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+        "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan"
+      ],
+      "pack_docs": [
+        "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+        "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+        "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+        "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+      ],
+      "model_answer": "证据包中未找到中芯国际2025年二季度收入指引及其相比一季度升降幅度的可验证依据。"
+    }
+  ]
+}

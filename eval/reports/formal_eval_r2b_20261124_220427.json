@@ -1,0 +1,190 @@
+{
+  "schema": "eval.formal_r2b.v1",
+  "generated_at": "2026-11-24T22:04:27+08:00",
+  "eval_window": {
+    "started_at": "2026-11-24T14:03:45.723753+00:00",
+    "generated_at": "2026-11-24T14:04:27.399352+00:00"
+  },
+  "commands": {
+    "snapshot": "make ingest-status",
+    "eval": "make eval",
+    "eval_exit_code": 2,
+    "calibration": "docker compose exec -T api python eval/calibrate.py --report eval/reports/redline_20261124_220427.json --name r2b_20261124_2207",
+    "calibration_exit_code": 2,
+    "analysis": "python3 eval/r2b_analysis.py"
+  },
+  "artifacts": {
+    "eval_report_md": "eval/reports/redline_20261124_220427.md",
+    "eval_report_json": "eval/reports/redline_20261124_220427.json",
+    "calibration_report_md": "eval/reports/r2b_20261124_2207.md",
+    "calibration_report_json": "eval/reports/r2b_20261124_2207.json",
+    "formal_report_md": "eval/reports/formal_eval_r2b_20261124_220427.md",
+    "formal_report_json": "eval/reports/formal_eval_r2b_20261124_220427.json",
+    "qa_log_export": "eval/r2b_qalog.csv",
+    "aggregated_analysis": "eval/r2b_analysis.json"
+  },
+  "corpus_snapshot": {
+    "source": "make ingest-status (pre-eval, verbatim)",
+    "versions": {"active": 9, "deprecated": 2, "pending": 10},
+    "chunks": {"active": 2136, "deprecated": 6},
+    "qdrant_points": 2142,
+    "sync_pending": 0,
+    "open_drift": {},
+    "evaluator_counts": {
+      "documents": 18,
+      "active_versions": 9,
+      "chunks": 2142,
+      "active_chunks": 2136,
+      "qa_log": 240
+    },
+    "consistent_with_parent_handoff": true
+  },
+  "one_line_verdict": {
+    "release": "不可发布",
+    "measurable": "不可测（缺有效精排 top1）",
+    "answerable_coverage": "0/35 = 0%",
+    "eval_exit_code": 2,
+    "reason": "42/50 题精排超时 scored=0 导致 top1=null→门控按 0.000 拒答；另有 7 道应答题零候选。四条红线全部 NOT_MEASURABLE。非 LLM 失败、非阈值本身错误。"
+  },
+  "definitions": {
+    "top1": "qa_log.score_snapshot->>'top1'（精排最高分）；降级时为 null，门控按 0.0 处理",
+    "answerable": "expected_verdict in {pass, partial}",
+    "reject": "expected_verdict in {reject_none, reject_low}",
+    "clarify": "expected_verdict == clarify（不参与二分类标定）",
+    "gate_thresholds_current": {"reject_none": 0.2, "reject_low": 0.4},
+    "golden": "eval/golden_50.jsonl（50 题 = 35 应答题 + 13 拒答题 + 2 澄清题；澄清题计入 15 道陷阱）"
+  },
+  "top1_distribution": {
+    "answerable": {
+      "n": 35,
+      "n_valid": 0,
+      "min": null, "p10": null, "median": null, "p90": null, "max": null,
+      "gt_0_20": 0, "gt_0_40": 0,
+      "note": "0 个有效样本，分位数无定义；不以 0 冒充观测值"
+    },
+    "reject": {
+      "n": 13,
+      "n_valid": 0,
+      "min": null, "p10": null, "median": null, "p90": null, "max": null,
+      "gt_0_20": 0, "gt_0_40": 0
+    },
+    "clarify": {
+      "n": 2,
+      "n_valid": 0,
+      "min": null, "p10": null, "median": null, "p90": null, "max": null,
+      "gt_0_20": 0, "gt_0_40": 0
+    }
+  },
+  "diagnostic_recall_distribution_not_gate_score": {
+    "answerable": {
+      "n_with_candidates": 28,
+      "dense_top1": {"min": 0.575146, "median": 0.703588, "max": 0.778214},
+      "fused_top1": {"min": 0.53125, "median": 0.9166665, "max": 1.0},
+      "sparse_top1_scale": [21.022894, 87.163574],
+      "note": "BM25 量级与 0..1 门控刻度不可比；与拒答题分布重叠；不可用于标定"
+    },
+    "reject": {
+      "n_with_candidates": 12,
+      "dense_top1": {"min": 0.546636, "median": 0.668466, "max": 0.738805},
+      "fused_top1": {"min": 0.53125, "median": 0.6833335, "max": 1.0}
+    }
+  },
+  "failure_attribution": {
+    "rerank_timeout_no_score": {
+      "total": 42,
+      "answerable": 28, "reject": 12, "clarify": 2,
+      "evidence": "rerank.degrade=rerank_timeout, rerank.scored=0, elapsed 801-815ms, detail='top1=0.000 < 0.2（精排降级，分数不可用）'",
+      "classification": "生成被门控拦（无分数→按 0 分拒答），不是检索没召回"
+    },
+    "zero_candidates": {
+      "total": 8,
+      "answerable": 7, "reject": 1, "clarify": 0,
+      "answerable_ids": ["B07", "B08", "C01", "C02", "C06", "C07", "M03"],
+      "evidence": "after_dedup=0, detail='超出库范围，未检索'（1 题陷阱为'检索无候选'）, rerank.elapsed_ms=0",
+      "classification": "检索/时间过滤层问题（独立故障，精排修好后仍会拒答）"
+    },
+    "llm_failures": {
+      "timeout": 0, "rate_limit": 0, "format_error": 0,
+      "evidence": "无 SSE token 事件、answer 全空、无生成日志；qa_log.model=deepseek-flash 仅为配置记录",
+      "note": "本次评测未进入生成层；不能把 LLM HTTP 200 前提当成生成质量已验证"
+    },
+    "answers_produced": 0,
+    "citations_total": 0
+  },
+  "red_lines": [
+    {
+      "key": "RL1", "name": "陷阱题拒答率", "status": "NOT_MEASURABLE",
+      "value": "15/15 = 100.0%", "threshold": "= 100%", "numerator": 15, "denominator": 15,
+      "note": "判别力闸未过：应答题进入生成层 0/35；全拒答真空态的 100% 不是通过"
+    },
+    {
+      "key": "RL2", "name": "数值准确率", "status": "NOT_MEASURABLE",
+      "value": "—", "threshold": "≥ 96%", "numerator": 0, "denominator": 0,
+      "note": "0 题已答、含数字断言 0 题"
+    },
+    {
+      "key": "RL3", "name": "角标可点回率", "status": "NOT_MEASURABLE",
+      "value": "无引用可查", "threshold": "≥ 98%", "numerator": 0, "denominator": 0,
+      "note": "总引用数 0，无 PG 回查对象"
+    },
+    {
+      "key": "RL4", "name": "忠实度优先于覆盖率", "status": "NOT_MEASURABLE",
+      "value": "0/0 = —", "threshold": "= 100%", "numerator": 0, "denominator": 0,
+      "note": "覆盖率 0/35；0 题已答时忠实度不可测（不是通过）"
+    }
+  ],
+  "calibration": {
+    "script_exit_code": 2,
+    "verdict": "不可标定",
+    "youden_all_thresholds": 0.0,
+    "threshold_scan": {"from": 0.2, "to": 0.6, "step": 0.01,
+      "TP": 0, "FN": 35, "FP": 0, "TN": 13, "TPR": 0.0, "FPR": 0.0},
+    "valley_found": false,
+    "candidate_threshold": null,
+    "threshold_change_recommended": false,
+    "reason": "top1 全 null；下调 0.20 不能改变 scored=0→0.000→拒答，调到 0 等于取消门控；无数据支持任何候选值",
+    "missing_inputs": [
+      "精排正常返回后的有效 top1（应答题与拒答题均需 rerank.scored>0、无 degrade）",
+      "修复后基于同一语料版本重跑的 make eval 结果",
+      "之后再据 Youden/波谷做阈值候选分析"
+    ],
+    "precision_caveat": "n=35/13 的命中率 95%CI 半宽约 ±16.6pp / ±27.2pp，即便有分数也只能给区间候选"
+  },
+  "golden_doc_key_audit": {
+    "empty_expected_doc_keys": {
+      "count": 13,
+      "ids": ["T01", "T02", "T03", "T04", "T05", "T07", "T08", "T09", "T10", "T11", "T12", "T13", "T15"],
+      "all_trap_questions": true,
+      "interpretation": "应拒答题无正确文档，是设计占位（评测器 preflight 的 TBD doc_key=13）；不是标注缺陷"
+    },
+    "answerable_with_empty_doc_keys": 0,
+    "citation_accuracy_confounded_by_placeholders": false,
+    "rl3_unmeasurable_cause": "引用数 0，而非 doc_key 占位"
+  },
+  "root_cause_probe": {
+    "read_only": true,
+    "config_changed": false,
+    "short_texts": {"n": 8, "http": 200, "seconds": 0.65424},
+    "real_length_texts": {"n": 8, "chars_each": 502, "http": 200, "seconds": 2.237456},
+    "configured_budget_ms": 800,
+    "conclusion": "真实长度切片精排耗时约 2.24s，明确超过 800ms 预算；与 qa_log 中 801-815ms 的超时记录一致"
+  },
+  "recommended_actions": [
+    {"id": 1, "action": "提高 RERANK_BUDGET_MS（建议 ≥2500-3000ms）或减小候选文本/批大小，修复精排超时", "owner": "backend/devops",
+     "acceptance": "重跑后 scored>0 且 degrade=null 的题数 ≥48/50，top1 非 null"},
+    {"id": 2, "action": "排查 7 道应答题零候选的时间过滤器与语料年份覆盖（B07,B08,C01,C02,C06,C07,M03）", "owner": "backend",
+     "acceptance": "这些题 after_dedup>0，或明确修正 golden/过滤器口径"},
+    {"id": 3, "action": "修复后重跑 make eval + calibrate.py，用真实 top1 做 Youden/波谷分析再议阈值", "owner": "data-analyst",
+     "acceptance": "四条红线不再因无分数而 NOT_MEASURABLE，标定退出码不为 2"},
+    {"id": 4, "action": "本轮保持 GATE_REJECT_NONE=0.20 / GATE_REJECT_LOW=0.40 不变", "owner": "all",
+     "acceptance": "配置 diff 为空"}
+  ],
+  "boundaries_respected": {
+    "threshold_changed": false,
+    "golden_modified": false,
+    "database_cleared": false,
+    "not_measurable_reported_as_pass": false,
+    "exit_code_reported_verbatim": 2
+  },
+  "final": "不可发布：本轮四条红线全部 NOT_MEASURABLE（退出码 2），应答题覆盖率 0/35；缺有效精排 top1 与零候选修复，非阈值数字问题。修复后重跑评测与标定再判定。"
+}

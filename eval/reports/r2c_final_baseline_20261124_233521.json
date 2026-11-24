@@ -1,0 +1,174 @@
+{
+  "schema": "eval.final_baseline.v1",
+  "report_id": "r2c_final_baseline_20261124_233521",
+  "task": "t_a60278a3",
+  "stage": "R2c",
+  "generated_at": "2026-11-24T23:35:21+08:00",
+  "eval_window": {
+    "redline_md": "eval/reports/redline_20261124_233521.md",
+    "redline_json": "eval/reports/redline_20261124_233521.json",
+    "calibration_md": "eval/reports/calibration_20261124_233737.md",
+    "calibration_json": "eval/reports/calibration_20261124_233737.json",
+    "qa_log_ids": [1260, 1309],
+    "answerable_ids": [1260, 1294],
+    "trap_ids": [1295, 1309],
+    "started_at": "2026-11-24T23:29:56+08:00",
+    "ended_at": "2026-11-24T23:35:21+08:00",
+    "eval_exit_code": 0
+  },
+  "preconditions": {
+    "rerank_budget_ms": 12000,
+    "rerank_text_max_chars": 400,
+    "gates": {"reject_none": 0.2, "reject_low": 0.4, "changed": false},
+    "lexicon_fix_loaded": true,
+    "lexicon_evidence": "container OUT_OF_SCOPE_MARKERS has no bare 预测",
+    "concurrent_eval": false,
+    "rerank_cpu_at_start_pct": 0.92,
+    "embedding_cpu_at_start_pct": 0.49,
+    "commits": ["14624a3", "4e60ae3", "8010196", "661e8a0", "0914e0d"],
+    "uncommitted_code_changes": false,
+    "corpus": {
+      "active_versions": 9,
+      "active_chunks": 2136,
+      "qdrant_points": 2142,
+      "sync_pending": 0,
+      "open_drift": {},
+      "source": "make ingest-status (re-run this stage)"
+    },
+    "llm_model": "deepseek-flash",
+    "llm_configured": true
+  },
+  "fix_acceptance": {
+    "rerank_budget_fix": {
+      "task": "t_e2610802",
+      "expectation": "scored>0 and degrade=null >= 48/50",
+      "scored_pos_degrade_null": 49,
+      "total": 50,
+      "scored_zero": 1,
+      "degrade_not_null": 0,
+      "degraded_true": 0,
+      "fallback_not_null": 0,
+      "scored_zero_detail": "id1295 T01 (2026 out-of-scope, 0 candidates, never entered rerank)",
+      "verdict": "achieved"
+    },
+    "zero_candidate_fix": {
+      "task": "t_ebcaeedc",
+      "expectation": "answerable zero-candidate -> 0 (or confirmed reasonable)",
+      "answerable_zero_candidate": 0,
+      "total_zero_candidate": 1,
+      "zero_candidate_detail": "id1295 T01 2026 future-year trap (reasonable)",
+      "r2b_7_after_dedup": 8,
+      "verdict": "achieved"
+    }
+  },
+  "red_lines": [
+    {
+      "key": "RL1",
+      "machine_status": "PASS",
+      "value": "15/15 = 100%",
+      "analyst_status": "PASS_NOT_REPRODUCIBLE",
+      "note": "prior isolated run 232015 (same config, no concurrency) = FAIL 13/15; LLM gateway model_timeout flips 13<->15; discriminator gate only 8/35"
+    },
+    {
+      "key": "RL2",
+      "machine_status": "PASS",
+      "value": "2/2 = 100%",
+      "analyst_status": "PASS_INFORMATIVE_LIMITED",
+      "note": "denominator n=2; CI half-width ~34pp; no release-grade precision"
+    },
+    {
+      "key": "RL3",
+      "machine_status": "PASS",
+      "value": "2/2 = 100%",
+      "analyst_status": "PASS_INFORMATIVE_LIMITED",
+      "note": "denominator n=2"
+    },
+    {
+      "key": "RL4",
+      "machine_status": "PASS",
+      "value": "2/2 = 100%",
+      "coverage": "2/35 = 5.7%",
+      "analyst_status": "PASS_COVERAGE_NOT_MET",
+      "note": "rubric judges faithfulness of answered only; coverage 5.7% means system answers almost nothing"
+    }
+  ],
+  "machine_verdict": "通过（四条红线全过）",
+  "publishability": {
+    "verdict": "NOT_PUBLISHABLE",
+    "one_liner": "两处修复生效、四条红线机器全 PASS，但覆盖率仅 2/35=5.7%、26/35 应答题在生成/NLI 层被拦、RL1 同配置两轮 13/15↔15/15 不可复现、RL2/RL3 分母 n=2。",
+    "reasons": [
+      "coverage 2/35 = 5.7%; 33/35 answerable got no answer",
+      "26/35 blocked at generation/NLI layer (20 draft_status with top1 0.55-0.98, 5 model_timeout, 1 nli_support)",
+      "RL1 not reproducible across two isolated runs with same config (13/15 vs 15/15)",
+      "RL2/RL3 denominator n=2"
+    ]
+  },
+  "coverage": {
+    "answered": 2,
+    "answerable": 35,
+    "rate": 0.05714285714285714
+  },
+  "attribution": {
+    "basis": "score_snapshot.detail + verify.failure.check (NOT gate1_verdict, which back-maps generation rejects)",
+    "categories": {
+      "retrieval_miss": {"n": 0, "criterion": "detail=检索无候选 OR top1<0.20", "top1_range": null},
+      "gate_block": {"n": 7, "criterion": "clarify(6) + reject_low(1)", "top1_range": [0.255, 0.999]},
+      "gen_nli_block": {"n": 26, "criterion": "draft_status(20) + model_timeout(5) + nli_support(1)", "top1_range": [0.549, 0.999]},
+      "answered": {"n": 2, "top1_range": [0.963, 0.987]}
+    },
+    "total": 35,
+    "trap_rejection_mechanism": {
+      "draft_status": 7,
+      "clarify": 5,
+      "top1_below_0.2": 2,
+      "no_candidates": 1,
+      "note": "15/15 traps safe, but only 2 rejected by top1 threshold; same draft_status mechanism that rejects traps also rejects 20 answerable"
+    },
+    "b08": {
+      "after_dedup": 8,
+      "top1": 0.998757,
+      "verdict": "clarify",
+      "note": "year-range fix did not regress B08 to zero-candidate; blocked at gate clarify (delta=0.000)",
+      "answered": false
+    },
+    "reproduce_sql": ["eval/r2c_qalog_check.sql", "eval/r2c_attribution.sql"]
+  },
+  "calibration": {
+    "decision": "NOT_CALIBRATABLE_KEEP_GATES",
+    "youden_threshold": 0.59,
+    "youden_J": 0.2989,
+    "tpr": 0.9143,
+    "fpr": 0.6154,
+    "valley_interval": null,
+    "overlap": true,
+    "refusable_p95": 0.9314197,
+    "answerable_p05": 0.5603854,
+    "gates_at_0_20": {"tpr": 1.0, "fpr": 0.7692, "youden": 0.2308},
+    "gates_at_0_40": {"tpr": 0.97, "fpr": 0.69, "youden": 0.28},
+    "reason": "no valley (overlap=true); 26/35 failures have top1 already >0.40 and were blocked in generation layer, so threshold change cannot recover coverage",
+    "missing_prereqs": [
+      "generation layer must stabilize first (eliminate 5 SSL EOF timeouts, reduce draft_status over-refusal) to lift answered+verifiable samples from 2",
+      "13/50 trap questions have empty expected_doc_keys (no target doc by design); refusable top1 None counted as 0.0 slightly perturbs refusable distribution",
+      "need enough answered+verifiable samples with separated top1 peaks"
+    ]
+  },
+  "run_stability": [
+    {"run": "redline_20261124_232015", "trap": "FAIL 13/15", "coverage": "1/35", "discriminator": "12/35", "verdict": "不通过"},
+    {"run": "redline_20261124_233521", "trap": "PASS 15/15", "coverage": "2/35", "discriminator": "8/35", "verdict": "通过（基线）"}
+  ],
+  "boundaries": {
+    "thresholds_changed": false,
+    "golden_changed": false,
+    "db_cleared": false,
+    "source_code_changed_by_this_task": false,
+    "new_artifacts": [
+      "eval/r2c_final_baseline_20261124_233521.md",
+      "eval/r2c_final_baseline_20261124_233521.json",
+      "eval/r2c_qalog_check.sql",
+      "eval/r2c_attribution.sql",
+      "eval/reports/redline_20261124_233521.md/.json",
+      "eval/reports/calibration_20261124_233737.md/.json"
+    ]
+  },
+  "baseline_anchor": "后续任何阈值/检索改动都与 redline_20261124_233521 + 本文件逐项对比"
+}

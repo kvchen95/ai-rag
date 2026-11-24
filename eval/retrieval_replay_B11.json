@@ -1,0 +1,155 @@
+{
+  "question": "中芯国际2024年末整体产能是多少？环比增加多少？",
+  "hybrid_candidate_n": 10,
+  "dense_count": 10,
+  "sparse_count": 10,
+  "rerank_scored": 10,
+  "hybrid_candidates": [
+    {
+      "chunk_id": "ch_cbe2a4d957d0",
+      "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+      "chunk_type": "text",
+      "page_num": 1,
+      "dense_rank": 1,
+      "sparse_rank": 2,
+      "dense_score": 0.7116406,
+      "sparse_score": 21.022892,
+      "fused_score": 0.833333
+    },
+    {
+      "chunk_id": "ch_1d2f3b3a4469",
+      "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+      "chunk_type": "text",
+      "page_num": 1,
+      "dense_rank": 2,
+      "sparse_rank": 1,
+      "dense_score": 0.7116406,
+      "sparse_score": 21.022894,
+      "fused_score": 0.833333
+    },
+    {
+      "chunk_id": "ch_8aa50f62b5b5",
+      "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+      "chunk_type": "text",
+      "page_num": 1,
+      "dense_rank": 3,
+      "sparse_rank": 3,
+      "dense_score": 0.57451546,
+      "sparse_score": 5.8444614,
+      "fused_score": 0.5
+    },
+    {
+      "chunk_id": "ch_612c332a0284",
+      "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+      "chunk_type": "text",
+      "page_num": 1,
+      "dense_rank": 4,
+      "sparse_rank": 7,
+      "dense_score": 0.5344745,
+      "sparse_score": 5.6786733,
+      "fused_score": 0.325
+    },
+    {
+      "chunk_id": "ch_1cf39c9b6666",
+      "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+      "chunk_type": "text",
+      "page_num": 1,
+      "dense_rank": 10,
+      "sparse_rank": 4,
+      "dense_score": 0.5223237,
+      "sparse_score": 5.813602,
+      "fused_score": 0.290909
+    },
+    {
+      "chunk_id": "ch_e8af21bcf8bd",
+      "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+      "chunk_type": "text",
+      "page_num": 1,
+      "dense_rank": 5,
+      "sparse_rank": 8,
+      "dense_score": 0.5344745,
+      "sparse_score": 5.6786733,
+      "fused_score": 0.277778
+    },
+    {
+      "chunk_id": "ch_bd25283228de",
+      "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+      "chunk_type": "text",
+      "page_num": 1,
+      "dense_rank": 8,
+      "sparse_rank": 5,
+      "dense_score": 0.5284674,
+      "sparse_score": 5.7528505,
+      "fused_score": 0.277778
+    },
+    {
+      "chunk_id": "ch_52da8b522791",
+      "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+      "chunk_type": "text",
+      "page_num": 1,
+      "dense_rank": 6,
+      "sparse_rank": 9,
+      "dense_score": 0.53088385,
+      "sparse_score": 5.6640663,
+      "fused_score": 0.242857
+    },
+    {
+      "chunk_id": "ch_6ce34d771606",
+      "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+      "chunk_type": "text",
+      "page_num": 1,
+      "dense_rank": 9,
+      "sparse_rank": 6,
+      "dense_score": 0.5284674,
+      "sparse_score": 5.7528505,
+      "fused_score": 0.242857
+    },
+    {
+      "chunk_id": "ch_23893099cb33",
+      "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+      "chunk_type": "text",
+      "page_num": 1,
+      "dense_rank": 7,
+      "sparse_rank": 10,
+      "dense_score": 0.5308838,
+      "sparse_score": 5.6640663,
+      "fused_score": 0.215909
+    }
+  ],
+  "golden_chunk_in_hybrid": false,
+  "golden_chunk_detail": [],
+  "golden_chunk_in_raw_routes": [
+    [],
+    []
+  ],
+  "golden_chunk_dropped_by_dedup": false,
+  "dedup_dropped_count": 0,
+  "final_top8": [
+    "ch_52da8b522791",
+    "ch_23893099cb33",
+    "ch_612c332a0284",
+    "ch_e8af21bcf8bd",
+    "ch_1cf39c9b6666",
+    "ch_8aa50f62b5b5",
+    "ch_cbe2a4d957d0",
+    "ch_1d2f3b3a4469"
+  ],
+  "top1": 0.549555,
+  "rerank_batches": [
+    {
+      "n_texts": 10,
+      "scores": [
+        0.186417,
+        0.186417,
+        0.207734,
+        0.484008,
+        0.234365,
+        0.484008,
+        0.076518,
+        0.549555,
+        0.076518,
+        0.549555
+      ]
+    }
+  ]
+}

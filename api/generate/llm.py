@@ -22,7 +22,10 @@
 from __future__ import annotations
 
 import json
+import random
 import re
+import threading
+import time
 from dataclasses import dataclass, field
 from typing import Any, Literal, Sequence
 
@@ -267,23 +270,72 @@ def build_generation_messages(question: str, evidence_block: str) -> list[dict[s
     ]
 
 
+# --- 共享 keep-alive 连接池 ---------------------------------------------------
+# 根因（2026-11-24 实测）：原先每次 complete() 都 `with httpx.Client(...)`，
+# 等于每次问答都做一次全新的 TCP + TLS 握手。第三方 SLB 在握手阶段随机回
+# `[SSL: UNEXPECTED_EOF_WHILE_READING]`，30 次冷连接探测失败 5~7 次（~20%）；
+# 同一网关换成共享 keep-alive 客户端后降到 1/30，中位延迟 3.1s→2.3s。
+# 所以这里持有长连接客户端并被生成/判别两条链路共用（同 endpoint+key+timeout）。
+_POOL_LOCK = threading.Lock()
+_SHARED_CLIENTS: dict[tuple[str, str, float], httpx.Client] = {}
+
+
+def _shared_client(base_url: str, api_key: str, timeout_s: float) -> httpx.Client:
+    """按 (endpoint, key, timeout) 复用一个线程安全的 keep-alive 客户端。
+
+    生成与判别是同一个 llm_client(settings) 工厂，走同一把池；不同凭证绝不共用，
+    避免把 A 租户的 token 发到 B 的 endpoint。
+    """
+    key = (base_url.rstrip("/"), api_key, timeout_s)
+    with _POOL_LOCK:
+        client = _SHARED_CLIENTS.get(key)
+        if client is None or client.is_closed:
+            client = httpx.Client(
+                base_url=key[0],
+                timeout=timeout_s,
+                headers={"Authorization": f"Bearer {api_key}"} if api_key else {},
+                trust_env=False,
+                limits=httpx.Limits(
+                    max_connections=8,
+                    max_keepalive_connections=8,
+                    keepalive_expiry=30.0,
+                ),
+            )
+            _SHARED_CLIENTS[key] = client
+        return client
+
+
+def reset_shared_clients() -> None:
+    """关闭并清空连接池（测试 / 配置变更后调用）。"""
+    with _POOL_LOCK:
+        for client in _SHARED_CLIENTS.values():
+            client.close()
+        _SHARED_CLIENTS.clear()
+
+
 @dataclass(slots=True)
 class LlmClient:
     """OpenAI 兼容网关的 `/chat/completions` 薄客户端。
 
     刻意不接 SDK：这里只有一次非流式的严格 JSON 调用，SDK 会带进一整套流式与
     重试逻辑，而重试策略必须是我们的（附录 D："不重试三次以上"）。
+
+    max_attempts 只覆盖**传输层瞬时故障**（握手 SSL EOF / 超时 / 5xx /
+    空响应）——这些调用都没有产出内容，重试是幂等的。GenerationRejected（4xx）
+    和 DraftFormatError（模型输出格式错）不重试，语义见各自的异常类注释。
     """
 
     base_url: str
     model: str
     api_key: str = ""
     timeout_s: float = 30.0
+    max_attempts: int = 6
+    retry_backoff_s: float = 0.3
+    retry_budget_s: float = 45.0
 
     def complete(
         self, messages: Sequence[dict[str, str]], *, temperature: float = 0.0
     ) -> str:
-        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
         body = {
             "model": self.model,
             "messages": list(messages),
@@ -292,34 +344,64 @@ class LlmClient:
             "temperature": temperature,
             "stream": False,
         }
-        try:
-            with httpx.Client(
-                base_url=self.base_url.rstrip("/"),
-                timeout=self.timeout_s,
-                headers=headers,
-                trust_env=False,
-            ) as client:
-                resp = client.post("/chat/completions", json=body)
-        except httpx.TimeoutException as exc:
-            raise GenerationUnavailable(f"llm timed out after {self.timeout_s}s") from exc
-        except httpx.HTTPError as exc:
-            raise GenerationUnavailable(f"llm unreachable: {exc}") from exc
-        if resp.status_code >= 500:
-            raise GenerationUnavailable(f"llm -> HTTP {resp.status_code}: {resp.text[:200]}")
-        if resp.status_code >= 400:
-            raise GenerationRejected(f"llm rejected: HTTP {resp.status_code} {resp.text[:300]}")
-        try:
-            data = resp.json()
-        except ValueError as exc:
-            raise GenerationUnavailable(f"llm returned non-JSON: {exc}") from exc
-        choices = (data or {}).get("choices") or []
-        if not choices:
-            raise GenerationUnavailable("llm returned no choices")
-        message = choices[0].get("message") or {}
-        content = message.get("content")
-        if not isinstance(content, str) or not content.strip():
-            raise GenerationUnavailable("llm returned empty content")
-        return content
+        # 总预算与 LLM_TIMEOUT_S 对齐：单次真超时（如 30s）用满预算后不再重试，
+        # 不会把一次问答放大成 N×30s。瞬时 SSL EOF 通常在 1~7s 失败，预算内可重试。
+        deadline = time.monotonic() + self.retry_budget_s
+        last: GenerationUnavailable | None = None
+        for attempt in range(1, max(1, self.max_attempts) + 1):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                client = _shared_client(self.base_url, self.api_key, self.timeout_s)
+                resp = client.post("/chat/completions", json=body, timeout=remaining)
+                if resp.status_code >= 500:
+                    raise GenerationUnavailable(f"llm -> HTTP {resp.status_code}: {resp.text[:200]}")
+                if resp.status_code >= 400:
+                    # 4xx 是请求形状错误，重试无意义——立即抛出，不进重试分支。
+                    raise GenerationRejected(f"llm rejected: HTTP {resp.status_code} {resp.text[:300]}")
+                try:
+                    data = resp.json()
+                except ValueError as exc:
+                    raise GenerationUnavailable(f"llm returned non-JSON: {exc}") from exc
+                choices = (data or {}).get("choices") or []
+                if not choices:
+                    raise GenerationUnavailable("llm returned no choices")
+                message = choices[0].get("message") or {}
+                content = message.get("content")
+                if not isinstance(content, str) or not content.strip():
+                    raise GenerationUnavailable("llm returned empty content")
+                return content
+            except httpx.TimeoutException as exc:
+                last = GenerationUnavailable(f"llm timed out after {self.timeout_s}s")
+                last.__cause__ = exc
+            except httpx.HTTPError as exc:
+                # SSL EOF 走这里（httpx.ConnectError ⊂ httpx.HTTPError）。
+                last = GenerationUnavailable(f"llm unreachable: {exc}")
+                last.__cause__ = exc
+            except GenerationRejected:
+                raise
+            except GenerationUnavailable as exc:
+                last = exc
+
+            if attempt >= max(1, self.max_attempts):
+                raise last  # type: ignore[misc]
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise last  # type: ignore[misc]
+            # 指数退避 + 抖动：避免同一批请求在 SLB 恢复瞬间同时重试造成二次抖动。
+            backoff = min(self.retry_backoff_s * (2 ** (attempt - 1)), remaining)
+            if backoff > 0:
+                time.sleep(backoff * (0.5 + random.random() * 0.5))
+            log_event(
+                logger,
+                "llm_retry",
+                level=30,
+                attempt=attempt,
+                model=self.model,
+                reason=str(last)[:160],
+            )
+        raise last  # type: ignore[misc]
 
 
 def generate_draft(

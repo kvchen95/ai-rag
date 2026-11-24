@@ -1,0 +1,69 @@
+{
+  "schema": "eval.calibration_supplement.v1",
+  "generated_at": "2026-11-24T22:06:00+08:00",
+  "machine_outputs": {
+    "md": "eval/reports/r2b_20261124_2207.md",
+    "json": "eval/reports/r2b_20261124_2207.json",
+    "command": "docker compose exec -T api python eval/calibrate.py --report eval/reports/redline_20261124_220427.json --name r2b_20261124_2207",
+    "exit_code": 2,
+    "verdict": "不可标定"
+  },
+  "input_eval": {
+    "report": "eval/reports/redline_20261124_220427.json",
+    "eval_exit_code": 2,
+    "active_versions": 9,
+    "active_chunks": 2136
+  },
+  "sample": {"answerable": 35, "reject": 13, "clarify": 2},
+  "top1_distribution": {
+    "answerable": {"n": 35, "valid": 0, "none": 35, "min": null, "p10": null, "median": null, "p90": null, "max": null, "gt_0_20": 0, "gt_0_40": 0},
+    "reject": {"n": 13, "valid": 0, "none": 13, "min": null, "p10": null, "median": null, "p90": null, "max": null, "gt_0_20": 0, "gt_0_40": 0},
+    "clarify": {"n": 2, "valid": 0, "none": 2, "min": null, "p10": null, "median": null, "p90": null, "max": null, "gt_0_20": 0, "gt_0_40": 0}
+  },
+  "threshold_scan": {
+    "range": [0.2, 0.6], "step": 0.01,
+    "TP": 0, "FN": 35, "FP": 0, "TN": 13,
+    "TPR": 0.0, "FPR": 0.0, "youden": 0.0,
+    "valley_found": false
+  },
+  "candidate_threshold": null,
+  "threshold_change_recommended": false,
+  "threshold_change_reasons": [
+    "链路 scored=0 -> top1=null -> 0.000 -> reject_none；下调至 0.10/0.05 仍不触发",
+    "调到 0 等于取消门控，无数据支持",
+    "Youden 恒为 0 是输入退化产物，不是阈值最优的证据",
+    "n=35/13 的命中率 95%CI 半宽约 ±16.6pp / ±27.2pp，不足以精确验收"
+  ],
+  "diagnostic_alternatives_not_usable_as_top1": {
+    "dense_top1": {"answerable_median": 0.703588, "reject_median": 0.668466,
+      "answerable_range": [0.575146, 0.778214], "reject_range": [0.546636, 0.738805],
+      "reason": "非精排分且两组重叠"},
+    "fused_top1": {"answerable_median": 0.9166665, "reject_median": 0.6833335,
+      "answerable_range": [0.53125, 1.0], "reject_range": [0.53125, 1.0],
+      "reason": "融合分刻度未按 0.20/0.40 语义校准，拒答题也达 1.0"},
+    "sparse_top1": {"answerable_range": [21.022894, 87.163574], "reject_range": [17.710629, 41.623024],
+      "reason": "BM25 量级 17-87，与 0..1 门控不同刻度"}
+  },
+  "root_cause_of_degenerate_input": {
+    "rerank_timeout": {"total": 42, "answerable": 28, "reject": 12, "clarify": 2,
+      "scored": 0, "elapsed_ms_range": [801, 815], "budget_ms": 800},
+    "zero_candidates": {"total": 8, "answerable": 7, "reject": 1,
+      "answerable_ids": ["B07", "B08", "C01", "C02", "C06", "C07", "M03"],
+      "detail": "超出库范围，未检索"},
+    "read_only_probe": {"short_8_texts_s": 0.65424, "real_length_8_texts_s": 2.237456,
+      "note": "8 条约 502 字文本直连 rerank 2.24s，远超 800ms 预算；未改配置"}
+  },
+  "missing_inputs_to_resume_calibration": [
+    "精排有效 top1（rerank.scored>0、degrade=null）≥48/50",
+    "7 道应答题零候选问题修复",
+    "同一 active=9 语料版本重跑 make eval",
+    "重跑 calibrate.py 检查波谷/Youden 后再另开调参任务"
+  ],
+  "boundaries": {
+    "config_changed": false,
+    "golden_modified": false,
+    "database_cleared": false,
+    "not_measurable_as_pass": false,
+    "exit_code_reported": 2
+  }
+}

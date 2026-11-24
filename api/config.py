@@ -59,6 +59,12 @@ class Settings(BaseSettings):
     llm_api_key: SecretStr = SecretStr("")
     llm_model: str = ""
     llm_timeout_s: float = Field(default=30.0, gt=0)
+    # 网关瞬时 SSL EOF 的 resilience：共享 keep-alive 池 + 有界重试。
+    # 重试预算与单次 timeout 解耦：SLB 偶发 ~20s 连续握手失败窗口需要跨窗重试；
+    # QA_BUDGET_S 仍保持 30 不变（仅文档口径，代码未做硬截断）。
+    llm_max_attempts: int = Field(default=6, ge=1, le=10)
+    llm_retry_backoff_s: float = Field(default=0.3, gt=0)
+    llm_retry_budget_s: float = Field(default=45.0, gt=0)
 
     vlm_base_url: str = ""
     vlm_api_key: SecretStr = SecretStr("")

@@ -1,0 +1,2646 @@
+{
+  "schema": "eval.redline.v1",
+  "generated_at": "2026-11-24T14:40:23.838015+00:00",
+  "started_at": "2026-11-24T14:35:13.004501+00:00",
+  "base_url": "http://127.0.0.1:8000",
+  "golden": "/app/eval/golden_50.jsonl",
+  "token_source": "api.identity.mint_dev_token（fixed_jwt）",
+  "args": {
+    "user_id": "eval_runner",
+    "depts": [
+      "fin"
+    ],
+    "roles": [
+      "staff"
+    ],
+    "only": "",
+    "category": ""
+  },
+  "precondition": {
+    "llm_configured": true,
+    "llm_model": "deepseek-flash",
+    "db": "psycopg 已连接",
+    "tbd_questions": 13,
+    "corpus_empty": false,
+    "rubric": "eval/README.md §5（细化 §12.1）"
+  },
+  "counts": {
+    "documents": 18,
+    "active_versions": 9,
+    "chunks": 2142,
+    "active_chunks": 2136,
+    "qa_log": 475
+  },
+  "red_lines": [
+    {
+      "key": "RL1",
+      "name": "陷阱题拒答率",
+      "status": "PASS",
+      "value": "15/15 = 100.0%",
+      "threshold": "= 100%",
+      "numerator": 15,
+      "denominator": 15,
+      "note": "判别力闸：应答题中拿到证据/进入生成层的 2/35；库内 active 切片 2136 条"
+    },
+    {
+      "key": "RL2",
+      "name": "数值准确率",
+      "status": "PASS",
+      "value": "2/2 = 100.0%",
+      "threshold": "≥ 96%",
+      "numerator": 2,
+      "denominator": 2,
+      "note": "口径：答案中每个数字（已去掉 [n] 角标）都必须出现在被引证据原文里；没有已答题或答案不含数字时不可测。"
+    },
+    {
+      "key": "RL3",
+      "name": "角标可点回率",
+      "status": "PASS",
+      "value": "2/2 = 100.0%",
+      "threshold": "≥ 98%",
+      "numerator": 2,
+      "denominator": 2,
+      "note": "逐条回查 PG：chunk_id 存在、doc_key/page_num/bbox 与库一致、切片与版本均 active。"
+    },
+    {
+      "key": "RL4",
+      "name": "忠实度优先于覆盖率",
+      "status": "PASS",
+      "value": "2/2 = 100.0%",
+      "threshold": "= 100%（覆盖率单独报告，不得以覆盖率换忠实度）",
+      "numerator": 2,
+      "denominator": 2,
+      "note": "覆盖率 = 应答题得到答案/应答题总数 = 2/35 = 5.7%；0 题已答时忠实度不可测（不是通过）。"
+    }
+  ],
+  "verdict": "通过（四条红线全过）",
+  "summary": "题目 50 题（应答题 35，陷阱 15），应答题得到答案 2 题，单题均分 0.34；陷阱安全拒答 15/15。",
+  "questions": [
+    {
+      "qid": "B01",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "pass",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "hit",
+      "numeric": "ok",
+      "numeric_bad": [],
+      "citations_total": 1,
+      "citations_resolvable": 1,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": 0.963822,
+      "gate1": "pass",
+      "gate2": "supported",
+      "reject_reason": null,
+      "answer": "中芯国际2025年第一季度营业收入为163.01亿元，同比+29.44% [1]。",
+      "citations": [
+        {
+          "n": 1,
+          "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+          "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+          "page_num": 1,
+          "bbox": [
+            [
+              0.0476,
+              0.223,
+              0.9347,
+              0.3535
+            ]
+          ],
+          "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…",
+          "chunk_id": "ch_f5446b088b9a"
+        }
+      ],
+      "fallback": null,
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 10809,
+        "hop_count": 0,
+        "verdict": "pass"
+      },
+      "latency_ms": 10830.9,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B02",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "clarify",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=clarify）"
+      ],
+      "top1": 0.698433,
+      "gate1": "clarify",
+      "gate2": null,
+      "reject_reason": null,
+      "answer": "",
+      "citations": [],
+      "fallback": null,
+      "clarify": {
+        "type": "clarify",
+        "question": "请确认要查的是哪一份资料：",
+        "options": [
+          {
+            "label": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf（第 1 页）",
+            "value": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji"
+              ]
+            }
+          },
+          {
+            "label": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf（第 1 页）",
+            "value": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+              ]
+            }
+          },
+          {
+            "label": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf（第 7 页）",
+            "value": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang"
+              ]
+            }
+          },
+          {
+            "label": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf（第 1 页）",
+            "value": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan"
+              ]
+            }
+          }
+        ]
+      },
+      "done": {
+        "type": "done",
+        "latency_ms": 3346,
+        "hop_count": 0,
+        "verdict": "clarify"
+      },
+      "latency_ms": 3374.6,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B03",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6049,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6070.3,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B04",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6069,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6168.6,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B05",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6122,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6151.4,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B06",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6108,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6165.8,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B07",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6185,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6202.9,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B08",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6214,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6256.0,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B09",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "clarify",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=clarify）"
+      ],
+      "top1": 0.849871,
+      "gate1": "clarify",
+      "gate2": null,
+      "reject_reason": null,
+      "answer": "",
+      "citations": [],
+      "fallback": null,
+      "clarify": {
+        "type": "clarify",
+        "question": "请确认要查的是哪一份资料：",
+        "options": [
+          {
+            "label": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf（第 1 页）",
+            "value": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji"
+              ]
+            }
+          },
+          {
+            "label": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf（第 1 页）",
+            "value": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi"
+              ]
+            }
+          },
+          {
+            "label": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf（第 1 页）",
+            "value": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan"
+              ]
+            }
+          }
+        ]
+      },
+      "done": {
+        "type": "done",
+        "latency_ms": 5612,
+        "hop_count": 0,
+        "verdict": "clarify"
+      },
+      "latency_ms": 5647.2,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B10",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.977822,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_name": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf",
+            "page_num": 1,
+            "snippet": "3Q24毛利率超预期，4Q24指引营收持续增 长……………………………………2024-11-09 4,823"
+          },
+          {
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_name": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf",
+            "page_num": 1,
+            "snippet": "3Q24毛利率超预期，4Q24指引营收持续增 长……………………………………2024-11-09 4,823"
+          },
+          {
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_name": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf",
+            "page_num": 1,
+            "snippet": "12英寸业务稳增长，季度收入首超20亿 美元-2024.11.13"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 9687,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 9714.4,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B11",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6071,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6111.7,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B12",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.565027,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_name": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf",
+            "page_num": 1,
+            "snippet": "12英寸业务稳增长，季度收入首超20亿 美元-2024.11.13"
+          },
+          {
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_name": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf",
+            "page_num": 1,
+            "snippet": "12英寸业务稳增长，季度收入首超20亿 美元-2024.11.13"
+          },
+          {
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_name": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf",
+            "page_num": 1,
+            "snippet": "3Q24毛利率超预期，4Q24指引营收持续增 长……………………………………2024-11-09 4,823"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 4822,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 4856.1,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B13",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.936976,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_name": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf",
+            "page_num": 1,
+            "snippet": "12英寸业务稳增长，季度收入首超20亿 美元-2024.11.13"
+          },
+          {
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_name": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf",
+            "page_num": 1,
+            "snippet": "12英寸业务稳增长，季度收入首超20亿 美元-2024.11.13"
+          },
+          {
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_name": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf",
+            "page_num": 1,
+            "snippet": "《中芯国际（00981.HK）-一季度营收、毛利率超指引》—— 2024-05-13"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 4967,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 5021.1,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B14",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.978924,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_name": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf",
+            "page_num": 1,
+            "snippet": "12英寸业务稳增长，季度收入首超20亿 美元-2024.11.13"
+          },
+          {
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_name": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf",
+            "page_num": 1,
+            "snippet": "12英寸业务稳增长，季度收入首超20亿 美元-2024.11.13"
+          },
+          {
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_name": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf",
+            "page_num": 1,
+            "snippet": "3Q24毛利率超预期，4Q24指引营收持续增 长……………………………………2024-11-09 4,823"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 7112,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 7160.6,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B15",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.835006,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          },
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          },
+          {
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_name": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf",
+            "page_num": 7,
+            "snippet": "自2020年以来，中芯国际H股股价在0.7-2.7倍BVPS区间震荡。我们认为公司是全球产 业链重构的主要受益者之一。看好公司通过积极投资把握1)中国企业在地化生产，以及2） DeepSeek等产业链机会。我们估值倍数上调至3.0倍（前值…"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 10018,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 10082.1,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B16",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "pass",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "hit",
+      "numeric": "ok",
+      "numeric_bad": [],
+      "citations_total": 1,
+      "citations_resolvable": 1,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": 0.998591,
+      "gate1": "pass",
+      "gate2": "supported",
+      "reject_reason": null,
+      "answer": "中原证券报告中，中芯国际2025年第一季度扣非归母净利润为11.70亿元，同比+88.00% [1]。",
+      "citations": [
+        {
+          "n": 1,
+          "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+          "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+          "page_num": 1,
+          "bbox": [
+            [
+              0.0476,
+              0.223,
+              0.9347,
+              0.3535
+            ]
+          ],
+          "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…",
+          "chunk_id": "ch_a903805e6e19"
+        }
+      ],
+      "fallback": null,
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 13501,
+        "hop_count": 0,
+        "verdict": "pass"
+      },
+      "latency_ms": 13542.0,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B17",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.789166,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          },
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          },
+          {
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_name": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf",
+            "page_num": 7,
+            "snippet": "自2020年以来，中芯国际H股股价在0.7-2.7倍BVPS区间震荡。我们认为公司是全球产 业链重构的主要受益者之一。看好公司通过积极投资把握1)中国企业在地化生产，以及2） DeepSeek等产业链机会。我们估值倍数上调至3.0倍（前值…"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 5033,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 5067.5,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B18",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6033,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6056.1,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B19",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6081,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6125.8,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B20",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6084,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6120.1,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "C01",
+      "category": "chart",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6071,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6125.6,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "C02",
+      "category": "chart",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6175,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6232.0,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "C03",
+      "category": "chart",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.923987,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_name": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf",
+            "page_num": 1,
+            "snippet": "12英寸业务稳增长，季度收入首超20亿 美元-2024.11.13"
+          },
+          {
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_name": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf",
+            "page_num": 1,
+            "snippet": "12英寸业务稳增长，季度收入首超20亿 美元-2024.11.13"
+          },
+          {
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_name": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf",
+            "page_num": 1,
+            "snippet": "《中芯国际（00981.HK）-一季度营收、毛利率超指引》—— 2024-05-13"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 10822,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 10946.7,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "C04",
+      "category": "chart",
+      "expected": "pass",
+      "actual": "reject_low",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_low）"
+      ],
+      "top1": 0.254542,
+      "gate1": "reject_low",
+      "gate2": null,
+      "reject_reason": "low_confidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "low_confidence",
+        "message": "现有资料不足以下结论",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_name": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf",
+            "best_score": 0.2545
+          },
+          {
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_name": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf",
+            "best_score": 0.1589
+          },
+          {
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_name": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf",
+            "best_score": 0.1198
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 1101,
+        "hop_count": 0,
+        "verdict": "reject_low",
+        "code": "low_confidence"
+      },
+      "latency_ms": 1115.9,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "C05",
+      "category": "chart",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.604583,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_name": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf",
+            "page_num": 1,
+            "snippet": "《中芯国际（00981.HK）-一季度营收、毛利率超指引》—— 2024-05-13"
+          },
+          {
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_name": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf",
+            "page_num": 1,
+            "snippet": "《中芯国际（00981.HK）-一季度营收、毛利率超指引》—— 2024-05-13"
+          },
+          {
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_name": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf",
+            "page_num": 1,
+            "snippet": "12英寸业务稳增长，季度收入首超20亿 美元-2024.11.13"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 4189,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 4208.7,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "C06",
+      "category": "chart",
+      "expected": "pass",
+      "actual": "clarify",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=clarify）"
+      ],
+      "top1": 0.718592,
+      "gate1": "clarify",
+      "gate2": null,
+      "reject_reason": null,
+      "answer": "",
+      "citations": [],
+      "fallback": null,
+      "clarify": {
+        "type": "clarify",
+        "question": "请确认要查的是哪一份资料：",
+        "options": [
+          {
+            "label": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf（第 1 页）",
+            "value": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji"
+              ]
+            }
+          },
+          {
+            "label": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf（第 7 页）",
+            "value": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang"
+              ]
+            }
+          },
+          {
+            "label": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf（第 1 页）",
+            "value": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+              ]
+            }
+          },
+          {
+            "label": "【上海证券】中芯国际深度研究报告：晶圆制造龙头，领航国产芯片新征程.pdf（第 26 页）",
+            "value": "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu",
+            "doc_key": "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu"
+              ]
+            }
+          }
+        ]
+      },
+      "done": {
+        "type": "done",
+        "latency_ms": 4970,
+        "hop_count": 0,
+        "verdict": "clarify"
+      },
+      "latency_ms": 4983.4,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "C07",
+      "category": "chart",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6054,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6074.8,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "C08",
+      "category": "chart",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.687931,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_name": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf",
+            "page_num": 1,
+            "snippet": "12英寸业务稳增长，季度收入首超20亿 美元-2024.11.13"
+          },
+          {
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_name": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf",
+            "page_num": 1,
+            "snippet": "12英寸业务稳增长，季度收入首超20亿 美元-2024.11.13"
+          },
+          {
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_name": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf",
+            "page_num": 1,
+            "snippet": "《中芯国际（00981.HK）-一季度营收、毛利率超指引》—— 2024-05-13"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 4790,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 4850.2,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "C09",
+      "category": "chart",
+      "expected": "pass",
+      "actual": "clarify",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=clarify）"
+      ],
+      "top1": 0.95271,
+      "gate1": "clarify",
+      "gate2": null,
+      "reject_reason": null,
+      "answer": "",
+      "citations": [],
+      "fallback": null,
+      "clarify": {
+        "type": "clarify",
+        "question": "请确认要查的是哪一份资料：",
+        "options": [
+          {
+            "label": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf（第 1 页）",
+            "value": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji"
+              ]
+            }
+          },
+          {
+            "label": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf（第 1 页）",
+            "value": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi"
+              ]
+            }
+          },
+          {
+            "label": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf（第 1 页）",
+            "value": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan"
+              ]
+            }
+          }
+        ]
+      },
+      "done": {
+        "type": "done",
+        "latency_ms": 689,
+        "hop_count": 0,
+        "verdict": "clarify"
+      },
+      "latency_ms": 704.4,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "C10",
+      "category": "chart",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.973999,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu",
+            "doc_name": "【上海证券】中芯国际深度研究报告：晶圆制造龙头，领航国产芯片新征程.pdf",
+            "page_num": 4,
+            "snippet": "表 表1：公司高管履历简介........................................................9 表2：2024年Q2全球前十大晶圆代工业者营收排名（单 位：百万美元）.............…"
+          },
+          {
+            "doc_key": "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu",
+            "doc_name": "【上海证券】中芯国际深度研究报告：晶圆制造龙头，领航国产芯片新征程.pdf",
+            "page_num": 4,
+            "snippet": "表 表1：公司高管履历简介........................................................9 表2：2024年Q2全球前十大晶圆代工业者营收排名（单 位：百万美元）.............…"
+          },
+          {
+            "doc_key": "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu",
+            "doc_name": "【上海证券】中芯国际深度研究报告：晶圆制造龙头，领航国产芯片新征程.pdf",
+            "page_num": 17,
+            "snippet": "表4：晶圆厂制备及规划表（2023年12月20日）"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 3819,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 3840.7,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "M01",
+      "category": "temporal_multihop",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6037,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6059.0,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "M02",
+      "category": "temporal_multihop",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.730818,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_name": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf",
+            "page_num": 1,
+            "snippet": "《中芯国际（00981.HK）-一季度营收、毛利率超指引》—— 2024-05-13"
+          },
+          {
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_name": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf",
+            "page_num": 1,
+            "snippet": "《中芯国际（00981.HK）-一季度营收、毛利率超指引》—— 2024-05-13"
+          },
+          {
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_name": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf",
+            "page_num": 1,
+            "snippet": "3Q24毛利率超预期，4Q24指引营收持续增 长……………………………………2024-11-09 4,823"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 5576,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 5608.0,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "M03",
+      "category": "temporal_multihop",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6054,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6087.0,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "M04",
+      "category": "temporal_multihop",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6285,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6340.8,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "M05",
+      "category": "temporal_multihop",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.954961,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_name": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf",
+            "page_num": 1,
+            "snippet": "3Q24毛利率超预期，4Q24指引营收持续增 长……………………………………2024-11-09 4,823"
+          },
+          {
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_name": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf",
+            "page_num": 1,
+            "snippet": "3Q24毛利率超预期，4Q24指引营收持续增 长……………………………………2024-11-09 4,823"
+          },
+          {
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_name": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf",
+            "page_num": 1,
+            "snippet": "《中芯国际（00981.HK）-一季度营收、毛利率超指引》—— 2024-05-13"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 8646,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 8687.8,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T01",
+      "category": "trap",
+      "expected": "reject_none",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "n/a",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 66,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 85.6,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T02",
+      "category": "trap",
+      "expected": "reject_none",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "n/a",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": 0.788137,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          },
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          },
+          {
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_name": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf",
+            "page_num": 1,
+            "snippet": "国补和产业回流驱动25Q1营收指引强劲，看 好毛利率持续改善…………………2025-02-13"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 8610,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 8631.3,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T03",
+      "category": "trap",
+      "expected": "reject_none",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "n/a",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6128,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6152.4,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T04",
+      "category": "trap",
+      "expected": "reject_none",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "n/a",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6240,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6257.8,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T05",
+      "category": "trap",
+      "expected": "reject_none",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "n/a",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6284,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6332.6,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T06",
+      "category": "trap",
+      "expected": "clarify",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 8048,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 8158.8,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T07",
+      "category": "trap",
+      "expected": "reject_none",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "n/a",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6147,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6182.6,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T08",
+      "category": "trap",
+      "expected": "reject_none",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "n/a",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6123,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6163.4,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T09",
+      "category": "trap",
+      "expected": "reject_none",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "n/a",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6684,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6727.8,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T10",
+      "category": "trap",
+      "expected": "reject_none",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "n/a",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6192,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6261.1,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T11",
+      "category": "trap",
+      "expected": "reject_none",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "n/a",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6285,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6304.1,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T12",
+      "category": "trap",
+      "expected": "reject_none",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "n/a",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6102,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6141.2,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T13",
+      "category": "trap",
+      "expected": "reject_none",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "n/a",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6304,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6346.0,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T14",
+      "category": "trap",
+      "expected": "clarify",
+      "actual": "clarify",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": 0.79464,
+      "gate1": "clarify",
+      "gate2": null,
+      "reject_reason": null,
+      "answer": "",
+      "citations": [],
+      "fallback": null,
+      "clarify": {
+        "type": "clarify",
+        "question": "请确认要查的是哪一份资料：",
+        "options": [
+          {
+            "label": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf（第 1 页）",
+            "value": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan"
+              ]
+            }
+          },
+          {
+            "label": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf（第 1 页）",
+            "value": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi"
+              ]
+            }
+          },
+          {
+            "label": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf（第 1 页）",
+            "value": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji"
+              ]
+            }
+          }
+        ]
+      },
+      "done": {
+        "type": "done",
+        "latency_ms": 2651,
+        "hop_count": 0,
+        "verdict": "clarify"
+      },
+      "latency_ms": 2734.4,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T15",
+      "category": "trap",
+      "expected": "reject_none",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "n/a",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 6295,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 6329.0,
+      "top1_source": "qa_log"
+    }
+  ]
+}

@@ -1,0 +1,227 @@
+{
+  "question": "中芯国际2025年第一季度产能利用率是多少？环比变化多少？",
+  "hybrid_candidate_n": 16,
+  "dense_count": 16,
+  "sparse_count": 16,
+  "rerank_scored": 16,
+  "hybrid_candidates": [
+    {
+      "chunk_id": "ch_a903805e6e19",
+      "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+      "chunk_type": "text",
+      "page_num": 1,
+      "dense_rank": 1,
+      "sparse_rank": 2,
+      "dense_score": 0.6539744,
+      "sparse_score": 49.8191,
+      "fused_score": 0.833333
+    },
+    {
+      "chunk_id": "ch_f5446b088b9a",
+      "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+      "chunk_type": "text",
+      "page_num": 1,
+      "dense_rank": 2,
+      "sparse_rank": 1,
+      "dense_score": 0.6539744,
+      "sparse_score": 49.8191,
+      "fused_score": 0.833333
+    },
+    {
+      "chunk_id": "ch_d8baf13f9f37",
+      "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+      "chunk_type": "text",
+      "page_num": 7,
+      "dense_rank": 3,
+      "sparse_rank": 4,
+      "dense_score": 0.5926624,
+      "sparse_score": 17.802711,
+      "fused_score": 0.45
+    },
+    {
+      "chunk_id": "ch_6fb61753c8dd",
+      "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+      "chunk_type": "text",
+      "page_num": 7,
+      "dense_rank": 4,
+      "sparse_rank": 3,
+      "dense_score": 0.5926624,
+      "sparse_score": 17.802711,
+      "fused_score": 0.45
+    },
+    {
+      "chunk_id": "ch_102a6ca7aa4a",
+      "doc_key": "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu",
+      "chunk_type": "table",
+      "page_num": 26,
+      "dense_rank": 15,
+      "sparse_rank": 5,
+      "dense_score": 0.45088875,
+      "sparse_score": 11.0399685,
+      "fused_score": 0.229167
+    },
+    {
+      "chunk_id": "ch_961824fb5bec",
+      "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+      "chunk_type": "text",
+      "page_num": 1,
+      "dense_rank": 5,
+      "sparse_rank": 16,
+      "dense_score": 0.5726435,
+      "sparse_score": 6.1464677,
+      "fused_score": 0.22549
+    },
+    {
+      "chunk_id": "ch_cea4a8d0b1fc",
+      "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+      "chunk_type": "text",
+      "page_num": 1,
+      "dense_rank": 8,
+      "sparse_rank": 8,
+      "dense_score": 0.527637,
+      "sparse_score": 6.4899573,
+      "fused_score": 0.222222
+    },
+    {
+      "chunk_id": "ch_7f282da5c61f",
+      "doc_key": "policy/travel-cn",
+      "chunk_type": "text",
+      "page_num": 1,
+      "dense_rank": 14,
+      "sparse_rank": 6,
+      "dense_score": 0.45234895,
+      "sparse_score": 7.015834,
+      "fused_score": 0.209524
+    },
+    {
+      "chunk_id": "ch_5efe92fcaffa",
+      "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+      "chunk_type": "text",
+      "page_num": 1,
+      "dense_rank": 6,
+      "sparse_rank": 15,
+      "dense_score": 0.5598135,
+      "sparse_score": 6.1776066,
+      "fused_score": 0.205357
+    },
+    {
+      "chunk_id": "ch_4ef9040f856f",
+      "doc_key": "policy/travel-cn",
+      "chunk_type": "text",
+      "page_num": 1,
+      "dense_rank": 13,
+      "sparse_rank": 7,
+      "dense_score": 0.45234895,
+      "sparse_score": 7.015834,
+      "fused_score": 0.196429
+    },
+    {
+      "chunk_id": "ch_207616a0120a",
+      "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+      "chunk_type": "text",
+      "page_num": 1,
+      "dense_rank": 7,
+      "sparse_rank": 14,
+      "dense_score": 0.5598135,
+      "sparse_score": 6.1776066,
+      "fused_score": 0.191667
+    },
+    {
+      "chunk_id": "ch_fe60ea4f8d1b",
+      "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+      "chunk_type": "text",
+      "page_num": 1,
+      "dense_rank": 9,
+      "sparse_rank": 11,
+      "dense_score": 0.50991905,
+      "sparse_score": 6.289122,
+      "fused_score": 0.183333
+    },
+    {
+      "chunk_id": "ch_d09153c5d2a1",
+      "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+      "chunk_type": "text",
+      "page_num": 1,
+      "dense_rank": 12,
+      "sparse_rank": 9,
+      "dense_score": 0.45832682,
+      "sparse_score": 6.4899573,
+      "fused_score": 0.176923
+    },
+    {
+      "chunk_id": "ch_776616bce93e",
+      "doc_key": "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu",
+      "chunk_type": "text",
+      "page_num": 2,
+      "dense_rank": 10,
+      "sparse_rank": 13,
+      "dense_score": 0.47458342,
+      "sparse_score": 6.2568517,
+      "fused_score": 0.162338
+    },
+    {
+      "chunk_id": "ch_2e0d22e69a0c",
+      "doc_key": "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu",
+      "chunk_type": "text",
+      "page_num": 2,
+      "dense_rank": 11,
+      "sparse_rank": 12,
+      "dense_score": 0.47458342,
+      "sparse_score": 6.2568517,
+      "fused_score": 0.160256
+    },
+    {
+      "chunk_id": "ch_b41be8001856",
+      "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+      "chunk_type": "text",
+      "page_num": 1,
+      "dense_rank": 16,
+      "sparse_rank": 10,
+      "dense_score": 0.45013148,
+      "sparse_score": 6.4385557,
+      "fused_score": 0.149733
+    }
+  ],
+  "golden_chunk_in_hybrid": false,
+  "golden_chunk_detail": [],
+  "golden_chunk_in_raw_routes": [
+    [],
+    []
+  ],
+  "golden_chunk_dropped_by_dedup": false,
+  "dedup_dropped_count": 0,
+  "final_top8": [
+    "ch_a903805e6e19",
+    "ch_f5446b088b9a",
+    "ch_d8baf13f9f37",
+    "ch_6fb61753c8dd",
+    "ch_5efe92fcaffa",
+    "ch_207616a0120a",
+    "ch_fe60ea4f8d1b",
+    "ch_d09153c5d2a1"
+  ],
+  "top1": 0.802427,
+  "rerank_batches": [
+    {
+      "n_texts": 16,
+      "scores": [
+        0.802427,
+        0.802427,
+        0.139561,
+        0.139561,
+        4e-05,
+        0.004366,
+        0.00438,
+        9.2e-05,
+        0.091836,
+        9.2e-05,
+        0.091836,
+        0.007987,
+        0.005683,
+        0.000469,
+        0.000469,
+        0.001565
+      ]
+    }
+  ]
+}

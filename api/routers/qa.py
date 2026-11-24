@@ -145,6 +145,9 @@ def llm_client(settings: Settings) -> LlmClient | None:
         model=settings.llm_model,
         api_key=settings.llm_api_key.get_secret_value(),
         timeout_s=settings.llm_timeout_s,
+        max_attempts=settings.llm_max_attempts,
+        retry_backoff_s=settings.llm_retry_backoff_s,
+        retry_budget_s=settings.llm_retry_budget_s,
     )
 
 

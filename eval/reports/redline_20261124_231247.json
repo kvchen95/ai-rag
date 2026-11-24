@@ -1,0 +1,3131 @@
+{
+  "schema": "eval.redline.v1",
+  "generated_at": "2026-11-24T15:12:47.489504+00:00",
+  "started_at": "2026-11-24T15:07:09.290530+00:00",
+  "base_url": "http://127.0.0.1:8000",
+  "golden": "/app/eval/golden_50.jsonl",
+  "token_source": "api.identity.mint_dev_token（fixed_jwt）",
+  "args": {
+    "user_id": "eval_runner",
+    "depts": [
+      "fin"
+    ],
+    "roles": [
+      "staff"
+    ],
+    "only": "",
+    "category": ""
+  },
+  "precondition": {
+    "llm_configured": true,
+    "llm_model": "deepseek-flash",
+    "db": "psycopg 已连接",
+    "tbd_questions": 13,
+    "corpus_empty": false,
+    "rubric": "eval/README.md §5（细化 §12.1）"
+  },
+  "counts": {
+    "documents": 18,
+    "active_versions": 9,
+    "chunks": 2142,
+    "active_chunks": 2136,
+    "qa_log": 675
+  },
+  "red_lines": [
+    {
+      "key": "RL1",
+      "name": "陷阱题拒答率",
+      "status": "FAIL",
+      "value": "14/15 = 93.3%",
+      "threshold": "= 100%",
+      "numerator": 14,
+      "denominator": 15,
+      "note": "判别力闸：应答题中拿到证据/进入生成层的 7/35；库内 active 切片 2136 条"
+    },
+    {
+      "key": "RL2",
+      "name": "数值准确率",
+      "status": "NOT_MEASURABLE",
+      "value": "—",
+      "threshold": "≥ 96%",
+      "numerator": 0,
+      "denominator": 0,
+      "note": "口径：答案中每个数字（已去掉 [n] 角标）都必须出现在被引证据原文里；没有已答题或答案不含数字时不可测。"
+    },
+    {
+      "key": "RL3",
+      "name": "角标可点回率",
+      "status": "NOT_MEASURABLE",
+      "value": "无引用可查",
+      "threshold": "≥ 98%",
+      "numerator": 0,
+      "denominator": 0,
+      "note": "逐条回查 PG：chunk_id 存在、doc_key/page_num/bbox 与库一致、切片与版本均 active。"
+    },
+    {
+      "key": "RL4",
+      "name": "忠实度优先于覆盖率",
+      "status": "NOT_MEASURABLE",
+      "value": "0/0 = —",
+      "threshold": "= 100%（覆盖率单独报告，不得以覆盖率换忠实度）",
+      "numerator": 0,
+      "denominator": 0,
+      "note": "覆盖率 = 应答题得到答案/应答题总数 = 0/35 = 0.0%；0 题已答时忠实度不可测（不是通过）。"
+    }
+  ],
+  "verdict": "不通过（至少一条红线不达标）",
+  "summary": "题目 50 题（应答题 35，陷阱 15），应答题得到答案 0 题，单题均分 0.28；陷阱安全拒答 14/15。",
+  "questions": [
+    {
+      "qid": "B01",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "unverifiable",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题未得到答案（verdict=unverifiable）"
+      ],
+      "top1": 0.963822,
+      "gate1": "pass",
+      "gate2": "skipped",
+      "reject_reason": "unverifiable",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "unverifiable",
+        "message": "本次不作结论，附原文",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          },
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 11703,
+        "hop_count": 0,
+        "verdict": "unverifiable",
+        "code": "unverifiable"
+      },
+      "latency_ms": 11717.4,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B02",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "clarify",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=clarify）"
+      ],
+      "top1": 0.698433,
+      "gate1": "clarify",
+      "gate2": null,
+      "reject_reason": null,
+      "answer": "",
+      "citations": [],
+      "fallback": null,
+      "clarify": {
+        "type": "clarify",
+        "question": "请确认要查的是哪一份资料：",
+        "options": [
+          {
+            "label": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf（第 1 页）",
+            "value": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji"
+              ]
+            }
+          },
+          {
+            "label": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf（第 1 页）",
+            "value": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+              ]
+            }
+          },
+          {
+            "label": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf（第 7 页）",
+            "value": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang"
+              ]
+            }
+          },
+          {
+            "label": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf（第 1 页）",
+            "value": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan"
+              ]
+            }
+          }
+        ]
+      },
+      "done": {
+        "type": "done",
+        "latency_ms": 2169,
+        "hop_count": 0,
+        "verdict": "clarify"
+      },
+      "latency_ms": 2183.0,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B03",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.980025,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_name": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf",
+            "page_num": 7,
+            "snippet": "自2020年以来，中芯国际H股股价在0.7-2.7倍BVPS区间震荡。我们认为公司是全球产 业链重构的主要受益者之一。看好公司通过积极投资把握1)中国企业在地化生产，以及2） DeepSeek等产业链机会。我们估值倍数上调至3.0倍（前值…"
+          },
+          {
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_name": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf",
+            "page_num": 7,
+            "snippet": "自2020年以来，中芯国际H股股价在0.7-2.7倍BVPS区间震荡。我们认为公司是全球产 业链重构的主要受益者之一。看好公司通过积极投资把握1)中国企业在地化生产，以及2） DeepSeek等产业链机会。我们估值倍数上调至3.0倍（前值…"
+          },
+          {
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_name": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf",
+            "page_num": 1,
+            "snippet": "目标价"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 12355,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 12374.2,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B04",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "unverifiable",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题未得到答案（verdict=unverifiable）"
+      ],
+      "top1": 0.986667,
+      "gate1": "pass",
+      "gate2": "skipped",
+      "reject_reason": "unverifiable",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "unverifiable",
+        "message": "本次不作结论，附原文",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_name": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf",
+            "page_num": 7,
+            "snippet": "自2020年以来，中芯国际H股股价在0.7-2.7倍BVPS区间震荡。我们认为公司是全球产 业链重构的主要受益者之一。看好公司通过积极投资把握1)中国企业在地化生产，以及2） DeepSeek等产业链机会。我们估值倍数上调至3.0倍（前值…"
+          },
+          {
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_name": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf",
+            "page_num": 7,
+            "snippet": "自2020年以来，中芯国际H股股价在0.7-2.7倍BVPS区间震荡。我们认为公司是全球产 业链重构的主要受益者之一。看好公司通过积极投资把握1)中国企业在地化生产，以及2） DeepSeek等产业链机会。我们估值倍数上调至3.0倍（前值…"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 13735,
+        "hop_count": 0,
+        "verdict": "unverifiable",
+        "code": "unverifiable"
+      },
+      "latency_ms": 13750.1,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B05",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.802427,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          },
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          },
+          {
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_name": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf",
+            "page_num": 7,
+            "snippet": "自2020年以来，中芯国际H股股价在0.7-2.7倍BVPS区间震荡。我们认为公司是全球产 业链重构的主要受益者之一。看好公司通过积极投资把握1)中国企业在地化生产，以及2） DeepSeek等产业链机会。我们估值倍数上调至3.0倍（前值…"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 7246,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 7258.8,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B06",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.887014,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          },
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          },
+          {
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_name": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf",
+            "page_num": 7,
+            "snippet": "自2020年以来，中芯国际H股股价在0.7-2.7倍BVPS区间震荡。我们认为公司是全球产 业链重构的主要受益者之一。看好公司通过积极投资把握1)中国企业在地化生产，以及2） DeepSeek等产业链机会。我们估值倍数上调至3.0倍（前值…"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 7544,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 7559.8,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B07",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "model_timeout",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题未得到答案（verdict=model_timeout）"
+      ],
+      "top1": 0.910415,
+      "gate1": "pass",
+      "gate2": null,
+      "reject_reason": "model_timeout",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "model_timeout",
+        "message": "稍后重试",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 3474,
+        "hop_count": 0,
+        "verdict": "model_timeout",
+        "code": "model_timeout"
+      },
+      "latency_ms": 3487.7,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B08",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "clarify",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=clarify）"
+      ],
+      "top1": 0.998757,
+      "gate1": "clarify",
+      "gate2": null,
+      "reject_reason": null,
+      "answer": "",
+      "citations": [],
+      "fallback": null,
+      "clarify": {
+        "type": "clarify",
+        "question": "请确认要查的是哪一份资料：",
+        "options": [
+          {
+            "label": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf（第 1 页）",
+            "value": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi"
+              ]
+            }
+          },
+          {
+            "label": "【上海证券】中芯国际深度研究报告：晶圆制造龙头，领航国产芯片新征程.pdf（第 25 页）",
+            "value": "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu",
+            "doc_key": "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu"
+              ]
+            }
+          },
+          {
+            "label": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf（第 1 页）",
+            "value": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan"
+              ]
+            }
+          },
+          {
+            "label": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf（第 2 页）",
+            "value": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+              ]
+            }
+          }
+        ]
+      },
+      "done": {
+        "type": "done",
+        "latency_ms": 8690,
+        "hop_count": 0,
+        "verdict": "clarify"
+      },
+      "latency_ms": 8720.7,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B09",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "clarify",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=clarify）"
+      ],
+      "top1": 0.849871,
+      "gate1": "clarify",
+      "gate2": null,
+      "reject_reason": null,
+      "answer": "",
+      "citations": [],
+      "fallback": null,
+      "clarify": {
+        "type": "clarify",
+        "question": "请确认要查的是哪一份资料：",
+        "options": [
+          {
+            "label": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf（第 1 页）",
+            "value": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji"
+              ]
+            }
+          },
+          {
+            "label": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf（第 1 页）",
+            "value": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi"
+              ]
+            }
+          },
+          {
+            "label": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf（第 1 页）",
+            "value": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan"
+              ]
+            }
+          }
+        ]
+      },
+      "done": {
+        "type": "done",
+        "latency_ms": 1105,
+        "hop_count": 0,
+        "verdict": "clarify"
+      },
+      "latency_ms": 1164.1,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B10",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "model_timeout",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题未得到答案（verdict=model_timeout）"
+      ],
+      "top1": 0.977822,
+      "gate1": "pass",
+      "gate2": null,
+      "reject_reason": "model_timeout",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "model_timeout",
+        "message": "稍后重试",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 7420,
+        "hop_count": 0,
+        "verdict": "model_timeout",
+        "code": "model_timeout"
+      },
+      "latency_ms": 7448.1,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B11",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.549555,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_name": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf",
+            "page_num": 1,
+            "snippet": "3Q24毛利率超预期，4Q24指引营收持续增 长……………………………………2024-11-09 4,823"
+          },
+          {
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_name": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf",
+            "page_num": 1,
+            "snippet": "3Q24毛利率超预期，4Q24指引营收持续增 长……………………………………2024-11-09 4,823"
+          },
+          {
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_name": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf",
+            "page_num": 1,
+            "snippet": "12英寸业务稳增长，季度收入首超20亿 美元-2024.11.13"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 3432,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 3446.5,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B12",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.565027,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_name": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf",
+            "page_num": 1,
+            "snippet": "12英寸业务稳增长，季度收入首超20亿 美元-2024.11.13"
+          },
+          {
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_name": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf",
+            "page_num": 1,
+            "snippet": "12英寸业务稳增长，季度收入首超20亿 美元-2024.11.13"
+          },
+          {
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_name": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf",
+            "page_num": 1,
+            "snippet": "3Q24毛利率超预期，4Q24指引营收持续增 长……………………………………2024-11-09 4,823"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 10349,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 10364.3,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B13",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "model_timeout",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题未得到答案（verdict=model_timeout）"
+      ],
+      "top1": 0.936976,
+      "gate1": "pass",
+      "gate2": null,
+      "reject_reason": "model_timeout",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "model_timeout",
+        "message": "稍后重试",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 1854,
+        "hop_count": 0,
+        "verdict": "model_timeout",
+        "code": "model_timeout"
+      },
+      "latency_ms": 1873.0,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B14",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.978924,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_name": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf",
+            "page_num": 1,
+            "snippet": "12英寸业务稳增长，季度收入首超20亿 美元-2024.11.13"
+          },
+          {
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_name": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf",
+            "page_num": 1,
+            "snippet": "12英寸业务稳增长，季度收入首超20亿 美元-2024.11.13"
+          },
+          {
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_name": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf",
+            "page_num": 1,
+            "snippet": "3Q24毛利率超预期，4Q24指引营收持续增 长……………………………………2024-11-09 4,823"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 5943,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 5957.3,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B15",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.835006,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          },
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          },
+          {
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_name": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf",
+            "page_num": 7,
+            "snippet": "自2020年以来，中芯国际H股股价在0.7-2.7倍BVPS区间震荡。我们认为公司是全球产 业链重构的主要受益者之一。看好公司通过积极投资把握1)中国企业在地化生产，以及2） DeepSeek等产业链机会。我们估值倍数上调至3.0倍（前值…"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 9300,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 9315.5,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B16",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "unverifiable",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题未得到答案（verdict=unverifiable）"
+      ],
+      "top1": 0.998591,
+      "gate1": "pass",
+      "gate2": "skipped",
+      "reject_reason": "unverifiable",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "unverifiable",
+        "message": "本次不作结论，附原文",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 12022,
+        "hop_count": 0,
+        "verdict": "unverifiable",
+        "code": "unverifiable"
+      },
+      "latency_ms": 12037.3,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B17",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.789166,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          },
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          },
+          {
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_name": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf",
+            "page_num": 7,
+            "snippet": "自2020年以来，中芯国际H股股价在0.7-2.7倍BVPS区间震荡。我们认为公司是全球产 业链重构的主要受益者之一。看好公司通过积极投资把握1)中国企业在地化生产，以及2） DeepSeek等产业链机会。我们估值倍数上调至3.0倍（前值…"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 7274,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 7293.3,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B18",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "unverifiable",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题未得到答案（verdict=unverifiable）"
+      ],
+      "top1": 0.972064,
+      "gate1": "pass",
+      "gate2": "skipped",
+      "reject_reason": "unverifiable",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "unverifiable",
+        "message": "本次不作结论，附原文",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/dong-fang-zheng-quan-chan-neng-li-yong-lv-ti-sheng-chi",
+            "doc_name": "【东方证券】产能利用率提升，持续推进工艺迭代和产品性能升级.pdf",
+            "page_num": 2,
+            "snippet": "| - | 指标 | - | - | 关键假设 | - | | --- | --- | --- | --- | --- | --- | | 无风险利率 | 无风险利率 | 无风险利率 | 1.63% | 1.63% | 1.63% | |…"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 13350,
+        "hop_count": 0,
+        "verdict": "unverifiable",
+        "code": "unverifiable"
+      },
+      "latency_ms": 13362.4,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B19",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.955251,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_name": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf",
+            "page_num": 7,
+            "snippet": "自2020年以来，中芯国际H股股价在0.7-2.7倍BVPS区间震荡。我们认为公司是全球产 业链重构的主要受益者之一。看好公司通过积极投资把握1)中国企业在地化生产，以及2） DeepSeek等产业链机会。我们估值倍数上调至3.0倍（前值…"
+          },
+          {
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_name": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf",
+            "page_num": 7,
+            "snippet": "自2020年以来，中芯国际H股股价在0.7-2.7倍BVPS区间震荡。我们认为公司是全球产 业链重构的主要受益者之一。看好公司通过积极投资把握1)中国企业在地化生产，以及2） DeepSeek等产业链机会。我们估值倍数上调至3.0倍（前值…"
+          },
+          {
+            "doc_key": "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu",
+            "doc_name": "【上海证券】中芯国际深度研究报告：晶圆制造龙头，领航国产芯片新征程.pdf",
+            "page_num": 5,
+            "snippet": "摩托罗拉、华登国际等，中芯利用多方资源在张江建立了公司第 一座制造工厂；2）挫折阶段（2004-2011年）：集成电路素有前期 投入大、回报周期长的特点，成立初期的中芯国际长期内处于亏 损状态，而上市、引入新股东资本成为中芯维持现金流、摆…"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 17169,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 17185.5,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "B20",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "clarify",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=clarify）"
+      ],
+      "top1": 0.731671,
+      "gate1": "clarify",
+      "gate2": null,
+      "reject_reason": null,
+      "answer": "",
+      "citations": [],
+      "fallback": null,
+      "clarify": {
+        "type": "clarify",
+        "question": "请确认要查的是哪一份资料：",
+        "options": [
+          {
+            "label": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf（第 1 页）",
+            "value": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji"
+              ]
+            }
+          },
+          {
+            "label": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf（第 7 页）",
+            "value": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang"
+              ]
+            }
+          },
+          {
+            "label": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf（第 1 页）",
+            "value": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+              ]
+            }
+          },
+          {
+            "label": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf（第 1 页）",
+            "value": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan"
+              ]
+            }
+          }
+        ]
+      },
+      "done": {
+        "type": "done",
+        "latency_ms": 2633,
+        "hop_count": 0,
+        "verdict": "clarify"
+      },
+      "latency_ms": 2650.0,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "C01",
+      "category": "chart",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.619064,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_name": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf",
+            "page_num": 7,
+            "snippet": "自2020年以来，中芯国际H股股价在0.7-2.7倍BVPS区间震荡。我们认为公司是全球产 业链重构的主要受益者之一。看好公司通过积极投资把握1)中国企业在地化生产，以及2） DeepSeek等产业链机会。我们估值倍数上调至3.0倍（前值…"
+          },
+          {
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_name": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf",
+            "page_num": 7,
+            "snippet": "自2020年以来，中芯国际H股股价在0.7-2.7倍BVPS区间震荡。我们认为公司是全球产 业链重构的主要受益者之一。看好公司通过积极投资把握1)中国企业在地化生产，以及2） DeepSeek等产业链机会。我们估值倍数上调至3.0倍（前值…"
+          },
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 9363,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 9379.6,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "C02",
+      "category": "chart",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.771497,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_name": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf",
+            "page_num": 7,
+            "snippet": "自2020年以来，中芯国际H股股价在0.7-2.7倍BVPS区间震荡。我们认为公司是全球产 业链重构的主要受益者之一。看好公司通过积极投资把握1)中国企业在地化生产，以及2） DeepSeek等产业链机会。我们估值倍数上调至3.0倍（前值…"
+          },
+          {
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_name": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf",
+            "page_num": 7,
+            "snippet": "自2020年以来，中芯国际H股股价在0.7-2.7倍BVPS区间震荡。我们认为公司是全球产 业链重构的主要受益者之一。看好公司通过积极投资把握1)中国企业在地化生产，以及2） DeepSeek等产业链机会。我们估值倍数上调至3.0倍（前值…"
+          },
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 8581,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 8594.2,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "C03",
+      "category": "chart",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.923987,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_name": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf",
+            "page_num": 1,
+            "snippet": "12英寸业务稳增长，季度收入首超20亿 美元-2024.11.13"
+          },
+          {
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_name": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf",
+            "page_num": 1,
+            "snippet": "12英寸业务稳增长，季度收入首超20亿 美元-2024.11.13"
+          },
+          {
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_name": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf",
+            "page_num": 1,
+            "snippet": "《中芯国际（00981.HK）-一季度营收、毛利率超指引》—— 2024-05-13"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 3961,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 3980.5,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "C04",
+      "category": "chart",
+      "expected": "pass",
+      "actual": "reject_low",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_low）"
+      ],
+      "top1": 0.254542,
+      "gate1": "reject_low",
+      "gate2": null,
+      "reject_reason": "low_confidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "low_confidence",
+        "message": "现有资料不足以下结论",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_name": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf",
+            "best_score": 0.2545
+          },
+          {
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_name": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf",
+            "best_score": 0.1589
+          },
+          {
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_name": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf",
+            "best_score": 0.1198
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 520,
+        "hop_count": 0,
+        "verdict": "reject_low",
+        "code": "low_confidence"
+      },
+      "latency_ms": 532.3,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "C05",
+      "category": "chart",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.604583,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_name": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf",
+            "page_num": 1,
+            "snippet": "《中芯国际（00981.HK）-一季度营收、毛利率超指引》—— 2024-05-13"
+          },
+          {
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_name": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf",
+            "page_num": 1,
+            "snippet": "《中芯国际（00981.HK）-一季度营收、毛利率超指引》—— 2024-05-13"
+          },
+          {
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_name": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf",
+            "page_num": 1,
+            "snippet": "12英寸业务稳增长，季度收入首超20亿 美元-2024.11.13"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 4594,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 4617.8,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "C06",
+      "category": "chart",
+      "expected": "pass",
+      "actual": "clarify",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=clarify）"
+      ],
+      "top1": 0.718592,
+      "gate1": "clarify",
+      "gate2": null,
+      "reject_reason": null,
+      "answer": "",
+      "citations": [],
+      "fallback": null,
+      "clarify": {
+        "type": "clarify",
+        "question": "请确认要查的是哪一份资料：",
+        "options": [
+          {
+            "label": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf（第 1 页）",
+            "value": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji"
+              ]
+            }
+          },
+          {
+            "label": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf（第 7 页）",
+            "value": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang"
+              ]
+            }
+          },
+          {
+            "label": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf（第 1 页）",
+            "value": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+              ]
+            }
+          },
+          {
+            "label": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf（第 1 页）",
+            "value": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan"
+              ]
+            }
+          }
+        ]
+      },
+      "done": {
+        "type": "done",
+        "latency_ms": 2295,
+        "hop_count": 0,
+        "verdict": "clarify"
+      },
+      "latency_ms": 2310.0,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "C07",
+      "category": "chart",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.707931,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_name": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf",
+            "page_num": 7,
+            "snippet": "自2020年以来，中芯国际H股股价在0.7-2.7倍BVPS区间震荡。我们认为公司是全球产 业链重构的主要受益者之一。看好公司通过积极投资把握1)中国企业在地化生产，以及2） DeepSeek等产业链机会。我们估值倍数上调至3.0倍（前值…"
+          },
+          {
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_name": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf",
+            "page_num": 7,
+            "snippet": "自2020年以来，中芯国际H股股价在0.7-2.7倍BVPS区间震荡。我们认为公司是全球产 业链重构的主要受益者之一。看好公司通过积极投资把握1)中国企业在地化生产，以及2） DeepSeek等产业链机会。我们估值倍数上调至3.0倍（前值…"
+          },
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 5419,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 5436.7,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "C08",
+      "category": "chart",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.687931,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_name": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf",
+            "page_num": 1,
+            "snippet": "12英寸业务稳增长，季度收入首超20亿 美元-2024.11.13"
+          },
+          {
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_name": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf",
+            "page_num": 1,
+            "snippet": "12英寸业务稳增长，季度收入首超20亿 美元-2024.11.13"
+          },
+          {
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_name": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf",
+            "page_num": 1,
+            "snippet": "《中芯国际（00981.HK）-一季度营收、毛利率超指引》—— 2024-05-13"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 3203,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 3216.3,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "C09",
+      "category": "chart",
+      "expected": "pass",
+      "actual": "clarify",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=clarify）"
+      ],
+      "top1": 0.95271,
+      "gate1": "clarify",
+      "gate2": null,
+      "reject_reason": null,
+      "answer": "",
+      "citations": [],
+      "fallback": null,
+      "clarify": {
+        "type": "clarify",
+        "question": "请确认要查的是哪一份资料：",
+        "options": [
+          {
+            "label": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf（第 1 页）",
+            "value": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji"
+              ]
+            }
+          },
+          {
+            "label": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf（第 1 页）",
+            "value": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi"
+              ]
+            }
+          },
+          {
+            "label": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf（第 1 页）",
+            "value": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan"
+              ]
+            }
+          }
+        ]
+      },
+      "done": {
+        "type": "done",
+        "latency_ms": 535,
+        "hop_count": 0,
+        "verdict": "clarify"
+      },
+      "latency_ms": 547.7,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "C10",
+      "category": "chart",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.956214,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu",
+            "doc_name": "【上海证券】中芯国际深度研究报告：晶圆制造龙头，领航国产芯片新征程.pdf",
+            "page_num": 4,
+            "snippet": "表 表1：公司高管履历简介........................................................9 表2：2024年Q2全球前十大晶圆代工业者营收排名（单 位：百万美元）.............…"
+          },
+          {
+            "doc_key": "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu",
+            "doc_name": "【上海证券】中芯国际深度研究报告：晶圆制造龙头，领航国产芯片新征程.pdf",
+            "page_num": 4,
+            "snippet": "表 表1：公司高管履历简介........................................................9 表2：2024年Q2全球前十大晶圆代工业者营收排名（单 位：百万美元）.............…"
+          },
+          {
+            "doc_key": "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu",
+            "doc_name": "【上海证券】中芯国际深度研究报告：晶圆制造龙头，领航国产芯片新征程.pdf",
+            "page_num": 17,
+            "snippet": "表4：晶圆厂制备及规划表（2023年12月20日）"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 3277,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 3304.2,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "M01",
+      "category": "temporal_multihop",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.796816,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_name": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf",
+            "page_num": 1,
+            "snippet": "国补和产业回流驱动25Q1营收指引强劲，看 好毛利率持续改善…………………2025-02-13"
+          },
+          {
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_name": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf",
+            "page_num": 1,
+            "snippet": "国补和产业回流驱动25Q1营收指引强劲，看 好毛利率持续改善…………………2025-02-13"
+          },
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 5527,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 5541.4,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "M02",
+      "category": "temporal_multihop",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.730818,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_name": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf",
+            "page_num": 1,
+            "snippet": "《中芯国际（00981.HK）-一季度营收、毛利率超指引》—— 2024-05-13"
+          },
+          {
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_name": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf",
+            "page_num": 1,
+            "snippet": "《中芯国际（00981.HK）-一季度营收、毛利率超指引》—— 2024-05-13"
+          },
+          {
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_name": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf",
+            "page_num": 1,
+            "snippet": "3Q24毛利率超预期，4Q24指引营收持续增 长……………………………………2024-11-09 4,823"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 10531,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 10543.5,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "M03",
+      "category": "temporal_multihop",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.929372,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_name": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf",
+            "page_num": 7,
+            "snippet": "自2020年以来，中芯国际H股股价在0.7-2.7倍BVPS区间震荡。我们认为公司是全球产 业链重构的主要受益者之一。看好公司通过积极投资把握1)中国企业在地化生产，以及2） DeepSeek等产业链机会。我们估值倍数上调至3.0倍（前值…"
+          },
+          {
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_name": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf",
+            "page_num": 7,
+            "snippet": "自2020年以来，中芯国际H股股价在0.7-2.7倍BVPS区间震荡。我们认为公司是全球产 业链重构的主要受益者之一。看好公司通过积极投资把握1)中国企业在地化生产，以及2） DeepSeek等产业链机会。我们估值倍数上调至3.0倍（前值…"
+          },
+          {
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_name": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf",
+            "page_num": 1,
+            "snippet": "国补和产业回流驱动25Q1营收指引强劲，看 好毛利率持续改善…………………2025-02-13"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 7178,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 7194.0,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "M04",
+      "category": "temporal_multihop",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.87865,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_name": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf",
+            "page_num": 1,
+            "snippet": "国补和产业回流驱动25Q1营收指引强劲，看 好毛利率持续改善…………………2025-02-13"
+          },
+          {
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_name": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf",
+            "page_num": 1,
+            "snippet": "国补和产业回流驱动25Q1营收指引强劲，看 好毛利率持续改善…………………2025-02-13"
+          },
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 7907,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 7920.2,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "M05",
+      "category": "temporal_multihop",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": 0.954961,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_name": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf",
+            "page_num": 1,
+            "snippet": "3Q24毛利率超预期，4Q24指引营收持续增 长……………………………………2024-11-09 4,823"
+          },
+          {
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_name": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf",
+            "page_num": 1,
+            "snippet": "3Q24毛利率超预期，4Q24指引营收持续增 长……………………………………2024-11-09 4,823"
+          },
+          {
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_name": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf",
+            "page_num": 1,
+            "snippet": "《中芯国际（00981.HK）-一季度营收、毛利率超指引》—— 2024-05-13"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 5263,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 5276.6,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T01",
+      "category": "trap",
+      "expected": "reject_none",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "n/a",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 17,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 31.7,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T02",
+      "category": "trap",
+      "expected": "reject_none",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "n/a",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": 0.788137,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          },
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          },
+          {
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_name": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf",
+            "page_num": 1,
+            "snippet": "国补和产业回流驱动25Q1营收指引强劲，看 好毛利率持续改善…………………2025-02-13"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 5276,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 5292.2,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T03",
+      "category": "trap",
+      "expected": "reject_none",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "n/a",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": 0.424983,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_name": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf",
+            "page_num": 1,
+            "snippet": "——中芯国际（0981.HK+688981.SH）2025年一季度业绩点评"
+          },
+          {
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_name": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf",
+            "page_num": 1,
+            "snippet": "《中芯国际（00981.HK）-一季度营收、毛利率超指引》—— 2024-05-13"
+          },
+          {
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_name": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf",
+            "page_num": 1,
+            "snippet": "《中芯国际（00981.HK）-一季度营收、毛利率超指引》—— 2024-05-13"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 10093,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 10122.4,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T04",
+      "category": "trap",
+      "expected": "reject_none",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "n/a",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": 0.65154,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          },
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          },
+          {
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_name": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf",
+            "page_num": 1,
+            "snippet": "国补和产业回流驱动25Q1营收指引强劲，看 好毛利率持续改善…………………2025-02-13"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 4867,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 4884.3,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T05",
+      "category": "trap",
+      "expected": "reject_none",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "n/a",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": 0.832604,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu",
+            "doc_name": "【上海证券】中芯国际深度研究报告：晶圆制造龙头，领航国产芯片新征程.pdf",
+            "page_num": 9,
+            "snippet": "| - | 姓名 | - | - | 职位 | - | - | 履历背景 | - | | --- | --- | --- | --- | --- | --- | --- | --- | --- | | 刘训 峰 | 刘训 峰 | 刘训 峰…"
+          },
+          {
+            "doc_key": "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu",
+            "doc_name": "【上海证券】中芯国际深度研究报告：晶圆制造龙头，领航国产芯片新征程.pdf",
+            "page_num": 5,
+            "snippet": "摩托罗拉、华登国际等，中芯利用多方资源在张江建立了公司第 一座制造工厂；2）挫折阶段（2004-2011年）：集成电路素有前期 投入大、回报周期长的特点，成立初期的中芯国际长期内处于亏 损状态，而上市、引入新股东资本成为中芯维持现金流、摆…"
+          },
+          {
+            "doc_key": "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu",
+            "doc_name": "【上海证券】中芯国际深度研究报告：晶圆制造龙头，领航国产芯片新征程.pdf",
+            "page_num": 5,
+            "snippet": "摩托罗拉、华登国际等，中芯利用多方资源在张江建立了公司第 一座制造工厂；2）挫折阶段（2004-2011年）：集成电路素有前期 投入大、回报周期长的特点，成立初期的中芯国际长期内处于亏 损状态，而上市、引入新股东资本成为中芯维持现金流、摆…"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 10996,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 11010.7,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T06",
+      "category": "trap",
+      "expected": "clarify",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": 0.97649,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          },
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          },
+          {
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_name": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf",
+            "page_num": 7,
+            "snippet": "自2020年以来，中芯国际H股股价在0.7-2.7倍BVPS区间震荡。我们认为公司是全球产 业链重构的主要受益者之一。看好公司通过积极投资把握1)中国企业在地化生产，以及2） DeepSeek等产业链机会。我们估值倍数上调至3.0倍（前值…"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 7300,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 7312.5,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T07",
+      "category": "trap",
+      "expected": "reject_none",
+      "actual": "clarify",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "n/a",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": 0.938243,
+      "gate1": "clarify",
+      "gate2": null,
+      "reject_reason": null,
+      "answer": "",
+      "citations": [],
+      "fallback": null,
+      "clarify": {
+        "type": "clarify",
+        "question": "请确认要查的是哪一份资料：",
+        "options": [
+          {
+            "label": "【上海证券】中芯国际深度研究报告：晶圆制造龙头，领航国产芯片新征程.pdf（第 23 页）",
+            "value": "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu",
+            "doc_key": "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu"
+              ]
+            }
+          },
+          {
+            "label": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf（第 1 页）",
+            "value": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi"
+              ]
+            }
+          }
+        ]
+      },
+      "done": {
+        "type": "done",
+        "latency_ms": 9329,
+        "hop_count": 0,
+        "verdict": "clarify"
+      },
+      "latency_ms": 9347.2,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T08",
+      "category": "trap",
+      "expected": "reject_none",
+      "actual": "model_timeout",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": false,
+      "must_not_violation": [],
+      "evidence_hit": "n/a",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "陷阱题未安全拒答（verdict=model_timeout）",
+        "系统故障，不是安全拒答（model_timeout）"
+      ],
+      "top1": 0.672394,
+      "gate1": "pass",
+      "gate2": null,
+      "reject_reason": "model_timeout",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "model_timeout",
+        "message": "稍后重试",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 8875,
+        "hop_count": 0,
+        "verdict": "model_timeout",
+        "code": "model_timeout"
+      },
+      "latency_ms": 8893.1,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T09",
+      "category": "trap",
+      "expected": "reject_none",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "n/a",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": 0.925837,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          },
+          {
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_name": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf",
+            "page_num": 1,
+            "snippet": "84.42 事件：近日公司发布2025年一季度报告，2025年第一季度公司实现 收盘价(元) 109.50/41.00 营收163.01亿元，同比+29.44%，环比+2.41%；归母净利润13.56亿 一年内最高/最低(元) 3,907…"
+          },
+          {
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_name": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf",
+            "page_num": 7,
+            "snippet": "自2020年以来，中芯国际H股股价在0.7-2.7倍BVPS区间震荡。我们认为公司是全球产 业链重构的主要受益者之一。看好公司通过积极投资把握1)中国企业在地化生产，以及2） DeepSeek等产业链机会。我们估值倍数上调至3.0倍（前值…"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 5359,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 5374.5,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T10",
+      "category": "trap",
+      "expected": "reject_none",
+      "actual": "clarify",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "n/a",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": 0.586956,
+      "gate1": "clarify",
+      "gate2": null,
+      "reject_reason": null,
+      "answer": "",
+      "citations": [],
+      "fallback": null,
+      "clarify": {
+        "type": "clarify",
+        "question": "请确认要查的是哪一份资料：",
+        "options": [
+          {
+            "label": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf（第 7 页）",
+            "value": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang"
+              ]
+            }
+          },
+          {
+            "label": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf（第 1 页）",
+            "value": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji"
+              ]
+            }
+          },
+          {
+            "label": "travel-cn.pdf（第 1 页）",
+            "value": "policy/travel-cn",
+            "doc_key": "policy/travel-cn",
+            "params": {
+              "doc_keys": [
+                "policy/travel-cn"
+              ]
+            }
+          },
+          {
+            "label": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf（第 1 页）",
+            "value": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+              ]
+            }
+          }
+        ]
+      },
+      "done": {
+        "type": "done",
+        "latency_ms": 2043,
+        "hop_count": 0,
+        "verdict": "clarify"
+      },
+      "latency_ms": 2057.9,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T11",
+      "category": "trap",
+      "expected": "reject_none",
+      "actual": "clarify",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "n/a",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": 0.910657,
+      "gate1": "clarify",
+      "gate2": null,
+      "reject_reason": null,
+      "answer": "",
+      "citations": [],
+      "fallback": null,
+      "clarify": {
+        "type": "clarify",
+        "question": "请确认要查的是哪一份资料：",
+        "options": [
+          {
+            "label": "【中原证券】产能利用率显著提升，持续推进工艺迭代升级——中芯国际(688981)季报点评.pdf（第 1 页）",
+            "value": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "doc_key": "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/zhong-yuan-zheng-quan-chan-neng-li-yong-lv-xian-zhu-ti"
+              ]
+            }
+          },
+          {
+            "label": "【华泰证券】中芯国际（688981）：上调港股目标价到63港币，看好DeepSeek推动代工需求强劲增长.pdf（第 7 页）",
+            "value": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "doc_key": "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang"
+              ]
+            }
+          },
+          {
+            "label": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf（第 1 页）",
+            "value": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji"
+              ]
+            }
+          },
+          {
+            "label": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf（第 1 页）",
+            "value": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan"
+              ]
+            }
+          }
+        ]
+      },
+      "done": {
+        "type": "done",
+        "latency_ms": 2306,
+        "hop_count": 0,
+        "verdict": "clarify"
+      },
+      "latency_ms": 2330.9,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T12",
+      "category": "trap",
+      "expected": "reject_none",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "n/a",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": 0.134825,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 7518,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 7534.5,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T13",
+      "category": "trap",
+      "expected": "reject_none",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "n/a",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": 0.128889,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 3580,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 3628.5,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T14",
+      "category": "trap",
+      "expected": "clarify",
+      "actual": "clarify",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": 0.79464,
+      "gate1": "clarify",
+      "gate2": null,
+      "reject_reason": null,
+      "answer": "",
+      "citations": [],
+      "fallback": null,
+      "clarify": {
+        "type": "clarify",
+        "question": "请确认要查的是哪一份资料：",
+        "options": [
+          {
+            "label": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf（第 1 页）",
+            "value": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan"
+              ]
+            }
+          },
+          {
+            "label": "【兴证国际】季度盈利低于预期，看好国产芯片长期空间.pdf（第 1 页）",
+            "value": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "doc_key": "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/xing-zheng-guo-ji-ji-du-ying-li-di-yu-yu-qi"
+              ]
+            }
+          },
+          {
+            "label": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf（第 1 页）",
+            "value": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "params": {
+              "doc_keys": [
+                "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji"
+              ]
+            }
+          }
+        ]
+      },
+      "done": {
+        "type": "done",
+        "latency_ms": 592,
+        "hop_count": 0,
+        "verdict": "clarify"
+      },
+      "latency_ms": 617.4,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "T15",
+      "category": "trap",
+      "expected": "reject_none",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": true,
+      "must_not_violation": [],
+      "evidence_hit": "n/a",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": 0.83184,
+      "gate1": "reject_none",
+      "gate2": "skipped",
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/guang-da-zheng-quan-zhong-xin-guo-ji-2025-nian-yi-ji",
+            "doc_name": "【光大证券】中芯国际2025年一季度业绩点评：1Q突发生产问题，2Q业绩有望筑底，自主可控趋势不改.pdf",
+            "page_num": 1,
+            "snippet": "——中芯国际（0981.HK+688981.SH）2025年一季度业绩点评"
+          },
+          {
+            "doc_key": "pdf_reports/guo-xin-zheng-quan-gong-ye-yu-qi-che-chu-di-fan",
+            "doc_name": "【国信证券】工业与汽车触底反弹，良率影响短期营收.pdf",
+            "page_num": 1,
+            "snippet": "《中芯国际（00981.HK）-出货量连续第三个季度回升，高资本"
+          },
+          {
+            "doc_key": "pdf_reports/shang-hai-zheng-quan-zhong-xin-guo-ji-shen-du-yan-jiu",
+            "doc_name": "【上海证券】中芯国际深度研究报告：晶圆制造龙头，领航国产芯片新征程.pdf",
+            "page_num": 5,
+            "snippet": "摩托罗拉、华登国际等，中芯利用多方资源在张江建立了公司第 一座制造工厂；2）挫折阶段（2004-2011年）：集成电路素有前期 投入大、回报周期长的特点，成立初期的中芯国际长期内处于亏 损状态，而上市、引入新股东资本成为中芯维持现金流、摆…"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 21351,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence"
+      },
+      "latency_ms": 21367.5,
+      "top1_source": "qa_log"
+    }
+  ]
+}

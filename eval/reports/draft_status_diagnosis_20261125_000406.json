@@ -1,0 +1,127 @@
+{
+  "schema": "eval.draft_status_diagnosis.v1",
+  "task_id": "t_e7b858e4",
+  "generated_at": "2026-11-25T00:04:06+08:00",
+  "anchor": {
+    "eval_report": "eval/reports/redline_20261124_233521.json",
+    "baseline_report": "eval/reports/r2c_final_baseline_20261124_233521.md",
+    "qa_log_window": "id 1260..1294 (35 answerable), draft_status rows selected by score_snapshot.verify.failure.check='draft_status'"
+  },
+  "conclusion": {
+    "verdict": "HYPOTHESIS_1_CONFIRMED",
+    "statement": "20 draft_status questions are NOT generation-layer over-refusal. The evidence packs genuinely lack the golden answer facts; the model correctly reported the missing documents/facts. Root cause is retrieval candidate recall: the fact-bearing chunks never enter the raw dense or sparse top-30, so they cannot be reranked into the top-8 evidence pack.",
+    "not_a_threshold_problem": true,
+    "not_a_prompt_problem": true,
+    "gates_0_20_0_40_unchanged": true
+  },
+  "hypotheses": {
+    "H1_evidence_pack_missing_answer": {
+      "status": "CONFIRMED",
+      "evidence": [
+        "20/20 draft_status answers explicitly say the pack lacks the needed doc/fact (score_snapshot.verify.failure.offenders[0]).",
+        "Among 18 questions with a distinctive golden answer value defined, 0/18 have any such value in their evidence pack text.",
+        "12/20 packs contain zero golden doc_key; 8/20 contain a golden doc but still miss the specific fact-bearing chunk.",
+        "All 20 packs have truncated=false and used_chars between 992 and 4259, so the 6000-char cap never fired."
+      ]
+    },
+    "H2_llm_over_conservative_or_prompt": {
+      "status": "REJECTED",
+      "evidence": [
+        "api/retrieval/rerank.py clip_for_rerank() applies RERANK_TEXT_MAX_CHARS=400 only to scoring input; api/qa/orchestrator.py::_build_pack uses fetch_texts() full content_text/table_md, so the pack uses original text.",
+        "Truncation flag false on all 20 rows, used_chars far below max_chars=6000.",
+        "Model answers name the exact missing source (e.g. '证据包中未包含东方证券的相关研报内容'), which is correct behavior under GENERATION_SYSTEM_PROMPT rule 3, not conservatism.",
+        "Relaxing the prompt or the CHECK_DRAFT_STATUS->no_evidence mapping would force answers without evidence and would endanger RL1 trap refusal (15/15)."
+      ]
+    }
+  },
+  "probe_results": {
+    "script": "eval/draft_status_evidence_probe.py",
+    "output": "eval/draft_status_evidence_probe.json",
+    "summary": {
+      "n_questions": 20,
+      "questions_with_distinctive_facts_defined": 18,
+      "questions_with_any_distinctive_fact_in_pack": 0,
+      "questions_with_no_distinctive_fact_in_pack": 20,
+      "golden_doc_present": 8,
+      "golden_doc_absent": 12,
+      "truncated_true": 0,
+      "top1_min": 0.549555,
+      "top1_max": 0.980025
+    }
+  },
+  "replay_cases": {
+    "script": "eval/retrieval_replay_probe.py",
+    "method": "in-container monkeypatch of HybridRetriever.retrieve, rrf_fuse, dedupe_parent_children and Reranker.score; replays the question read-only and records pre-dedup raw routes, dedup drops, rerank scores, final top8",
+    "B03": {
+      "question": "东方证券给中芯国际的目标价是多少？",
+      "golden_fact": "129.48",
+      "fact_chunk": "ch_f7237808607b (dong-fang p2, chunk_type=table)",
+      "fact_exists_in_corpus": true,
+      "in_raw_dense_top30": false,
+      "in_raw_sparse_top30": false,
+      "dropped_by_parent_child_dedup": false,
+      "in_final_top8": false,
+      "replayed_top1": 0.980025,
+      "replayed_top8_matches_eval": true,
+      "differential_B18": "Same chunk ranks dense_rank=1, sparse_rank=1, fused=1.0 and enters top8 when the query names WACC/永续增长率 instead of 目标价."
+    },
+    "B05": {
+      "question": "中芯国际2025年第一季度产能利用率是多少？环比变化多少？",
+      "golden_fact": "89.6",
+      "fact_chunk": "ch_b2846f232d57 (guo-xin p1)",
+      "in_raw_dense_top30": false,
+      "in_raw_sparse_top30": false,
+      "dropped_by_parent_child_dedup": false,
+      "in_final_top8": false
+    },
+    "B11": {
+      "question": "中芯国际2024年末整体产能是多少？环比增加多少？",
+      "golden_fact": "948kwpm",
+      "fact_chunk": "ch_4748e9b177d8 (hua-tai p4)",
+      "in_raw_dense_top30": false,
+      "in_raw_sparse_top30": false,
+      "dropped_by_parent_child_dedup": false,
+      "in_final_top8": false
+    },
+    "qdrant_index_check": "All three fact chunks exist in Qdrant collection kb_chunks with payload status=active, allowed_depts=['fin'], allowed_roles=['staff'] — accessible under the probe identity. Not an indexing or ACL-filter miss.",
+    "top_k_sensitivity": "Replaying B03 and B11 with RETRIEVAL_TOP_K=100 still does not surface the fact chunks in either raw route, so raising top-K alone is not a demonstrated fix."
+  },
+  "mechanism_chain": [
+    "Fact-bearing chunks exist in PG and Qdrant, active and ACL-visible.",
+    "For these question phrasings neither dense nor sparse retrieval puts them in top-30 (dedup drops nothing).",
+    "Rerank scores only the available, topically-related but fact-free candidates highly (top1 0.549-0.980).",
+    "Gate passes on high top1; evidence pack assembles 8 fact-free chunks, truncated=false.",
+    "Model returns status=unknown with a precise 'not in evidence pack' explanation.",
+    "CHECK_DRAFT_STATUS maps status=unknown to no_evidence — correct by §9.2 rule 3."
+  ],
+  "boundary_compliance": {
+    "code_changed": false,
+    "thresholds_changed": false,
+    "golden_changed": false,
+    "db_cleared": false,
+    "make_eval_rerun": false,
+    "reason_no_eval_rerun": "Task boundary is diagnosis; implement/fix is operator's decision and no fix was applied. Re-running make eval without a fix would only reproduce the anchored baseline."
+  },
+  "recommendation": {
+    "owner_decision_required": true,
+    "direction": "Fix retrieval recall (query rewrite / synonym expansion for analyst terms vs table values, table chunk labelling/indexing), then validate with an exclusive make eval: draft_status drops, coverage rises, RL1 still 15/15, four red lines do not regress.",
+    "do_not": [
+      "Do not relax GENERATION_SYSTEM_PROMPT rule 3 or the CHECK_DRAFT_STATUS->no_evidence mapping: the model is correct.",
+      "Do not move 0.20/0.40: failures already passed the gate; no threshold work is indicated by this diagnosis.",
+      "Do not treat top1 as a proxy for evidence coverage in future attribution: it measures relevance of available candidates, not answer presence."
+    ]
+  },
+  "artifacts": [
+    "eval/draft_status_evidence_probe.py",
+    "eval/draft_status_evidence_probe.json",
+    "eval/retrieval_replay_probe.py",
+    "eval/retrieval_replay_B03.json",
+    "eval/retrieval_replay_B05.json",
+    "eval/retrieval_replay_B11.json",
+    "eval/retrieval_replay_B18.json",
+    "eval/retrieval_replay_B03_k100.json",
+    "eval/retrieval_replay_B11_k100.json",
+    "eval/reports/draft_status_diagnosis_20261125_000406.md",
+    "eval/reports/draft_status_diagnosis_20261125_000406.json"
+  ]
+}
