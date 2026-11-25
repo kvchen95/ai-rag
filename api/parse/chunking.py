@@ -507,6 +507,7 @@ def build_table_chunk(
     date: BusinessDate,
     chunk_id: str,
     content_text: str,
+    table_md: str | None = None,
     section: str | None = None,
 ) -> Chunk:
     """表格切片：一张表一条，不切（§3.5：超长表格整表单独成片，标 `may_exceed`）。"""
@@ -532,7 +533,7 @@ def build_table_chunk(
         allowed_roles=acl.allowed_roles,
         parent_id=None,
         table_html=table.html,
-        table_md=table.md,
+        table_md=table_md if table_md is not None else table.md,
         table_cells=table.cells_json(),
         token_count=len(content_text),
         section=section,

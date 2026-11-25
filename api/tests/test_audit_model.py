@@ -58,10 +58,10 @@ def test_reason_requires_reject_verdict(reason: ErrorCode) -> None:
     assert _entry(gate1_verdict="reject_none", reject_reason=reason)
 
 
-def test_unverifiable_cannot_coexist_with_supported() -> None:
-    with pytest.raises(ValidationError):
-        _entry(gate2_verdict="supported", reject_reason=ErrorCode.UNVERIFIABLE)
-    # unverifiable 配 not_supported / skipped / None 都成立
+def test_unverifiable_can_coexist_with_supported() -> None:
+    # 第五道失败时判别器仍可能判定 supported，两者不是自相矛盾。
+    assert _entry(gate2_verdict="supported", reject_reason=ErrorCode.UNVERIFIABLE)
+    # unverifiable 配 not_supported / skipped / None 也都成立
     for gate2 in ("not_supported", "skipped", None):
         assert _entry(gate2_verdict=gate2, reject_reason=ErrorCode.UNVERIFIABLE)
 

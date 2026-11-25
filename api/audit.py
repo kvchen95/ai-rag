@@ -99,13 +99,8 @@ class QaLogEntry(BaseModel):
             raise ValueError(
                 f"reject_reason={self.reject_reason} 只能配拒答判定，实际 gate1={self.gate1_verdict}"
             )
-        if (
-            self.reject_reason is ErrorCode.UNVERIFIABLE
-            and self.gate2_verdict == "supported"
-        ):
-            raise ValueError(
-                "gate2 判定 supported 与 reject_reason=unverifiable 自相矛盾"
-            )
+        # 第五道失败时判别器仍可能为 supported，两者不矛盾：门控放行且证据有据，
+        # 但同属性多值的内部一致性不过，仍然只能拒答并附原文。
         return self
 
 

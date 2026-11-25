@@ -133,6 +133,16 @@ def test_second_check_passes_when_every_sentence_is_cited(pack) -> None:
     assert check_every_claim_cited(draft, pack) is None
 
 
+def test_second_check_uses_claim_citations_field(pack) -> None:
+    """模型把引用放在 claim.citations、而不是 claim.text 里时，校验器也必须读取。"""
+    draft = _draft(
+        "每人每天住宿费标准为 500 元，交通费标准为 100 元 [1][2]。",
+        citations=(1, 2),
+        claims=[("住宿费每人每天 500 元", (1,)), ("交通费每次 100 元", (2,))],
+    )
+    assert check_every_claim_cited(draft, pack) is None
+
+
 def test_second_check_rejects_a_sentence_without_citation(pack) -> None:
     """最典型的情形：模型自己补了一句没有出处的话。"""
     draft = _draft("每人每天 500 元[1]。另外还有餐补。", citations=(1,))

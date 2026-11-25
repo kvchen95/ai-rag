@@ -52,7 +52,7 @@ from api.verify.numbers import (
     locate_proper_nouns,
     locate_quantities,
 )
-from api.verify.sentences import Sentence, merge_claim_sentences, parse_citations
+from api.verify.sentences import Sentence, merge_claim_sentences, parse_citations, strip_citations, to_sentences
 
 logger = get_logger("api.verify.checks")
 
@@ -224,7 +224,49 @@ def check_citation_range(draft: Draft, pack: EvidencePack) -> CheckFailure | Non
 
 
 def _draft_sentences(draft: Draft) -> tuple[Sentence, ...]:
-    return merge_claim_sentences(draft.answer, tuple(claim.text for claim in draft.claims))
+    """answer 的句子为主干；claim 的 citations 也要并入对应句子。
+
+    旧实现把 `claim.citations` 追加到 claim 文本里，再交给 `merge_claim_sentences`。
+    但 claim 文本一旦被判定为某句的子串，合并函数会跳过它，导致 citation 丢失。
+    这里直接把 claim 的 citations 并入对应句子，避免“claim 有引用、answer 句没有”的假红。
+    """
+    sentences = list(to_sentences(draft.answer))
+    covered = [item.bare.replace(" ", "") for item in sentences if item.bare]
+    for claim in draft.claims:
+        text = claim.text.strip()
+        if not text:
+            sentences.append(
+                Sentence(text=text, citations=parse_citations(text) or claim.citations, bare="")
+            )
+            continue
+        existing = parse_citations(text)
+        missing = [n for n in claim.citations if n not in existing]
+        needle = strip_citations(text).strip().replace(" ", "")
+        matched_index = None
+        for index, hay in enumerate(covered):
+            if needle and (needle in hay or hay in needle):
+                matched_index = index
+                break
+        if matched_index is not None and missing:
+            previous = sentences[matched_index]
+            sentences[matched_index] = Sentence(
+                text=previous.text,
+                citations=tuple(dict.fromkeys((*previous.citations, *missing))),
+                bare=previous.bare,
+            )
+        if matched_index is None:
+            claim_text = text
+            if missing:
+                claim_text = f"{text} {' '.join(f'[{n}]' for n in missing)}"
+            sentences.append(
+                Sentence(
+                    text=claim_text,
+                    citations=parse_citations(claim_text),
+                    bare=strip_citations(claim_text).strip(),
+                )
+            )
+            covered.append(strip_citations(claim_text).strip().replace(" ", ""))
+    return tuple(sentences)
 
 
 def check_every_claim_cited(draft: Draft, _pack: EvidencePack) -> CheckFailure | None:
@@ -248,7 +290,7 @@ def check_every_claim_cited(draft: Draft, _pack: EvidencePack) -> CheckFailure |
     return None
 
 
-def check_grounding(draft: Draft, pack: EvidencePack) -> CheckFailure | None:
+def check_grounding(draft: Draft, pack: EvidencePack, *, question: str = "") -> CheckFailure | None:
     """第三道：数字与专名能在**被引**证据里定位（§10.1 / §10.2）。
 
     只查被引证据，不查整包：一句只引了 [1] 的话，在 [2] 里找到的"500 元"不算
@@ -347,7 +389,7 @@ def verify_draft(
         elif check == CHECK_EVERY_CLAIM:
             failure = check_every_claim_cited(draft, pack)
         elif check == CHECK_GROUNDING:
-            failure = check_grounding(draft, pack)
+            failure = check_grounding(draft, pack, question=question)
         elif check == CHECK_NLI:
             failure, judge_result = check_nli(judge_client, question, draft, pack)
         else:

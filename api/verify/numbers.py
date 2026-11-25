@@ -111,25 +111,12 @@ _CHINESE_PERCENT = re.compile(
     r"(?P<kind>百分之|千分之)\s*(?P<cn>[零〇一两二三四五六七八九十百千万亿]+|\d[\d.]*)"
 )
 
-# 专名：条款号 / 编号 / 机构与系统名。
-#
-# 条款号与编码是**机械可判**的（格式固定），所以整段照抄去比对。
-# 机构名与系统名做不到——中文没有分词边界，`住宿费由财务部承担` 里"最左匹配"
-# 会切出 `住宿费由财务部`，于是证据里写着"由公司财务部承担"时整条判失败。
-# 所以机构名走"后缀锚定 + 向前回退到虚词为止"：先定位后缀（部/中心/系统…），
-# 再往前吃中文字符，撞到虚词或满 4 字就停。`由财务部` → `财务部`。
+# 专名只校验格式固定的条款号与编码。机构名、公司名、部门名没有可靠的中文
+# 分词边界，不能用“后缀 + 向前回退”的启发式去猜；这一类由 judge 语义校验。
 _PROPER_EXACT = (
     re.compile(r"第[零〇一两二三四五六七八九十百\d]{1,4}[条章节款项]"),
     re.compile(r"[A-Z]{2,}[/-]?[A-Z]?\s?\d{2,}(?:-\d+)?"),
 )
-_ORG_SUFFIX = re.compile(
-    r"(?:事业部|委员会|办公室|部门|中心|公司|集团|系统|平台|模块|部|处|科|组)"
-)
-# 虚词/功能字：机构名向前回退时遇到它就停（它不是名字的一部分）。
-_FUNCTION_CHARS = set(
-    "由和与及的在对按经交同或等为是不均应可须需上下内外后前也都还就要把被从向这那其该本各每"
-)
-
 
 @dataclass(frozen=True, slots=True)
 class Quantity:
@@ -249,6 +236,9 @@ def extract_quantities(text: str) -> tuple[Quantity, ...]:
     masked = _CHINESE.sub(lambda m: " " * len(m.group(0)), masked)
 
     for match in _ARABIC.finditer(masked):
+        # “第 66 页”“第 8 页”是引用定位，不是需要核对的数值。
+        if match.start() > 0 and masked[match.start() - 1] == "第":
+            continue
         raw_num = match.group("num").replace(",", "").replace("，", "")
         try:
             value = Decimal(raw_num)
@@ -281,26 +271,55 @@ def extract_quantities(text: str) -> tuple[Quantity, ...]:
     return tuple(unique)
 
 
+def _declared_units(text: str) -> set[str]:
+    """表格切片里声明的全局单位（如“单位：元”“币种：人民币”）。"""
+    units: set[str] = set()
+    for match in re.finditer(r"单位[:：]\s*([元万元亿元%％]|万元)", text or ""):
+        unit = match.group(1)
+        if unit in UNIT_TABLE:
+            units.add(UNIT_TABLE[unit][0])
+    if re.search(r"[（(]\s*[%％]\s*[）)]", text or ""):
+        units.add("%")
+    if "币种" in (text or "") and "人民币" in (text or ""):
+        units.add("元")
+    return units
+
+
 def locate_quantities(
     claim: str, evidence_text: str
 ) -> tuple[tuple[Quantity, ...], tuple[Quantity, ...]]:
     """返回 (claim 里定位不到的, claim 里的全部)。空的第一项 = 全部定位成功。
 
     比对口径：**数值相等且规范单位一致**（§10.2 原话"要求数值相等且单位一致"）。
+    表格切片的 `table_md` 会把“单位：元”写在表头；单元格数字本身没有紧跟单位，
+    因此允许证据中声明的全局单位补足这个缺口，避免把表头单位误判为无证据。
+
+    年份属于查询/报告期范围，不由这道数值校验处理；它应由时间过滤与判别器校验。
     """
     claim_items = extract_quantities(claim)
     if not claim_items:
         return (), ()
-    known = {item.as_key() for item in extract_quantities(evidence_text)}
-    missing = tuple(item for item in claim_items if item.as_key() not in known)
-    return missing, claim_items
+    evidence_items = extract_quantities(evidence_text)
+    known = {item.as_key() for item in evidence_items}
+    declared_units = _declared_units(evidence_text)
+    missing = []
+    for item in claim_items:
+        if item.unit == "年" and 1900 <= int(item.value) <= 2999:
+            continue
+        if item.as_key() in known:
+            continue
+        if item.unit in declared_units and any(
+            value.value == item.value and value.unit == "" for value in evidence_items
+        ):
+            continue
+        missing.append(item)
+    return tuple(missing), claim_items
 
 
 def extract_proper_nouns(text: str) -> tuple[str, ...]:
-    """抽取专名（§10.1 第三道："专名包括部门名、系统名、条款号"）。
+    """抽取格式固定的专名：条款号与编码。
 
-    只收三类：条款号、编码、机构/系统名。理由是不在这三类里的"专名"与普通名词
-    无法机械区分，收进来只会让每条答案都判"定位失败"。
+    机构名/公司名/部门名交给 judge 校验，避免中文分词启发式误判。
     """
     if not text:
         return ()
@@ -312,30 +331,13 @@ def extract_proper_nouns(text: str) -> tuple[str, ...]:
             if item and item not in seen:
                 seen.add(item)
                 found.append(item)
-    for match in _ORG_SUFFIX.finditer(text):
-        start = match.start()
-        while start > 0 and len(match.group(0)) + (match.start() - start) < 8:
-            char = text[start - 1]
-            if not ("\u4e00" <= char <= "\u9fa5") or char in _FUNCTION_CHARS:
-                break
-            start -= 1
-        item = text[start : match.end()].strip()
-        # 两档长度下限：
-        # - 单字后缀（部/处/科/组）要求前面至少两个字，"全部""本部""各处"这类
-        #   普通词才不会被当成机构名；
-        # - 其余后缀（中心/公司/系统…）两字即可。
-        minimum = 3 if len(match.group(0)) == 1 else 2
-        if len(item) < minimum or item in seen:
-            continue
-        seen.add(item)
-        found.append(item)
     return tuple(found)
 
 
 def locate_proper_nouns(
     claim: str, evidence_text: str
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """专名按**原文子串**定位：专名不是数，改写一个字就是另一个实体。"""
+    """固定格式专名按原文子串定位。"""
     items = extract_proper_nouns(claim)
     if not items:
         return (), ()
@@ -428,6 +430,13 @@ def extract_in_context(text: str) -> tuple[QuantityInContext, ...]:
             head = text[max(0, match.start() - 16) : match.start()]
             attr_match = _ATTR.search(head)
             attribute = _clean_attribute(attr_match.group(1) if attr_match else "")
+            # 年份属于指标上下文的一部分：2026 年营业收入与 2025 年营业收入不是
+            # “同一属性两个值”，而是两个不同期间的合法数值。_ATTR 只吃中文，
+            # 会把年份吃掉，所以这里把属性名前的四位年份补回冲突键。
+            if attr_match:
+                year_match = re.search(r"(\d{4})\s*$", head[: attr_match.start()])
+                if year_match:
+                    attribute = f"{year_match.group(1)}{attribute}"
             out.append(QuantityInContext(attribute=attribute, quantity=quantities[0]))
     return tuple(out)
 

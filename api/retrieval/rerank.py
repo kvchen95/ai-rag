@@ -28,6 +28,7 @@ from typing import Any, Literal, Sequence
 import httpx
 
 from api.retrieval.hybrid import Candidate
+from api.trace import trace as trace_event
 
 # TEI 的 --max-client-batch-size 默认 32：超过直接 413（实测）。
 TEI_MAX_BATCH = 32
@@ -162,6 +163,12 @@ class Reranker:
             raise RerankUnavailable(
                 f"rerank returned {seen} scores for {len(texts)} texts"
             )
+        trace_event(
+            "rerank.batch",
+            n_texts=len(texts),
+            scores=[round(score, 6) for score in scores],
+            text_heads=[text[:120] for text in texts],
+        )
         return scores
 
 
@@ -261,7 +268,7 @@ def rerank_candidates(
 
     window = merged[: max(top_n_min, min(top_n_max, len(merged)))]
     fallback = "fused_rank" if degraded else None
-    return RerankOutcome(
+    outcome = RerankOutcome(
         ordered=window,
         degraded=degraded,
         reason=reason,
@@ -269,6 +276,13 @@ def rerank_candidates(
         elapsed_ms=elapsed_ms,
         fallback=fallback,
     )
+    trace_event(
+        "rerank.selected",
+        query=query,
+        ordered=[item.as_dict() for item in window],
+        **outcome.as_audit(),
+    )
+    return outcome
 
 
 __all__ = [

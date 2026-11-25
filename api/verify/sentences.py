@@ -95,11 +95,23 @@ def split_sentences(text: str) -> tuple[str, ...]:
 
 
 def to_sentences(text: str) -> tuple[Sentence, ...]:
-    """把一段草稿切成可校验的句子集合。"""
+    """把一段草稿切成可校验的句子集合。
+
+    模型偶尔会把引用写成“事实句。[6]”。这种独立角标不是一句事实，必须合并回
+    上一句，否则事实句没有引用、角标自己又是空句，第二道校验会假红。
+    """
     sentences: list[Sentence] = []
     for piece in split_sentences(text):
         citations = parse_citations(piece)
         bare = strip_citations(piece).strip()
+        if not bare and sentences and citations:
+            previous = sentences[-1]
+            sentences[-1] = Sentence(
+                text=previous.text + piece,
+                citations=tuple(dict.fromkeys((*previous.citations, *citations))),
+                bare=previous.bare,
+            )
+            continue
         sentences.append(Sentence(text=piece, citations=citations, bare=bare))
     return tuple(sentences)
 

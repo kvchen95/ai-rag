@@ -11,6 +11,7 @@ api/
   main.py            create_app()：唯一装配入口（uvicorn 用 --factory 调用）
   config.py          Settings：业务口径必须来自环境变量，基础设施参数给默认值
   observability.py   一行一条 JSON 的日志 + request_id 上下文
+  trace.py           本地链路文件（qa_trace.jsonl），调试用，不进数据库
   middleware.py      纯 ASGI 中间件（写入/透传 request_id，记录访问日志）
   errors.py          §11.3 错误表：文案 / HTTP 状态 / 告警口径同源
   audit.py           qa_log 写入（身份快照 + 问答结果）与保留期清理
@@ -91,6 +92,43 @@ api/
 - 保留期 `AUDIT_RETENTION_DAYS`（默认 365），清理走 `AuditWriter.purge_expired()`。
 - 写失败不抛：调用方拿到 `AuditResult(ok=False)`，日志里是一条 ERROR
   `audit_write_failed`。审计挂掉不能把一次成功的回答变成失败，但也不能没人知道。
+
+## 本地链路追踪文件（调试用，不进数据库）
+
+`api/trace.py` 把一次问答拆成多行 JSON 事件写到本地文件，默认 `logs/qa_trace.jsonl`。
+compose 把仓库根挂到容器的 `/app`，所以宿主侧直接看 `<repo>/logs/qa_trace.jsonl`；
+`make trace` 跟随它。`AI_RAG_TRACE_ENABLED=0` 可关掉，`AI_RAG_TRACE_FILE` 可换路径。
+写文件失败只吞异常，不影响正在跑的问答。**这里会有问题与答案原文，只作本地调试，
+不要当成 `qa_log` 的替代品**（审计只存编号与分数摘要，口径见上一节）。
+
+每行固定带 `ts` / `request_id` / `event`，其余字段随事件走。请求的 `request_id` 就是
+响应头 `X-Request-Id`（自己带一个更好认）。一次问答的事件顺序：
+
+| event | 看什么 |
+|---|---|
+| `qa.route_enter` | 入口：问题、scope、时间窗、身份快照 |
+| `query.understood` | 改写后的 `retrieval_text`、实体、时间窗、改写痕迹 |
+| `filter.built` | 实际用的权限/时间/文档过滤条件 |
+| `retrieval.embed` | 查询向量维度与编码耗时 |
+| `hybrid.raw_routes` | **精确化（BM25）与向量两路各自的 chunk_id、名次、原始分** |
+| `hybrid.fused` / `hybrid.dedup` | RRF 融合后的候选与父片去重丢弃列表 |
+| `retrieval.version_guard` / `retrieval.texts` | 旧版本剔除、正文取回与缺失 |
+| `rerank.batch` | 每一批送进精排的文本开头与逐条分数 |
+| `rerank.selected` | **精排最终选中的候选、top1、降级原因** |
+| `gate.decided` | 门控 verdict / top1 / 证据编号 / 原因（多跳每跳一条） |
+| `multihop.hop` / `multihop.finished` | 每跳的子问题、缺口、通过与否、停止原因 |
+| `retrieval.finished` | 检索出口：全部候选、证据编号、两路条数 |
+| `qa.retrieval_done` / `qa.evidence_pack` | 编排出入口：进生成前的证据包与截断 |
+| `qa.draft` / `qa.verify` | 草稿全文与五道校验结论（本地文件才留草稿） |
+| `qa.exit` / `qa.worker_failed` | 终态：verdict、错误码、答案、耗时；装配失败另有一条 |
+
+看一次完整链路：
+
+```bash
+jq -c 'select(.request_id == "你的request_id")' logs/qa_trace.jsonl
+# 没带 request_id 时按问题找入口行，再从那行取 request_id：
+grep 'qa.route_enter' logs/qa_trace.jsonl | grep '关键词'
+```
 
 ## 摄取：样本扫描 / 判重 / ingest_jobs（§3.1、§4.4、附录 C.1）
 
@@ -754,7 +792,7 @@ make b4-mutation     # 10 条关键判据逐条改坏，确认对应用例真的
   换掉 `pipeline._run_multihop` 里的 `sub_questioner` 即可，`run_multihop` 本身不动。
 - 门控的 0.20/0.40 与 0.38–0.42 目前是 `.env.example` 里的初始值，**换模型后要按
   §12.2 波谷法重标定**（默认卡的模型定档说明已记这一条）。标定脚本还没写：
-  需要先有一份带标注的评测集（`eval/golden_50.jsonl` 的 `expected_doc_keys` 还是
+  需要先有一份带标注的评测集（`eval/golden_questions_v1.jsonl` 的 `expected_doc_keys` 还是
   TBD），且要能跑真精排拿分数分布。
 - 摄取侧没做的（都不是本卡的验收项）：碰撞后的人工处置界面、崩溃 worker 的任务
   回收（超时判失败，§4.4 提到但需要 worker 心跳落地）、文件读不到时的告警升级

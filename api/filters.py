@@ -38,6 +38,7 @@ from typing import Any, Sequence
 from api.identity import IdentitySnapshot
 from api.observability import get_logger, log_event
 from api.time_range import TimeRange
+from api.trace import trace as trace_event
 
 logger = get_logger("api.filters")
 
@@ -58,6 +59,7 @@ P_IS_PUBLIC = "is_public"
 P_DEPTS = "allowed_depts"
 P_ROLES = "allowed_roles"
 P_EFFECTIVE_DATE = "effective_date"
+P_EFFECTIVE_YEAR = "effective_year"
 P_DATE_CONFIDENCE = "date_confidence"
 
 # 只有显式日期才参与时间过滤（§5.2：不认推断出来的时间）。
@@ -154,17 +156,28 @@ class RetrievalFilter:
 
         if self.time_range is not None:
             tr = self.time_range
-            must.append(
-                FieldCondition(
-                    key=P_EFFECTIVE_DATE, range=Range(gte=tr.date_from, lte=tr.date_to)
+            if tr.granularity in ("year", "half_year", "quarter"):
+                # 报告/半年报级时间窗按年份过滤：切片的 effective_date 常为 NULL（正文
+                # 没写“生效”引导词），按精确日期过滤会把现金流量表等整段筛没。
+                # inferred 年份也保留，避免“半年报”整份文档被时间条件打空。
+                must.append(
+                    FieldCondition(
+                        key=P_EFFECTIVE_YEAR,
+                        range=Range(gte=min(tr.years), lte=max(tr.years)),
+                    )
                 )
-            )
-            must.append(
-                FieldCondition(
-                    key=P_DATE_CONFIDENCE,
-                    match=MatchValue(value=EXPLICIT_CONFIDENCE),
+            else:
+                must.append(
+                    FieldCondition(
+                        key=P_EFFECTIVE_DATE, range=Range(gte=tr.date_from, lte=tr.date_to)
+                    )
                 )
-            )
+                must.append(
+                    FieldCondition(
+                        key=P_DATE_CONFIDENCE,
+                        match=MatchValue(value=EXPLICIT_CONFIDENCE),
+                    )
+                )
 
         if self.doc_keys is not None:
             must.append(
@@ -218,10 +231,14 @@ class RetrievalFilter:
 
         if self.time_range is not None:
             tr = self.time_range
-            clauses.append(f"{prefix}effective_date BETWEEN %s AND %s")
-            params.extend([tr.date_from, tr.date_to])
-            clauses.append(f"{prefix}date_confidence = %s")
-            params.append(EXPLICIT_CONFIDENCE)
+            if tr.granularity in ("year", "half_year", "quarter"):
+                clauses.append(f"{prefix}effective_year BETWEEN %s AND %s")
+                params.extend([min(tr.years), max(tr.years)])
+            else:
+                clauses.append(f"{prefix}effective_date BETWEEN %s AND %s")
+                params.extend([tr.date_from, tr.date_to])
+                clauses.append(f"{prefix}date_confidence = %s")
+                params.append(EXPLICIT_CONFIDENCE)
 
         if self.doc_keys is not None:
             clauses.append(f"{prefix}doc_key = ANY(%s)")
@@ -250,6 +267,7 @@ class RetrievalFilter:
 
     def log(self) -> None:
         log_event(logger, "retrieval_filter_built", **self.describe())
+        trace_event("filter.built", **self.describe())
 
 
 def build_filter(

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""黄金 50 题评测：调 QA SSE 接口，判分，算四条红线，写报告（详细设计.md §11/§12）。
+"""黄金 30 题评测：调 QA SSE 接口，判分，算四条红线，写报告（详细设计.md §11/§12）。
 
 这个脚本只做三件事，且刻意只做这三件：
 
@@ -49,7 +49,7 @@ from typing import Any, Sequence
 from urllib.parse import urlsplit
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_GOLDEN = REPO_ROOT / "eval" / "golden_50.jsonl"
+DEFAULT_GOLDEN = REPO_ROOT / "eval" / "golden_questions_v1.jsonl"
 DEFAULT_OUT_DIR = REPO_ROOT / "eval" / "reports"
 
 # 按脚本路径运行（`python3 eval/run_eval.py`）时，Python 只把 `eval/` 放进

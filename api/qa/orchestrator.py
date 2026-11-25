@@ -50,6 +50,7 @@ from api.generate.llm import (
 )
 from api.identity import IdentitySnapshot
 from api.observability import get_logger, log_event
+from api.trace import trace as trace_event
 from api.qa import events as ev
 from api.qa.events import SseEvent
 from api.retrieval.pipeline import RetrievalPipeline, RetrievalSnapshot
@@ -186,6 +187,16 @@ class QaService:
             )
             outcome.events_sent = sent
             outcome.audit = _audit_entry(outcome, latency, self.model_name)
+            trace_event(
+                "qa.exit",
+                verdict=outcome.verdict,
+                code=None if outcome.error_code is None else outcome.error_code.value,
+                hops=outcome.hop_count,
+                latency_ms=round(latency, 1),
+                events_sent=sent,
+                answer=outcome.answer,
+                detail=outcome.detail,
+            )
         return outcome
 
     # --- 主流程 ---------------------------------------------------------------
@@ -214,6 +225,16 @@ class QaService:
         outcome.retrieved_ids = tuple(snapshot.retrieved_ids())
         outcome.score_snapshot = dict(snapshot.score_snapshot())
         outcome.score_snapshot["uncovered"] = list(snapshot.decision.uncovered)
+        trace_event(
+            "qa.retrieval_done",
+            verdict=snapshot.verdict,
+            top1=outcome.score_snapshot.get("top1"),
+            candidates=len(snapshot.candidates),
+            retrieved_ids=list(outcome.retrieved_ids),
+            evidence_ids=list(outcome.score_snapshot.get("evidence") or ()),
+            hops=snapshot.hop_count,
+            reason=snapshot.decision.reason,
+        )
 
         send(
             ev.step(
@@ -234,6 +255,7 @@ class QaService:
         # --- pass / partial：进生成 ---
         pack = self._build_pack(snapshot)
         outcome.evidence = pack
+        trace_event("qa.evidence_pack", n_items=pack.n_items, **pack.as_audit())
         if not pack:
             # 门控放行了但证据包是空的（候选都取不到正文）。这不是"模型没说好"，
             # 是"我们没东西给它"，所以按无证据收口，不去调模型烧一次 token。
@@ -267,10 +289,12 @@ class QaService:
             self._system_fallback(send, outcome, ErrorCode.MODEL_TIMEOUT, str(exc))
             return
 
+        trace_event("qa.draft", **draft.as_audit())
         send(ev.step(ev.PHASE_VERIFY, hop=snapshot.hop_count, elapsed_ms=_ms(started)))
         report = verify_draft(draft, pack, question=question, judge_client=self.judge_client)
         outcome.verification = report
         outcome.judge = report.judge
+        trace_event("qa.verify", **report.as_audit())
         if not report.passed:
             self._emit_verification_failure(
                 send,

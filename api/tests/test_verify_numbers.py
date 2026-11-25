@@ -35,6 +35,12 @@ def test_five_million_matches_its_arabic_form() -> None:
     assert missing == ()
 
 
+def test_table_header_unit_applies_to_numbers_without_inline_unit() -> None:
+    evidence = "单位：元币种：人民币\n| 经营活动现金流量净额 | 311,314,642.46 |"
+    missing, _ = locate_quantities("经营活动现金流量净额为311,314,642.46元。", evidence)
+    assert missing == ()
+
+
 def test_workdays_do_not_match_days() -> None:
     """"30 个工作日"与"30 天"**不对上**：单位不同就是不同的数。"""
     missing, _ = locate_quantities("审批时限为 30 天。", "审批时限：30 个工作日")
@@ -126,18 +132,6 @@ def test_clause_numbers_and_codes_are_extracted_verbatim() -> None:
     found = extract_proper_nouns("依据第十二条与 GB/T 19001-2016 执行")
     assert "第十二条" in found
     assert "GB/T 19001-2016" in found
-
-
-def test_org_name_backs_off_to_a_function_word() -> None:
-    """`由财务部` 必须切成 `财务部`：整段照抄会让证据里写"公司财务部"时判失败。"""
-    found = extract_proper_nouns("住宿费由财务部承担")
-    assert "财务部" in found
-    assert "住宿费由财务部" not in found
-
-
-def test_single_character_org_suffix_is_not_a_name() -> None:
-    """切出一个"部"再去证据里找必然找不到，所以长度 < 2 的不算专名。"""
-    assert extract_proper_nouns("全部费用") == ()
 
 
 def test_proper_noun_must_appear_verbatim() -> None:

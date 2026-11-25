@@ -17,6 +17,8 @@ web/node_modules/
 data/
 figures/*.webp.tmp
 *.log
+# 本地链路文件（qa_trace.jsonl）：调试产物，不进版本库
+logs/
 
 # os
 .DS_Store

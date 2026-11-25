@@ -32,7 +32,9 @@ from api.errors import ErrorCode
 from api.filters import RetrievalFilter, build_filter
 from api.identity import IdentitySnapshot
 from api.observability import get_logger, log_event
+from api.trace import trace as trace_event
 from api.query import NeedsClarification, QueryPlan, understand
+from api.time_range import select_time_docs
 from api.retrieval.gate import (
     GateConfig,
     GateDecision,
@@ -42,7 +44,16 @@ from api.retrieval.gate import (
 from api.retrieval.hybrid import Candidate, HybridRetriever
 from api.retrieval.multihop import Fact, HopOutcome, MultiHopResult, run_multihop
 from api.retrieval.rerank import RerankOutcome, Reranker, rerank_candidates
-from api.retrieval.texts import ChunkText, doc_names, fetch_texts
+from api.retrieval.texts import (
+    ChunkText,
+    all_doc_names,
+    dedupe_candidate_texts,
+    doc_names,
+    drop_header_only_candidates,
+    drop_repeated_boilerplate,
+    fetch_texts,
+    mentioned_doc_keys,
+)
 from api.version_guard import drop_stale
 
 logger = get_logger("api.retrieval.pipeline")
@@ -174,6 +185,7 @@ class RetrievalPipeline:
     evidence_max_chars: int
     rerank_text_max_chars: int | None = None
     multi_entity_threshold: int = 2
+    time_llm: Any = None
     _texts: dict[str, ChunkText] = field(default_factory=dict, repr=False)
 
     # --- 单跳 -----------------------------------------------------------------
@@ -187,12 +199,23 @@ class RetrievalPipeline:
         （说明 BM25 侧没写进去或查询串没过 `bm25_text()`），丢了它就只剩
         "一条也没召回到"这种无从下手的现象。
         """
+        embed_started = time.perf_counter()
         vector = self.embedder.embed(plan.retrieval_text)
+        trace_event(
+            "retrieval.embed",
+            retrieval_text=plan.retrieval_text,
+            dim=len(vector),
+            elapsed_ms=round((time.perf_counter() - embed_started) * 1000, 1),
+        )
+        # 预精排要先去重并剔除页眉/样板文本；若两路只取 top_k=30，
+        # 大量重复标题会把真正数据表挡在候选池外，后面的过滤再准也救不回来。
+        # 因此至少召回 rerank_candidates_max 条，保证过滤后仍有足够候选可打分。
+        retrieval_k = max(self.top_k, self.rerank_candidates_max)
         hybrid = self.retriever.retrieve(
             plan.retrieval_text,
             flt,
             dense_query=vector,
-            top_k=self.top_k,
+            top_k=retrieval_k,
             parent_child_keep=self.parent_child_keep,
         )
         # §7.4：必须在精排前。drop_stale 吃 dict，Candidate 转一下再转回来。
@@ -200,11 +223,29 @@ class RetrievalPipeline:
         kept_ids = {row["chunk_id"] for row in kept}
         guarded = [c for c in hybrid.candidates if c.chunk_id in kept_ids]
         dropped_ids = [row["chunk_id"] for row in dropped]
+        trace_event(
+            "retrieval.version_guard",
+            kept_ids=list(kept_ids),
+            dropped_ids=dropped_ids,
+        )
 
-        texts = fetch_texts(self.pg, [c.chunk_id for c in guarded])
+        requested_ids = [c.chunk_id for c in guarded]
+        texts = fetch_texts(self.pg, requested_ids)
         # 取不到正文的候选不能进精排：精排拿空串打分只会给一个 0 分，
         # 然后在证据包里变成一条空引用。它们的正文多半是刚被下线的（版本窗口）。
         guarded = [c for c in guarded if c.chunk_id in texts]
+        guarded, deduped = dedupe_candidate_texts(guarded, texts)
+        guarded, boilerplate_dropped = drop_repeated_boilerplate(guarded, texts)
+        guarded, header_dropped = drop_header_only_candidates(guarded, texts)
+        trace_event(
+            "retrieval.texts",
+            requested=requested_ids,
+            fetched=list(texts),
+            missing=[cid for cid in requested_ids if cid not in texts],
+            dropped_duplicates=deduped,
+            dropped_boilerplate=boilerplate_dropped,
+            dropped_header_only=header_dropped,
+        )
 
         outcome = rerank_candidates(
             self.reranker,
@@ -245,7 +286,11 @@ class RetrievalPipeline:
         started = time.perf_counter()
 
         try:
-            plan = understand(question, previous_entities=previous_entities)
+            plan = understand(
+                question,
+                previous_entities=previous_entities,
+                time_llm=self.time_llm,
+            )
         except NeedsClarification as exc:
             # 指代不清时不检索（§6.1）：此时任何检索结果都是"按原句瞎猜"的产物。
             return self._clarify_without_retrieval(exc, question, started)
@@ -257,7 +302,17 @@ class RetrievalPipeline:
             )
 
         effective_range = time_range if time_range is not None else plan.time.range
-        flt = build_filter(identity, time_range=effective_range, doc_keys=doc_keys)
+        effective_doc_keys = tuple(doc_keys) if doc_keys is not None else None
+        if not effective_doc_keys and effective_range is not None:
+            names = all_doc_names(self.pg)
+            selected = select_time_docs(question, names, client=self.time_llm)
+            if selected:
+                effective_doc_keys = selected
+            else:
+                named_doc_keys = mentioned_doc_keys(question, names)
+                if named_doc_keys:
+                    effective_doc_keys = named_doc_keys
+        flt = build_filter(identity, time_range=effective_range, doc_keys=effective_doc_keys)
         multi_entity = plan.mode == "multi" or len(plan.entities) >= self.multi_entity_threshold
 
         candidates, rerank_outcome, texts, dropped, dense_count, sparse_count = self._retrieve_once(
@@ -268,12 +323,13 @@ class RetrievalPipeline:
             cfg=self.gate,
             entities=plan.entities,
             texts={cid: item.text for cid, item in texts.items()},
-            doc_names=doc_names(self.pg, [c.doc_key for c in candidates]),
+            doc_names={c.doc_key: texts[c.chunk_id].doc_name for c in candidates},
             multi_entity=multi_entity,
             degraded=rerank_outcome.degraded,
             degrade_reason=rerank_outcome.reason,
             evidence_cap=self.rerank_top_n_max,
         )
+        trace_event("gate.decided", hop=0, **decision.as_audit())
 
         multihop: MultiHopResult | None = None
         hop_count = 0
@@ -288,12 +344,15 @@ class RetrievalPipeline:
                     cfg=self.gate,
                     entities=plan.entities,
                     texts={cid: item.text for cid, item in texts.items()},
-                    doc_names=doc_names(self.pg, [c.doc_key for c in candidates]),
+                    doc_names={c.doc_key: texts[c.chunk_id].doc_name for c in candidates},
                     multi_entity=multi_entity,
                     degraded=rerank_outcome.degraded,
                     degrade_reason=rerank_outcome.reason,
                     uncovered=multihop.uncovered,
                     evidence_cap=self.rerank_top_n_max,
+                )
+                trace_event(
+                    "gate.decided", hop=hop_count, final=True, **decision.as_audit()
                 )
 
         elapsed_ms = (time.perf_counter() - started) * 1000
@@ -318,6 +377,17 @@ class RetrievalPipeline:
             evidence=len(decision.evidence),
             hops=hop_count,
             degraded=rerank_outcome.degraded,
+            elapsed_ms=round(elapsed_ms, 1),
+        )
+        trace_event(
+            "retrieval.finished",
+            verdict=decision.verdict,
+            candidates=[item.as_dict() for item in candidates],
+            evidence_ids=[item.chunk_id for item in decision.evidence],
+            hops=hop_count,
+            dense=snapshot.dense_count,
+            sparse=snapshot.sparse_count,
+            dropped_stale=list(snapshot.dropped_stale),
             elapsed_ms=round(elapsed_ms, 1),
         )
         return snapshot
@@ -367,7 +437,11 @@ class RetrievalPipeline:
             return f"{entity} {plan.retrieval_text}".strip()
 
         def runner(hop: int, sub_question: str, gap: str) -> HopOutcome:
-            sub_plan = understand(sub_question, previous_entities=None)
+            sub_plan = understand(
+                sub_question,
+                previous_entities=None,
+                time_llm=self.time_llm,
+            )
             candidates, outcome, texts, _dropped, _dense, _sparse = self._retrieve_once(
                 sub_plan, flt
             )
@@ -398,6 +472,17 @@ class RetrievalPipeline:
                     for c in hop_decision.evidence
                     if c.chunk_id in texts
                 )
+            trace_event(
+                "multihop.hop",
+                hop=hop,
+                sub_question=sub_question,
+                gap=gap,
+                top1=hop_decision.top1,
+                verdict=hop_decision.verdict,
+                passed=passed,
+                facts=len(facts),
+                note=hop_decision.reason,
+            )
             return HopOutcome(
                 hop=hop,
                 sub_question=sub_question,
@@ -415,6 +500,7 @@ class RetrievalPipeline:
             sub_questioner=sub_questioner,
             initial_gap=remaining,
         )
+        trace_event("multihop.finished", **result.as_audit())
         _ = covered  # 覆盖集合只用于日志，不参与判定（缺口由 gap_probe 重算）
         return result
 
@@ -432,6 +518,7 @@ class RetrievalPipeline:
         from api.time_range import normalise_time
 
         detail = f"指代「{exc.pronoun}」有 {len(exc.candidates)} 个候选，未检索"
+        trace_event("retrieval.short_circuit", mode="clarify", reason=detail)
         plan = QueryPlan(
             retrieval_text=question,
             entities=tuple(exc.candidates),
@@ -461,6 +548,9 @@ class RetrievalPipeline:
     def _reject_without_retrieval(
         self, question: str, plan: QueryPlan, reason: str, started: float
     ) -> RetrievalSnapshot:
+        trace_event(
+            "retrieval.short_circuit", mode="reject_none", reason=reason, question=question
+        )
         decision = GateDecision(
             verdict="reject_none",
             top1=None,
@@ -529,7 +619,7 @@ def _filter_json(flt: RetrievalFilter) -> dict[str, Any]:
     return qdrant_filter_json(flt)
 
 
-def build_pipeline(settings: Any, pg: PgDatabase) -> RetrievalPipeline:
+def build_pipeline(settings: Any, pg: PgDatabase, llm: Any = None) -> RetrievalPipeline:
     """按 `Settings` 造一条链路。装配只在这一处，路由与测试共用。
 
     为什么要一个工厂而不是让路由自己 new 五个对象：这五个对象的参数全部来自配置，
@@ -567,6 +657,7 @@ def build_pipeline(settings: Any, pg: PgDatabase) -> RetrievalPipeline:
         max_hops=settings.max_hops,
         evidence_max_chars=settings.evidence_max_chars,
         rerank_text_max_chars=settings.rerank_text_max_chars,
+        time_llm=llm,
     )
 
 

@@ -17,7 +17,7 @@ API_TEST_NETWORK ?= ai-rag_default
 API_TEST_DSN ?= postgresql+psycopg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)
 
 .DEFAULT_GOAL := help
-.PHONY: help dev up up-models down logs ps build pull config health wait reset qdrant-init psql smoke web-build prints-env test-api test-api-db api-dev-image db-migrate db-status index-rebuild index-rebuild-dry samples scan doc verify-scan-api promote rollback vector-sync reconcile reconcile-dry reclaim reclaim-dry ingest-status verify-a3 verify-a3-api verify-a3-migration test-a3 test-a3-vectors test-a3-flip test-a3-sync samples-layout verify-parse a2-mutation test-a2 test-b4-logic test-b4 verify-b4 b4-mutation promote-all eval eval-trap test pending ingest-once ingest-worker
+.PHONY: help dev up up-models down logs trace ps build pull config health wait reset qdrant-init psql smoke web-build prints-env parse-one parse-resume test-api test-api-db api-dev-image db-migrate db-status index-rebuild index-rebuild-dry samples scan doc verify-scan-api promote rollback vector-sync reconcile reconcile-dry reclaim reclaim-dry ingest-status verify-a3 verify-a3-api verify-a3-migration test-a3 test-a3-vectors test-a3-flip test-a3-sync samples-layout verify-parse a2-mutation test-a2 test-b4-logic test-b4 verify-b4 b4-mutation promote-all eval eval-trap test pending ingest-once ingest-worker
 
 help:
 	@echo "ai-rag local dev — targets"
@@ -28,6 +28,9 @@ help:
 	@echo "  make health      # 健康检查（容器状态 + Qdrant + PG + API + Web + 模型）"
 	@echo "  make smoke       # 端到端冒烟（embedding -> Qdrant 稠密+BM25 -> RRF -> rerank）"
 	@echo "  make logs        # 跟随全部容器日志"
+	@echo "  make trace       # 跟随本地链路文件 logs/qa_trace.jsonl（按 request_id 串起一次问答）"
+	@echo "  make parse-one FILE=... MAX_PAGES=N  # 单文件解析（DRY_RUN=1 不花 token）"
+	@echo "  make parse-resume DIR=...             # 恢复已付费任务的 ZIP 下载，不重提交"
 	@echo "  make ps          # 查看容器状态"
 	@echo "  make down        # 停容器，保留数据卷"
 	@echo "  make reset       # 停容器并删除数据卷（需输入 RESET 确认）"
@@ -89,6 +92,21 @@ down:
 
 logs:
 	$(COMPOSE) logs -f --tail=200
+
+# 本地链路文件：宿主侧 logs/qa_trace.jsonl（compose 把仓库根挂到 /app）。
+trace:
+	@mkdir -p logs && touch logs/qa_trace.jsonl && tail -f logs/qa_trace.jsonl
+
+# 单文件解析（当前唯一解析入口）：MAX_PAGES 是付费闸门；DRY_RUN=1 不发请求。
+parse-one:
+	@test -n "$(FILE)" || (echo "FILE=路径 必填"; exit 2)
+	@test -n "$(MAX_PAGES)" || (echo "MAX_PAGES=页数上限 必填（付费闸门）"; exit 2)
+	@python3 scripts/parse_doc.py single "$(FILE)" --max-pages "$(MAX_PAGES)" $(if $(filter 1,$(DRY_RUN)),--dry-run,)
+
+# 从 mineru_task.json 恢复下载：只 GET 已生成的 ZIP，不重新提交解析任务。
+parse-resume:
+	@test -n "$(DIR)" || (echo "DIR=输出目录 必填"; exit 2)
+	@python3 scripts/parse_doc.py single --resume "$(DIR)" $(if $(BATCH_ID),--batch-id "$(BATCH_ID)",) $(if $(ZIP_URL),--zip-url "$(ZIP_URL)",)
 
 ps:
 	$(COMPOSE) ps

@@ -24,6 +24,7 @@ from api.filters import (
     P_DEPTS,
     P_DOC_KEY,
     P_EFFECTIVE_DATE,
+    P_EFFECTIVE_YEAR,
     P_IS_PUBLIC,
     P_ROLES,
     P_STATUS,
@@ -41,6 +42,7 @@ MULTI = IdentitySnapshot(
 NO_DEPTS = IdentitySnapshot(user_id="u_new")
 ADMIN = IdentitySnapshot(user_id="u_admin", depts=(), roles=(), admin=True)
 MARCH = TimeRange(20260301, 20260331, "month", "三月", "assumed_year", inferred=True)
+YEAR_2026 = TimeRange(20260101, 20261231, "year", "2026年", "explicit")
 
 
 # --- 结构 -------------------------------------------------------------------
@@ -152,6 +154,14 @@ def test_time_window_adds_inclusive_range_and_explicit_only() -> None:
     assert conds[P_DATE_CONFIDENCE].value == "explicit"  # type: ignore[union-attr]
 
 
+def test_year_window_uses_effective_year_and_allows_inferred_dates() -> None:
+    """报告级年份是 inferred；年份查询不能要求精确 explicit 日期。"""
+    conds = _conditions(RetrievalFilter(identity=USER, time_range=YEAR_2026))
+    assert conds[P_EFFECTIVE_YEAR] == (2026, 2026)
+    assert P_EFFECTIVE_DATE not in conds
+    assert P_DATE_CONFIDENCE not in conds
+
+
 # --- scope ------------------------------------------------------------------
 
 
@@ -224,6 +234,14 @@ def test_pg_where_time_clause_uses_between_and_explicit() -> None:
     assert "date_confidence = %s" in where
     assert 20260301 in params and 20260331 in params
     assert "explicit" in params
+
+
+def test_pg_where_year_clause_uses_effective_year_without_confidence_gate() -> None:
+    where, params = RetrievalFilter(identity=USER, time_range=YEAR_2026).pg_where()
+    assert "effective_year BETWEEN %s AND %s" in where
+    assert "effective_date" not in where
+    assert "date_confidence" not in where
+    assert 2026 in params
 
 
 def test_pg_where_params_are_all_placeholders() -> None:

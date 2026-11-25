@@ -42,6 +42,13 @@ from api.retrieval.rerank import (
     RerankUnavailable,
     rerank_candidates,
 )
+from api.retrieval.texts import (
+    ChunkText,
+    dedupe_candidate_texts,
+    drop_header_only_candidates,
+    drop_repeated_boilerplate,
+    mentioned_doc_keys,
+)
 
 # 一份与 .env.example 一致的门控配置，只在测试里出现。
 CFG = GateConfig(
@@ -175,6 +182,63 @@ def test_negative_keep_is_rejected() -> None:
     """配置错误不能静默变成"全留"——那会让一段本该短的召回悄悄变长。"""
     with pytest.raises(ValueError, match=">= 0"):
         dedupe_parent_children([cand("c1", score=0.9, parent_id="p1")], keep=-1)
+
+
+# --- 预精排候选清洗 ---------------------------------------------------------
+
+
+def _chunk_text(chunk_id: str, text: str, *, chunk_type: str = "text") -> ChunkText:
+    return ChunkText(
+        chunk_id=chunk_id,
+        doc_key="reports/yu-shu",
+        doc_name="宇树科技26三季报.pdf",
+        page_num=1,
+        bbox=[],
+        text=text,
+        chunk_type=chunk_type,
+    )
+
+
+def test_header_only_candidates_are_dropped_before_rerank() -> None:
+    items = [
+        cand("header", score=None, doc_key="reports/yu-shu"),
+        cand("sentence", score=None, doc_key="reports/yu-shu"),
+        cand("table", score=None, doc_key="reports/yu-shu"),
+    ]
+    texts = {
+        "header": _chunk_text("header", "宇树科技股份有限公司2026年第三季度报告"),
+        "sentence": _chunk_text("sentence", "本报告期营业收入同比增长69.93%。"),
+        "table": _chunk_text("table", "营业收入 665,044,497.90", chunk_type="table"),
+    }
+    kept, dropped = drop_header_only_candidates(items, texts)
+    assert [item.chunk_id for item in kept] == ["sentence", "table"]
+    assert dropped == ["header"]
+
+
+def test_repeated_boilerplate_across_three_pages_is_dropped() -> None:
+    text = "宇树科技股份有限公司2026年第三季度报告 单位：元 币种：人民币 未经审计"
+    items = [cand(f"h{i}", score=None, page_num=i, doc_key="reports/yu-shu") for i in (1, 2, 3)]
+    texts = {item.chunk_id: _chunk_text(item.chunk_id, text) for item in items}
+    kept, dropped = drop_repeated_boilerplate(items, texts, min_pages=3)
+    assert kept == []
+    assert dropped == ["h1", "h2", "h3"]
+
+
+def test_repeated_text_on_two_pages_is_preserved() -> None:
+    text = "宇树科技股份有限公司2026年第三季度报告 单位：元 币种：人民币 未经审计"
+    items = [cand("h1", score=None, page_num=1), cand("h2", score=None, page_num=2)]
+    texts = {item.chunk_id: _chunk_text(item.chunk_id, text) for item in items}
+    kept, dropped = drop_repeated_boilerplate(items, texts, min_pages=3)
+    assert [item.chunk_id for item in kept] == ["h1", "h2"]
+    assert dropped == []
+
+
+def test_identical_candidate_text_keeps_only_first() -> None:
+    items = [cand("a", score=None), cand("b", score=None)]
+    texts = {item.chunk_id: _chunk_text(item.chunk_id, "相同正文") for item in items}
+    kept, dropped = dedupe_candidate_texts(items, texts)
+    assert [item.chunk_id for item in kept] == ["a"]
+    assert dropped == ["b"]
 
 
 # --- 精排（§7.3）-------------------------------------------------------------
@@ -891,3 +955,13 @@ def test_max_hops_zero_means_no_multihop() -> None:
         initial_gap=("a",),
     )
     assert result.stop == "max_hops" and result.hops == ()
+
+
+def test_mentioned_doc_keys_finds_explicit_company_name() -> None:
+    names = {
+        "pdf_reports/han-wu-ji-26-ban-nian-bao": "寒武纪26半年报.pdf",
+        "pdf_reports/zhang-xin-ke-ji-26-ban-nian-bao": "长鑫科技26半年报.pdf",
+    }
+    assert mentioned_doc_keys("寒武纪 2026 年上半年营业收入是多少？", names) == (
+        "pdf_reports/han-wu-ji-26-ban-nian-bao",
+    )

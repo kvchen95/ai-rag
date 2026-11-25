@@ -364,14 +364,17 @@ def _table_chunk(
     table = region.table
     assert table is not None
     caption = _caption_for(region, page)
-    content = table_content_text(table, title=caption)
+    unit = _unit_for(region, page)
+    title = caption
+    if unit:
+        title = (title + " " + unit).strip() if title else unit
+    content = table_content_text(table, title=title)
     if not content.strip():
-        # 空表的 content_text 会撞 `ck_chunks_text_nonempty`。这里补一行占位说明
-        # 而不是丢切片：一张空表在原文里是"这里有个表"，丢掉等于隐瞒。
-        content = caption or "table (empty)"
+        content = title or "table (empty)"
     chunk_id = ck.chunk_id_for(
         version_id, page_num=page.page_num, kind="table", index=index
     )
+    table_md = table.md
     return ck.build_table_chunk(
         doc_key=doc_key,
         version_id=version_id,
@@ -381,6 +384,7 @@ def _table_chunk(
         date=date,
         chunk_id=chunk_id,
         content_text=content,
+        table_md=table_md,
     )
 
 
@@ -476,6 +480,24 @@ def _caption_for(region: Region, page: PageLayout) -> str | None:
                 gap = region.rect.top - line.rect.bottom
                 if best is None or gap < best[0]:
                     best = (gap, text)
+    return best[1] if best is not None else None
+
+
+def _unit_for(region: Region, page: PageLayout) -> str | None:
+    """表题附近的单位说明，如 "单位：元"。"""
+    best: tuple[float, str] | None = None
+    for other in page.regions:
+        if other is region or other.kind is not RegionKind.TEXT:
+            continue
+        if other.rect.bottom > region.rect.top + 2:
+            continue
+        for line in other.lines:
+            text = line.text.strip()
+            if "单位" not in text:
+                continue
+            gap = region.rect.top - line.rect.bottom
+            if best is None or gap < best[0]:
+                best = (gap, text)
     return best[1] if best is not None else None
 
 

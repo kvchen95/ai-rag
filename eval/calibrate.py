@@ -43,7 +43,7 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_GOLDEN = REPO_ROOT / "eval" / "golden_50.jsonl"
+DEFAULT_GOLDEN = REPO_ROOT / "eval" / "golden_questions_v1.jsonl"
 DEFAULT_OUT_DIR = REPO_ROOT / "eval" / "reports"
 
 ANSWERABLE = ("pass", "partial")

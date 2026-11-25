@@ -37,6 +37,7 @@ import httpx
 
 from api.filters import RetrievalFilter
 from api.observability import get_logger, log_event
+from api.trace import trace as trace_event
 from scripts.qdrant_common import DENSE_VECTOR, SPARSE_VECTOR, bm25_vector
 
 logger = get_logger("api.retrieval.hybrid")
@@ -371,6 +372,20 @@ class HybridRetriever:
                 rows.append((chunk_id, float(point.get("score") or 0.0)))
             routes.append(rows)
 
+        # 本地链路：两路原始名单先落盘，再看融合/去重。排障时“正确切片是否进过
+        # 候选池”只能靠这一步回答，融合后的名单已经把两路出处压成了名次。
+        trace_event(
+            "hybrid.raw_routes",
+            dense=[
+                {"chunk_id": cid, "score": round(score, 6), "rank": index + 1}
+                for index, (cid, score) in enumerate(routes[0])
+            ],
+            sparse=[
+                {"chunk_id": cid, "score": round(score, 6), "rank": index + 1}
+                for index, (cid, score) in enumerate(routes[1])
+            ],
+        )
+
         fused = rrf_fuse(routes[0], routes[1], top_k=top_k)
         # 融合结果是"裸编号 + 名次"，payload 在这里补回去：RRF 只看名次，
         # 不该知道 payload 长什么样（否则测试里没法用两个字符串构造它）。
@@ -379,6 +394,29 @@ class HybridRetriever:
             for candidate in fused
         ]
         kept, dropped = dedupe_parent_children(enriched, keep=parent_child_keep)
+        trace_event(
+            "hybrid.fused",
+            query_text=query_text,
+            top_k=top_k,
+            candidates=[
+                {
+                    **item.as_dict(),
+                    "dense_score": None
+                    if item.dense_score is None
+                    else round(item.dense_score, 6),
+                    "sparse_score": None
+                    if item.sparse_score is None
+                    else round(item.sparse_score, 6),
+                }
+                for item in fused
+            ],
+        )
+        trace_event(
+            "hybrid.dedup",
+            keep=parent_child_keep,
+            kept_ids=[item.chunk_id for item in kept],
+            dropped_ids=[item.chunk_id for item in dropped],
+        )
         if dropped:
             log_event(
                 logger,

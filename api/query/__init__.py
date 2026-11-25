@@ -30,9 +30,11 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Literal, Sequence
 
+from api.llm_json import parse_json_object
 from api.observability import get_logger, log_event
 from api.query import lexicon
 from api.time_range import TimeNormalisation, normalise_time
+from api.trace import trace as trace_event
 
 logger = get_logger("api.query.understand")
 
@@ -217,6 +219,39 @@ def rewrite(text: str) -> tuple[str, tuple[RewriteStep, ...]]:
     return "".join(out), tuple(steps)
 
 
+def rewrite_with_llm(text: str, client: Any) -> str:
+    """让 LLM 只追加同义词，不改写原问句。
+
+    输出约定为 {"expansion": "..."}；原问句始终完整保留，从结构上避免公司名、
+    数字、否定含义被模型改掉。
+    """
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你是企业知识库检索扩展器。保留用户原问句不变，只额外给出少量"
+                "同义词或财报口径词，例如“本报告期”“季度财务报表”。"
+                "不要重复原问句，不要修改公司名、数字、否定含义，不要添加事实。"
+                '只输出 JSON：{"expansion":"..."}。'
+            ),
+        },
+        {"role": "user", "content": text},
+    ]
+    try:
+        content = client.complete(messages, temperature=0.0)
+        data = parse_json_object(content)
+        expansion = (data or {}).get("expansion")
+        if not isinstance(expansion, str) or not expansion.strip():
+            return text
+        if re.search(r"\d", expansion):
+            return text
+        if any(marker in expansion for marker in lexicon.NEGATION_MARKERS):
+            return text
+        return f"{text} {expansion.strip()}"
+    except Exception:  # noqa: BLE001
+        return text
+
+
 def _join_without_overlap(out: list[str], target: str) -> str:
     """把 `target` 接到已输出文本后面，但去掉与末尾重复的部分。
 
@@ -323,6 +358,7 @@ def understand(
     question: str,
     *,
     previous_entities: Sequence[str] | None = None,
+    time_llm: Any = None,
     now: date | None = None,
     fiscal_start_month: int = 1,
 ) -> QueryPlan:
@@ -346,7 +382,13 @@ def understand(
     # 2. 时间归一。在改写之前跑：词表里若混进"上个月"这类词，改写会把它换掉，
     #    时间归一就再也认不出来了。用 `operated` 而不是 `original`，这样
     #    「那它呢」被换成「差旅管理办法」之后，时间词仍能被看到。
-    time_result = normalise_time(operated, now=now, fiscal_start_month=fiscal_start_month)
+    time_result = normalise_time(
+        operated,
+        client=time_llm,
+        now=now,
+        fiscal_start_month=fiscal_start_month,
+    )
+
     if time_result.note:
         notes.append(time_result.note)
     # 补了年份的标注挂在 `range.note` 上（TimeRange 自己的字段），不在
@@ -357,6 +399,14 @@ def understand(
 
     # 3. 同义 / 缩写 / 口语。
     rewritten, steps = rewrite(operated)
+    if time_llm is not None:
+        expanded = rewrite_with_llm(rewritten, time_llm)
+        if expanded != rewritten:
+            rewritten = expanded
+            steps = (
+                *steps,
+                RewriteStep(kind="synonym", source=operated, target=expanded, position=0),
+            )
     trace.extend(steps)
 
     # 4. 实体与跳数。
@@ -399,6 +449,8 @@ def understand(
         has_time_window=plan.time.has_window,
         out_of_scope=plan.out_of_scope,
     )
+    # 本地链路文件里留完整口径（含 retrieval_text / 时间窗），日志里刻意不打原文。
+    trace_event("query.understood", question=original, **plan.as_audit())
     return plan
 
 

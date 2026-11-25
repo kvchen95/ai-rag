@@ -18,9 +18,9 @@
    过滤器一旦拿到 window 就会强制按 effective_date + explicit 过滤，
    而预测类研报的切片日期常为 NULL，套上去会把正确证据筛没（见 §1b 注释）。
 
-刻意不做的事：不做"大概""左右""上半年"这类猜测式换算。规则表里没有的说法
-一律落到"未限定时间"——少一个时间条件只会多召回，错了也还能被门控拦住；
-猜错一个时间窗却会让答案指向错误的条款。
+刻意不做的事：不做"大概""左右""前段"这类猜测式换算。规则表里没有的说法
+一律落到"未限定时间"；但"2026年上半年/下半年"是明确的半年表达，必须换算成
+半年闭区间，否则会把同年的三季报、年报一起召回并触发错误澄清。
 """
 
 from __future__ import annotations
@@ -29,9 +29,11 @@ import calendar
 import re
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import Literal
+from typing import Any, Literal
 
-Granularity = Literal["day", "month", "year"]
+from api.llm_json import parse_json_object
+
+Granularity = Literal["day", "month", "quarter", "half_year", "year"]
 Basis = Literal["explicit", "relative", "assumed_year"]
 
 _CN_DIGITS = {
@@ -63,6 +65,9 @@ _ABS_MONTH = re.compile(
 _ABS_YEAR_RANGE = re.compile(
     r"(?P<y1>(?:19|20)\d{2})\s*年?\s*(?:[-—–~～]|至|到)\s*(?P<y2>(?:19|20)\d{2})\s*年"
 )
+# 绝对半年：2025年上半年 / 2025年下半年。必须早于 _ABS_YEAR，
+# 否则“2025年上半年”只会匹配“2025年”，把季报也召进来。
+_ABS_HALF_YEAR = re.compile(r"(?P<y>\d{4})\s*年\s*(?P<half>上半年|下半年)")
 # 绝对年：2025年
 _ABS_YEAR = re.compile(r"(?P<y>\d{4})\s*年")
 
@@ -126,6 +131,7 @@ class TimeNormalisation:
     question: str
     range: TimeRange | None = None
     note: str | None = None
+    target_time: str | None = None
 
     @property
     def has_window(self) -> bool:
@@ -135,6 +141,7 @@ class TimeNormalisation:
         return {
             "range": None if self.range is None else self.range.as_dict(),
             "note": self.note,
+            "target_time": self.target_time,
         }
 
 
@@ -205,7 +212,178 @@ def _bare_month_is_real(question: str, start: int) -> bool:
     return True
 
 
+
+
+
+_FORECAST_MARKERS = ("预测", "预计", "展望", "规划", "未来", "市场规模", "到", "至")
+_DOC_TIME_MARKERS = ("报告", "年报", "季报", "半年报", "月报", "制度", "政策", "办法", "年度", "季度")
+
+
+def _forecast_years(text: str) -> list[str]:
+    out: list[str] = []
+    for m in re.finditer(r"(?P<y>\d{4})\s*年", text or ""):
+        year = m.group("y")
+        after = (text or "")[m.end(): m.end() + 8]
+        window = (text or "")[max(0, m.start() - 12): m.end() + 25]
+        if any(marker in after for marker in _DOC_TIME_MARKERS):
+            continue
+        if any(marker in window for marker in _FORECAST_MARKERS):
+            out.append(year)
+    seen = set()
+    result = []
+    for y in out:
+        if y not in seen:
+            seen.add(y)
+            result.append(y)
+    return result
+
+
+def _strip_forecast_years(text: str, years: list[str]) -> str:
+    if not years:
+        return text or ""
+    year_set = set(years)
+    def _repl(m: re.Match) -> str:
+        if m.group("y") in year_set:
+            return ""
+        return m.group(0)
+    return re.sub(r"(?P<y>\d{4})\s*年", _repl, text or "")
+
+
+
 def normalise_time(
+    question: str,
+    *,
+    client: Any = None,
+    now: date | None = None,
+    fiscal_start_month: int = 1,
+) -> TimeNormalisation:
+    import re as _re
+    _year_range = _re.search(r"(?P<y1>(?:19|20)\d{2})\s*年?\s*(?:[-—–~～]|至|到)\s*(?P<y2>(?:19|20)\d{2})\s*年", question or "")
+    if _year_range:
+        target_years = []
+    else:
+        target_years = _forecast_years(question or "")
+    target_time = target_years[0] if target_years else None
+    cleaned = _strip_forecast_years(question or "", target_years)
+    if client is not None:
+        today = (now or date.today()).isoformat()
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "你是时间归一器。把用户问句里的绝对/相对时间换算成 JSON，只输出 JSON。"
+                    "所有日期用 YYYYMMDD 整数，闭区间。"
+                    "granularity 只能是 day/month/quarter/half_year/year。"
+                    "basis 只能是 explicit/relative/assumed_year。"
+                    "如果问句没有明确时间，range 为 null，并在 note 说明。"
+                    "如果时间模糊（如“最近”“前段时间”），range 为 null。"
+                    "“今年”按当前日期所属自然年；“去年”按上一年；“上半年”为 1-6 月；"
+                    "“下半年”为 7-12 月。"
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"当前日期：{today}\n"
+                    f"财年起始月：{fiscal_start_month}\n"
+                    f"问句：{cleaned}\n"
+                    '输出：{"range":{"from":20260101,"to":20260630,"granularity":"half_year","matched":"2026年上半年","basis":"explicit","inferred":false,"note":null},"note":null}'
+                ),
+            },
+        ]
+        try:
+            content = client.complete(messages, temperature=0.0)
+            data = parse_json_object(content)
+            if isinstance(data, dict):
+                rng = data.get("range")
+                if rng is None:
+                    note = data.get("note")
+                    return TimeNormalisation(
+                        question or "",
+                        range=None,
+                        note=str(note) if note is not None else None,
+                    )
+                if isinstance(rng, dict):
+                    try:
+                        date_from = int(rng["from"])
+                        date_to = int(rng["to"])
+                    except (KeyError, TypeError, ValueError):
+                        raise ValueError("bad dates")
+                    if date_from <= date_to and 19000101 <= date_from and date_to <= 29991231:
+                        granularity = str(rng.get("granularity") or "day")
+                        if granularity not in ("day", "month", "quarter", "half_year", "year"):
+                            granularity = "day"
+                        basis = str(rng.get("basis") or "explicit")
+                        if basis not in ("explicit", "relative", "assumed_year"):
+                            basis = "explicit"
+                        tr = TimeRange(
+                            date_from=date_from,
+                            date_to=date_to,
+                            granularity=granularity,  # type: ignore[arg-type]
+                            matched=str(rng.get("matched") or question),
+                            basis=basis,  # type: ignore[arg-type]
+                            inferred=bool(rng.get("inferred", False)),
+                            note=str(rng.get("note")) if rng.get("note") is not None else None,
+                        )
+                        return TimeNormalisation(
+                            question or "",
+                            range=tr,
+                            note=str(data.get("note")) if data.get("note") is not None else tr.note,
+                            target_time=target_time,
+                        )
+        except Exception:  # noqa: BLE001
+            pass
+    result = _normalise_time_rules(cleaned, now=now, fiscal_start_month=fiscal_start_month)
+    return TimeNormalisation(
+        question=question or "",
+        range=result.range,
+        note=result.note,
+        target_time=target_time,
+    )
+
+
+def select_time_docs(
+    question: str,
+    doc_names: dict[str, str],
+    *,
+    client: Any = None,
+) -> tuple[str, ...]:
+    """用 LLM 从文档名中挑出与问句时间/报告期匹配的 doc_key。
+
+    半年报/季报/年报经常共用同一个 effective_year，仅靠年份过滤无法区分。
+    这里让模型按“上半年/第三季度/年度”等报告期语义选择；失败或输出非法时
+    返回空元组，由调用方回退到普通提及匹配。
+    """
+    if client is None or not doc_names:
+        return ()
+    options = "\n".join(f"- {key}: {name}" for key, name in doc_names.items())
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你是检索范围选择器。根据问句里的公司、报告期/时间，从下面文档中"
+                "选择直接相关的 doc_key。只输出 JSON，不要解释。"
+                "如果问句明确说“上半年”，不要选三季报或年报；明确说“第三季度”，"
+                "不要选半年报。若无法确定，返回空列表。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": f"问句：{question}\n文档：\n{options}\n输出：{{\"doc_keys\":[]}}",
+        },
+    ]
+    try:
+        content = client.complete(messages, temperature=0.0)
+        data = parse_json_object(content)
+        keys = data.get("doc_keys")
+        if not isinstance(keys, list):
+            return ()
+        return tuple(dict.fromkeys(str(k) for k in keys if str(k) in doc_names))
+    except Exception:  # noqa: BLE001
+        return ()
+
+
+def _normalise_time_rules(
     question: str,
     *,
     now: date | None = None,
@@ -264,6 +442,18 @@ def normalise_time(
         start, end = _month_span(y, m)
         return TimeNormalisation(
             text, TimeRange(start, end, "month", hit.group(0), "explicit")
+        )
+
+    # 2b. 绝对半年：2025年上半年 / 2025年下半年。早于绝对年匹配。
+    hit = _ABS_HALF_YEAR.search(text)
+    if hit:
+        y = int(hit["y"])
+        if hit["half"] == "上半年":
+            start, end = y * 10000 + 101, y * 10000 + 630
+        else:
+            start, end = y * 10000 + 701, y * 10000 + 1231
+        return TimeNormalisation(
+            text, TimeRange(start, end, "half_year", hit.group(0), "explicit")
         )
 
     # 3. 相对年 + 月：去年十二月 / 前年3月（先匹配，否则「去年」会把整年吃掉）

@@ -4,12 +4,13 @@ import { PdfPreview } from './components/PdfPreview';
 import { StatusBar } from './components/StatusBar';
 import { useChat } from './useChat';
 import { auditCitations } from './citations';
+import { DEFAULT_DEV_TOKEN } from './devToken';
 import type { CitationItem, ClarifyOption, DataSource, FallbackDoc } from './types';
 
-const DEFAULT_QUESTION = '2025年差旅住宿标准是多少？';
+const DEFAULT_QUESTION = '中芯国际 25年营收多少？';
 const TOKEN_KEY = 'ai-rag.dev-token';
 
-/** 开发期凭证：`?token=` 优先（方便截图/演示），其次 sessionStorage（刷新不丢）。 */
+/** 开发期凭证：`?token=` 优先（方便截图/演示），其次 sessionStorage，最后内置 dev JWT。 */
 function readInitialToken(): string {
   if (typeof window === 'undefined') return '';
   const fromUrl = new URLSearchParams(window.location.search).get('token');
@@ -17,7 +18,7 @@ function readInitialToken(): string {
     window.sessionStorage.setItem(TOKEN_KEY, fromUrl);
     return fromUrl;
   }
-  return window.sessionStorage.getItem(TOKEN_KEY) ?? '';
+  return window.sessionStorage.getItem(TOKEN_KEY) ?? DEFAULT_DEV_TOKEN;
 }
 
 export function App() {

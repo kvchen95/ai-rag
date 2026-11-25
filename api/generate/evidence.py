@@ -187,7 +187,10 @@ def _group_by_parent(candidates: Sequence[Candidate]) -> list[list[Candidate]]:
     groups: dict[str, list[Candidate]] = {}
     order: list[str] = []
     for candidate in candidates:
-        key = candidate.parent_id or f"__self__:{candidate.chunk_id}"
+        # 父片本身（parent_id 为空）与它的子片必须落进同一组：父片的编号
+        # 就是子片的 parent_id。把父片放进 `__self__:chunk_id` 会把它和子片拆开，
+        # 导致证据包里父段与子段重复出现，角标也对不上。
+        key = candidate.parent_id or candidate.chunk_id
         if key not in groups:
             groups[key] = []
             order.append(key)

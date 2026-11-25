@@ -21,3 +21,7 @@
 pdfplumber==0.11.4
 pypdfium2==5.15.2
 Pillow==13.0.0
+# 分阶段解析：Docling 表格 + LangChain SemanticChunker + 本地 embedding fallback
+docling==2.151.1
+langchain-experimental==0.4.2
+sentence-transformers==6.3.0

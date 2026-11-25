@@ -79,7 +79,7 @@ INSERT INTO chunks (
 # 幂等的落点：重跑同一个 version_id 时先删旧切片，再插新的。
 DELETE_VERSION_SQL = "DELETE FROM chunks WHERE version_id = %s"
 
-# 开发期 ACL 口径：`eval/golden_50.jsonl` 全部是 `pdf_reports/*` 研报，检索身份
+# 开发期 ACL 口径：`eval/golden_questions_v1.jsonl` 全部是 `pdf_reports/*` 研报，检索身份
 # 是 depts=('fin',) / roles=('staff',)（eval/run_eval.py 的 --dept/--role 默认值）。
 # 所以研报给 fin+staff；原有 policy/hr/layout 样本保持 fin+hr+staff，避免把已有
 # 的可检索材料变成"谁都看不到"。未列出的目录必须报错，不给隐式放行。

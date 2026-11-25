@@ -35,7 +35,8 @@ pnpm dev
 
 默认 http://localhost:5174（Vite 代理 `/api` 到 `VITE_API_TARGET`，默认 `http://127.0.0.1:8000`）。
 
-真实模式需配置 Bearer JWT（页面输入框 / `?token=` / sessionStorage）。无后端时可切换“演示回放”查看事件顺序。
+真实模式已预置一枚开发用 JWT（u_dev / fin,corp / staff，按当前 .env 的密钥签发），打开页面即可发送；
+也可用页面输入框、`?token=`、sessionStorage 或构建时 `VITE_DEV_TOKEN` 覆盖。密钥改过时要重新签发内置凭证。无后端时可切换“演示回放”查看事件顺序。
 
 ## 验证
 

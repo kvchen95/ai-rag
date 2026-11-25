@@ -40,6 +40,20 @@ def test_last_month() -> None:
     assert tr.granularity == "month"
 
 
+def test_absolute_half_year_is_normalised_before_year() -> None:
+    result = normalise_time("海光信息 2026 年上半年营业收入是多少？", now=NOW)
+    assert result.range is not None
+    assert (result.range.date_from, result.range.date_to) == (20260101, 20260630)
+    assert result.range.granularity == "half_year"
+
+
+def test_absolute_second_half_year_is_normalised() -> None:
+    result = normalise_time("海光信息 2026 年下半年营业收入是多少？", now=NOW)
+    assert result.range is not None
+    assert (result.range.date_from, result.range.date_to) == (20260701, 20261231)
+    assert result.range.granularity == "half_year"
+
+
 def test_last_month_handles_31_day_month() -> None:
     """月底边界按日历算：2026-01 的上个月是 2025-12-31，不是 30 号。"""
     tr = normalise_time("上个月的差标", now=date(2026, 1, 10)).range

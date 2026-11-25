@@ -41,6 +41,7 @@ from api.observability import get_logger, log_event
 from api.qa.orchestrator import QaOutcome, QaService
 from api.retrieval.pipeline import build_pipeline
 from api.time_range import TimeRange
+from api.trace import trace as trace_event
 
 logger = get_logger("api.qa.api")
 
@@ -122,7 +123,7 @@ def build_service(request: Request, settings: Settings) -> QaService:
 
     代价是每请求一次 TCP 握手。对 30 秒预算的问答链路来说，这点开销在噪声里。
     """
-    pipeline = build_pipeline(settings, request.app.state.pg)
+    pipeline = build_pipeline(settings, request.app.state.pg, llm=llm_client(settings))
     return QaService(
         pipeline=pipeline,
         llm=llm_client(settings),
@@ -185,6 +186,13 @@ async def qa_stream(
     question = validate_question(body.question, settings)
     doc_keys = body.scope.doc_keys if body.scope else None
     time_range = body.time_range.to_range() if body.time_range else None
+    trace_event(
+        "qa.route_enter",
+        question=question,
+        doc_keys=doc_keys or [],
+        time_range=None if time_range is None else time_range.as_dict(),
+        **identity.to_audit(),
+    )
 
     queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
     loop = asyncio.get_running_loop()
@@ -195,9 +203,10 @@ async def qa_stream(
         loop.call_soon_threadsafe(queue.put_nowait, ("event", event))
 
     def worker() -> None:
-        service = build_service(request, settings)
+        service: QaService | None = None
         outcome: QaOutcome | None = None
         try:
+            service = build_service(request, settings)
             outcome = service.run(
                 question,
                 identity,
@@ -213,8 +222,14 @@ async def qa_stream(
                 level=40,
                 error=f"{type(exc).__name__}: {str(exc)[:300]}",
             )
+            trace_event(
+                "qa.worker_failed", error=f"{type(exc).__name__}: {str(exc)[:300]}"
+            )
         finally:
-            service.pipeline.close()
+            # 装配本身失败时 service 还没造出来；不能让清理异常盖掉 close 事件，
+            # 否则前端会一直等不到流结束（实测撞过）。
+            if service is not None:
+                service.pipeline.close()
             loop.call_soon_threadsafe(queue.put_nowait, ("close", None))
 
     async def stream() -> AsyncIterator[bytes]:
