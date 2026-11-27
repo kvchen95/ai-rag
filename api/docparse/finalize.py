@@ -1,4 +1,4 @@
-"""最终 Markdown 整合输出。"""
+"""最终 Markdown 整合输出。."""
 
 from __future__ import annotations
 
@@ -7,11 +7,12 @@ from typing import Any
 
 
 def _clean(text: str) -> str:
+    """Run _clean."""
     return text.strip()
 
 
 def render_final_markdown(blocks: list[dict[str, Any]]) -> str:
-    """把富化后的块整合成一份可读的 Markdown 文档。"""
+    """把富化后的块整合成一份可读的 Markdown 文档。."""
     lines: list[str] = []
     for block in blocks:
         block_type = str(block.get("type") or "")
@@ -21,7 +22,11 @@ def render_final_markdown(blocks: list[dict[str, Any]]) -> str:
         if not text:
             continue
         level = block.get("heading_level")
-        if isinstance(level, int) and 1 <= level <= 6 and block_type not in {"table"}:
+        if (
+            isinstance(level, int)
+            and 1 <= level <= 6
+            and block_type not in {"table"}
+        ):
             lines.append(f"{'#' * level} {text}")
             lines.append("")
             continue

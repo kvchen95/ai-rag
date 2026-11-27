@@ -1,4 +1,4 @@
-"""在线检索编排：§6 → §7 → §8 一条链路（B3 的最终出口）。
+"""在线检索编排：§6 → §7 → §8 一条链路（B3 的最终出口）。.
 
 这个模块只做**编排**：把 `understand()` 的计划、`HybridRetriever` 的两路召回、
 `drop_stale()` 的版本兜底、`Reranker` 的精排、`decide()` 的门控按设计文档的顺序
@@ -6,8 +6,9 @@
 
 四条顺序约束，每一条都能说清"换了会怎样"：
 
-1. **版本兜底在精排之前**（§7.4）。反过来的话，旧版本切片会占掉精排窗口里的位置，
-   而精排是逐对打分（每多一条都是毫秒）：我们花预算给一批注定要丢的候选打分。
+1. **版本兜底在精排之前**（§7.4）。反过来的话，旧版本切片会占掉精排窗口里
+   的位置，而精排是逐对打分（每多一条都是毫秒）：我们花预算给一批注定要丢的
+   候选打分。
 2. **父片去重在精排之前**（§7.2）。同一父片的两条子片内容高度重叠，让它们都进
    精排等于用两条预算换一条信息。
 3. **门控只在精排之后**（§8.1）。门控看的是精排分：拿融合分判会让"排第一"必然
@@ -16,29 +17,25 @@
    第一跳证据齐了就按单跳收口。这个"改回去"的动作必须在编排层做，
    因为只有它同时知道预判与实际证据。
 
-多跳的每一跳**独立过阈**（卡片的验收原句）：不是"总证据够就继续"，而是每一跳的
-最高分都要过 `reject_none`（低于它这一跳什么都没查到，断链）。所以 `run_multihop`
-的回调里调的是同一个 `_retrieve_once`，门控判定用的是同一份 `GateConfig`。
+多跳的每一跳**独立过阈**（卡片的验收原句）：不是"总证据够就继续"，而是每一
+跳的最高分都要过 `reject_none`（低于它这一跳什么都没查到，断链）。所以
+`run_multihop` 的回调里调的是同一个 `_retrieve_once`，门控判定用的是同一份
+`GateConfig`。
 """
 
 from __future__ import annotations
 
-import re
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
-from typing import Any, Sequence
+from typing import Any
 
 from api.clients.pg import PgDatabase
 from api.errors import ErrorCode
 from api.filters import RetrievalFilter, build_filter
 from api.identity import IdentitySnapshot
 from api.observability import get_logger, log_event
-from api.trace import trace as trace_event
 from api.query import NeedsClarification, QueryPlan, understand
-from api.temporal import build_temporal_scope
-from api.temporal.compound import CompoundGateResult, aggregate_gates
-from api.temporal.decompose import Decomposition, decompose_question
-from api.temporal.documents import select_documents
 from api.retrieval.gate import (
     GateConfig,
     GateDecision,
@@ -46,30 +43,39 @@ from api.retrieval.gate import (
     decide,
 )
 from api.retrieval.hybrid import Candidate, HybridRetriever
-from api.retrieval.multihop import Fact, HopOutcome, MultiHopResult, run_multihop
-from api.retrieval.rerank import RerankOutcome, Reranker, rerank_candidates
+from api.retrieval.multihop import (
+    Fact,
+    HopOutcome,
+    MultiHopResult,
+    run_multihop,
+)
+from api.retrieval.rerank import Reranker, RerankOutcome, rerank_candidates
 from api.retrieval.texts import (
     ChunkText,
     all_doc_names,
     dedupe_candidate_texts,
-    doc_names,
     drop_header_only_candidates,
     drop_repeated_boilerplate,
     fetch_texts,
     mentioned_doc_keys,
 )
+from api.temporal import build_temporal_scope
+from api.temporal.compound import CompoundGateResult, aggregate_gates
+from api.temporal.decompose import Decomposition, decompose_question
+from api.temporal.documents import select_documents
+from api.trace import trace as trace_event
 from api.version_guard import drop_stale
 
 logger = get_logger("api.retrieval.pipeline")
 
 
-class EmbeddingUnavailable(RuntimeError):
-    """查询编码失败。召回无法开始——这不是"没有证据"，不能落进拒答（§11.3）。"""
+class EmbeddingUnavailableError(RuntimeError):
+    """查询编码失败。召回无法开始——这不是"没有证据"，不能落进拒答（§11.3）。."""
 
 
 @dataclass(slots=True)
 class QueryEmbedder:
-    """把查询文本编码成稠密向量。
+    """把查询文本编码成稠密向量。.
 
     单独一个类而不是塞进 `HybridRetriever`：编码服务与向量库是两个独立依赖，
     它们各自挂掉时的处置完全不同（编码挂了要 503 `index_stale`/`internal`，
@@ -83,9 +89,12 @@ class QueryEmbedder:
     timeout_s: float = 10.0
 
     def embed(self, text: str) -> list[float]:
+        """Run embed."""
         import httpx
 
-        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+        headers = (
+            {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+        )
         try:
             with httpx.Client(
                 base_url=self.base_url.rstrip("/"),
@@ -93,20 +102,27 @@ class QueryEmbedder:
                 headers=headers,
                 trust_env=False,
             ) as client:
-                resp = client.post("/embeddings", json={"input": [text], "model": self.model})
+                resp = client.post(
+                    "/embeddings", json={"input": [text], "model": self.model}
+                )
         except httpx.HTTPError as exc:
-            raise EmbeddingUnavailable(f"embedding service unreachable: {exc}") from exc
+            raise EmbeddingUnavailableError(
+                f"embedding service unreachable: {exc}"
+            ) from exc
         if resp.status_code >= 400:
-            raise EmbeddingUnavailable(
+            raise EmbeddingUnavailableError(
                 f"embedding -> HTTP {resp.status_code}: {resp.text[:300]}"
             )
         data = (resp.json() or {}).get("data") or []
         if len(data) != 1:
-            raise EmbeddingUnavailable(f"embedding returned {len(data)} vectors for 1 text")
+            raise EmbeddingUnavailableError(
+                f"embedding returned {len(data)} vectors for 1 text"
+            )
         vector = data[0].get("embedding")
         if not isinstance(vector, list) or len(vector) != self.dim:
-            raise EmbeddingUnavailable(
-                f"embedding dim mismatch: got {len(vector) if isinstance(vector, list) else 'n/a'}, "
+            raise EmbeddingUnavailableError(
+                f"embedding dim mismatch: got "
+                f"{len(vector) if isinstance(vector, list) else 'n/a'}, "
                 f"expected {self.dim}"
             )
         return [float(v) for v in vector]
@@ -114,10 +130,11 @@ class QueryEmbedder:
 
 @dataclass(frozen=True, slots=True)
 class RetrievalSnapshot:
-    """一次检索的审计快照（§11.2 的 `score_snapshot` + `retrieved_ids`）。
+    """一次检索的审计快照（§11.2 的 `score_snapshot` + `retrieved_ids`）。.
 
-    只存编号与分数摘要，**不存原文**——原文在 PG 里，重复存会让审计表变成第二份正文
-    （§11.2 原话）。这里的 `filter_json` 会进审计：事后能复现"这次按什么权限搜的"。
+    只存编号与分数摘要，**不存原文**——原文在 PG 里，重复存会让审计表变成
+    第二份正文（§11.2 原话）。这里的 `filter_json` 会进审计：事后能复现"这次
+    按什么权限搜的"。
     """
 
     plan: QueryPlan
@@ -135,22 +152,33 @@ class RetrievalSnapshot:
 
     @property
     def verdict(self) -> Verdict:
+        """Run verdict."""
         return self.decision.verdict
 
     def score_snapshot(self) -> dict[str, Any]:
-        """§11.2 的 `score_snapshot`：各路最高分与分布。"""
-        dense = [c.dense_score for c in self.candidates if c.dense_score is not None]
-        sparse = [c.sparse_score for c in self.candidates if c.sparse_score is not None]
-        rerank_scores = [c.rerank_score for c in self.candidates if c.rerank_score is not None]
+        """§11.2 的 `score_snapshot`：各路最高分与分布。."""
+        dense = [
+            c.dense_score for c in self.candidates if c.dense_score is not None
+        ]
+        sparse = [
+            c.sparse_score
+            for c in self.candidates
+            if c.sparse_score is not None
+        ]
+        rerank_scores = [
+            c.rerank_score
+            for c in self.candidates
+            if c.rerank_score is not None
+        ]
         return {
             "top1": None
             if self.decision.top1 is None
             else round(self.decision.top1, 6),
             "dense_top1": round(max(dense), 6) if dense else None,
             "sparse_top1": round(max(sparse), 6) if sparse else None,
-            # 两个键不能同名：早先这里连写两次 `"rerank"`，后一个（`as_audit()` 的
-            # dict）把前一个（分数列表）静默覆盖掉，于是审计里永远看不到分数分布——
-            # 而"分怎么分布"正是排查"这次为什么判成弱相关"的第一个依据。
+            # 两个键不能同名：早先这里连写两次 `"rerank"`，后一个（`as_audit()`
+            # 的 dict）把前一个（分数列表）静默覆盖掉，于是审计里永远看不到分数
+            # 分布——而"分怎么分布"正是排查"这次为什么判成弱相关"的第一个依据。
             "rerank_scores": [round(s, 6) for s in rerank_scores],
             "fused": [round(c.fused_score, 6) for c in self.candidates],
             "routes": {"dense": self.dense_count, "sparse": self.sparse_count},
@@ -164,17 +192,21 @@ class RetrievalSnapshot:
             "filter": self.filter_json,
             "mode": self.plan.mode,
             "rewrite_trace": [step.as_text() for step in self.plan.trace],
-            **({"compound": self.compound.as_audit()} if self.compound is not None else {}),
+            **(
+                {"compound": self.compound.as_audit()}
+                if self.compound is not None
+                else {}
+            ),
         }
 
     def retrieved_ids(self) -> list[str]:
-        """§11.2 的 `retrieved_ids`：进精排的切片编号（按上游顺序）。"""
+        """§11.2 的 `retrieved_ids`：进精排的切片编号（按上游顺序）。."""
         return [c.chunk_id for c in self.candidates]
 
 
 @dataclass(slots=True)
 class RetrievalPipeline:
-    """一条链路的全部依赖。字段就是它的依赖清单，没有隐藏单例。"""
+    """一条链路的全部依赖。字段就是它的依赖清单，没有隐藏单例。."""
 
     pg: PgDatabase
     retriever: HybridRetriever
@@ -198,8 +230,15 @@ class RetrievalPipeline:
 
     def _retrieve_once(
         self, plan: QueryPlan, flt: RetrievalFilter
-    ) -> tuple[list[Candidate], RerankOutcome, dict[str, ChunkText], list[str], int, int]:
-        """一次完整召回：两路 → RRF → 父片去重 → 版本兜底 → 取正文 → 精排。
+    ) -> tuple[
+        list[Candidate],
+        RerankOutcome,
+        dict[str, ChunkText],
+        list[str],
+        int,
+        int,
+    ]:
+        """一次完整召回：两路 → RRF → 父片去重 → 版本兜底 → 取正文 → 精排。.
 
         返回值带上两路各自的条数：排障时"sparse=0"是最有用的一个信号
         （说明 BM25 侧没写进去或查询串没过 `bm25_text()`），丢了它就只剩
@@ -225,7 +264,9 @@ class RetrievalPipeline:
             parent_child_keep=self.parent_child_keep,
         )
         # §7.4：必须在精排前。drop_stale 吃 dict，Candidate 转一下再转回来。
-        kept, dropped = drop_stale(self.pg, [_as_mapping(c) for c in hybrid.candidates])
+        kept, dropped = drop_stale(
+            self.pg, [_as_mapping(c) for c in hybrid.candidates]
+        )
         kept_ids = {row["chunk_id"] for row in kept}
         guarded = [c for c in hybrid.candidates if c.chunk_id in kept_ids]
         dropped_ids = [row["chunk_id"] for row in dropped]
@@ -284,7 +325,7 @@ class RetrievalPipeline:
         previous_entities: Sequence[str] | None = None,
         time_range: Any = None,
     ) -> RetrievalSnapshot:
-        """复合问逐项独立检索；单问保持原链路。"""
+        """复合问逐项独立检索；单问保持原链路。."""
         decomposition = decompose_question(question)
         if not decomposition.is_compound:
             return self._run_single(
@@ -320,7 +361,7 @@ class RetrievalPipeline:
         time_range: Any,
         decomposition: Decomposition,
     ) -> RetrievalSnapshot:
-        """一句问话 → 一个判定（§8.4 的五态之一）。
+        """一句问话 → 一个判定（§8.4 的五态之一）。.
 
         `time_range` 显式传进来的优先级高于问句里归一出来的时间窗：前端给的
         `time_range` 是用户点选的结果，比从自然语言里猜出来的更权威。
@@ -343,8 +384,14 @@ class RetrievalPipeline:
                 question, plan, "超出库范围，未检索", started
             )
 
-        effective_range = time_range if time_range is not None else (
-            plan.temporal.document_ranges[0] if plan.temporal and plan.temporal.document_ranges else plan.time.range
+        effective_range = (
+            time_range
+            if time_range is not None
+            else (
+                plan.temporal.document_ranges[0]
+                if plan.temporal and plan.temporal.document_ranges
+                else plan.time.range
+            )
         )
         effective_doc_keys = tuple(doc_keys) if doc_keys is not None else None
         if not effective_doc_keys and effective_range is not None:
@@ -357,7 +404,9 @@ class RetrievalPipeline:
             if selected:
                 effective_doc_keys = selected
             else:
-                named_doc_keys = mentioned_doc_keys(question, all_doc_names(self.pg))
+                named_doc_keys = mentioned_doc_keys(
+                    question, all_doc_names(self.pg)
+                )
                 if named_doc_keys:
                     effective_doc_keys = named_doc_keys
                 else:
@@ -365,18 +414,30 @@ class RetrievalPipeline:
                     return self._reject_without_retrieval(
                         question, plan, "文档选择无命中", started
                     )
-        flt = build_filter(identity, time_range=effective_range, doc_keys=effective_doc_keys)
-        multi_entity = plan.mode == "multi" or len(plan.entities) >= self.multi_entity_threshold
-
-        candidates, rerank_outcome, texts, dropped, dense_count, sparse_count = self._retrieve_once(
-            plan, flt
+        flt = build_filter(
+            identity, time_range=effective_range, doc_keys=effective_doc_keys
         )
+        multi_entity = (
+            plan.mode == "multi"
+            or len(plan.entities) >= self.multi_entity_threshold
+        )
+
+        (
+            candidates,
+            rerank_outcome,
+            texts,
+            dropped,
+            dense_count,
+            sparse_count,
+        ) = self._retrieve_once(plan, flt)
         decision = decide(
             candidates,
             cfg=self.gate,
             entities=plan.entities,
             texts={cid: item.text for cid, item in texts.items()},
-            doc_names={c.doc_key: texts[c.chunk_id].doc_name for c in candidates},
+            doc_names={
+                c.doc_key: texts[c.chunk_id].doc_name for c in candidates
+            },
             multi_entity=multi_entity,
             degraded=rerank_outcome.degraded,
             degrade_reason=rerank_outcome.reason,
@@ -386,7 +447,11 @@ class RetrievalPipeline:
 
         multihop: MultiHopResult | None = None
         hop_count = 0
-        if decision.verdict == "pass" and plan.mode == "multi" and self.max_hops > 0:
+        if (
+            decision.verdict == "pass"
+            and plan.mode == "multi"
+            and self.max_hops > 0
+        ):
             # §8.3：预判多跳且第一跳已经过阈，才继续找。第一跳没过阈直接收口——
             # 那说明问题本身库里就没有，多跳只会多花三次检索。
             multihop = self._run_multihop(plan, flt, decision, texts)
@@ -397,7 +462,10 @@ class RetrievalPipeline:
                     cfg=self.gate,
                     entities=plan.entities,
                     texts={cid: item.text for cid, item in texts.items()},
-                    doc_names={c.doc_key: texts[c.chunk_id].doc_name for c in candidates},
+                    doc_names={
+                        c.doc_key: texts[c.chunk_id].doc_name
+                        for c in candidates
+                    },
                     multi_entity=multi_entity,
                     degraded=rerank_outcome.degraded,
                     degrade_reason=rerank_outcome.reason,
@@ -405,7 +473,10 @@ class RetrievalPipeline:
                     evidence_cap=self.rerank_top_n_max,
                 )
                 trace_event(
-                    "gate.decided", hop=hop_count, final=True, **decision.as_audit()
+                    "gate.decided",
+                    hop=hop_count,
+                    final=True,
+                    **decision.as_audit(),
                 )
 
         elapsed_ms = (time.perf_counter() - started) * 1000
@@ -454,7 +525,7 @@ class RetrievalPipeline:
         first: GateDecision,
         first_texts: dict[str, ChunkText],
     ) -> MultiHopResult:
-        """带着第一跳已查实的事实在同一套权限条件下继续找（§8.3）。
+        """带着第一跳已查实的事实在同一套权限条件下继续找（§8.3）。.
 
         每一跳都**重新召回、独立过阈**：不是复用第一跳的候选。复用的后果是
         "第一跳的证据决定了后面所有跳"——那正好是断链时想说清的那件事做不到。
@@ -463,11 +534,12 @@ class RetrievalPipeline:
         known_texts = dict(first_texts)
 
         def _missing() -> tuple[str, ...]:
-            """还缺哪些实体（按**实体**归并，而不是按表面写法）。
+            """还缺哪些实体（按**实体**归并，而不是按表面写法）。.
 
-            实测撞出来的死循环：`coverage_terms` 里同时有 `住宿费限额`（归一后）和
-            `住宿费`（原文）。第一跳命中了正文"住宿费标准"——`住宿费` 被覆盖了，
-            但 `住宿费限额` 没出现，于是缺口永远非空，多跳空转到 Max Hops。
+            实测撞出来的死循环：`coverage_terms` 里同时有 `住宿费限额`（归一后）
+            和 `住宿费`（原文）。第一跳命中了正文"住宿费标准"——`住宿费` 被
+            覆盖了，但 `住宿费限额` 没出现，于是缺口永远非空，多跳空转到
+            Max Hops。
 
             正确的口径是"这个**实体**有没有被覆盖"，而同一实体的多种写法是或的关系：
             任一写法出现即算覆盖。所以先把写法按实体分组，再看每组是否有一支命中。
@@ -482,21 +554,24 @@ class RetrievalPipeline:
         remaining = _missing()
 
         def gap_probe(_board: Any) -> Sequence[str]:
+            """Run gap_probe."""
             return _missing()
 
         def sub_questioner(entity: str) -> str:
             # 子问题只能是"原问 + 这个实体"：拼进改写过的检索串会丢掉时间窗之外
             # 的所有条件（§8.3"带黑板检索"），而拼进原文又会让实体被淹没。
+            """Run sub_questioner."""
             return f"{entity} {plan.retrieval_text}".strip()
 
         def runner(hop: int, sub_question: str, gap: str) -> HopOutcome:
+            """Run runner."""
             sub_plan = understand(
                 sub_question,
                 previous_entities=None,
                 time_llm=self.time_llm,
             )
-            candidates, outcome, texts, _dropped, _dense, _sparse = self._retrieve_once(
-                sub_plan, flt
+            candidates, outcome, texts, _dropped, _dense, _sparse = (
+                self._retrieve_once(sub_plan, flt)
             )
             hop_decision = decide(
                 candidates,
@@ -562,13 +637,12 @@ class RetrievalPipeline:
     def _clarify_without_retrieval(
         self, exc: NeedsClarification, question: str, started: float
     ) -> RetrievalSnapshot:
-        """指代不清 → 澄清（§6.1）。
+        """指代不清 → 澄清（§6.1）。.
 
         这里**不能**再调 `understand()`：它会再抛同一个 `NeedsClarification`
         （实测撞过——异常从"被接住"变成"从接住处再抛一次"，最终冒到 HTTP 层）。
         时间归一单独跑一次即可，它跟指代无关，也不会抛。
         """
-        from api.temporal import build_temporal_scope
         from api.time_range import normalise_time
 
         detail = f"指代「{exc.pronoun}」有 {len(exc.candidates)} 个候选，未检索"
@@ -603,8 +677,12 @@ class RetrievalPipeline:
     def _reject_without_retrieval(
         self, question: str, plan: QueryPlan, reason: str, started: float
     ) -> RetrievalSnapshot:
+        """Run _reject_without_retrieval."""
         trace_event(
-            "retrieval.short_circuit", mode="reject_none", reason=reason, question=question
+            "retrieval.short_circuit",
+            mode="reject_none",
+            reason=reason,
+            question=question,
         )
         decision = GateDecision(
             verdict="reject_none",
@@ -625,6 +703,7 @@ class RetrievalPipeline:
         )
 
     def close(self) -> None:
+        """Run close."""
         self.retriever.close()
         self.reranker.close()
 
@@ -635,6 +714,7 @@ def _combine_compound(
     decomposition: Decomposition,
     snapshots: tuple[RetrievalSnapshot, ...],
 ) -> RetrievalSnapshot:
+    """Run _combine_compound."""
     compound = aggregate_gates(decomposition, snapshots)
     first = snapshots[0]
     plan = replace(first.plan, original=question)
@@ -646,7 +726,7 @@ def _combine_compound(
                 seen.add(c.chunk_id)
                 candidates.append(c)
     elapsed_ms = sum(s.elapsed_ms for s in snapshots)
-    snapshot = RetrievalSnapshot(
+    return RetrievalSnapshot(
         plan=plan,
         decision=compound.decision,
         candidates=candidates,
@@ -660,17 +740,18 @@ def _combine_compound(
         multihop=None,
         compound=compound,
     )
-    return snapshot
+
 
 def _term_in(term: str, texts: dict[str, ChunkText]) -> bool:
+    """Run _term_in."""
     return any(term in item.text for item in texts.values())
 
 
 def _entity_groups(plan: QueryPlan) -> dict[str, tuple[str, ...]]:
-    """把同一实体的多种表面写法归到一组：{实体: (写法, ...)}。
+    """把同一实体的多种表面写法归到一组：{实体: (写法, ...)}。.
 
-    分组的依据是"谁是谁的前缀"：`住宿费` 是 `住宿费限额` 的前缀，两者是同一个实体
-    的两种写法；`交通费` 与 `住宿费` 互不为前缀，是两个实体。
+    分组的依据是"谁是谁的前缀"：`住宿费` 是 `住宿费限额` 的前缀，两者是同一个
+    实体的两种写法；`交通费` 与 `住宿费` 互不为前缀，是两个实体。
 
     为什么不用改写痕迹（`trace`）来分组：改写只记录了"被替换掉的词"，而同一实体
     还可能是"没被替换但同义"的写法（比如正文写"住宿费标准"、问句写"住宿费"），
@@ -681,19 +762,21 @@ def _entity_groups(plan: QueryPlan) -> dict[str, tuple[str, ...]]:
         forms = [
             term
             for term in plan.coverage_terms
-            if term == entity or entity.startswith(term) or term.startswith(entity)
+            if term == entity
+            or entity.startswith(term)
+            or term.startswith(entity)
         ]
         groups[entity] = tuple(dict.fromkeys(forms)) or (entity,)
     return groups
 
 
 def _entity_in(entity: str, texts: dict[str, ChunkText]) -> bool:
-    """兼容旧名（多跳的回调里曾用这个）。"""
+    """兼容旧名（多跳的回调里曾用这个）。."""
     return _term_in(entity, texts)
 
 
 def _as_mapping(candidate: Candidate) -> dict[str, Any]:
-    """`drop_stale` 只要求 chunk_id/doc_key/version_id 三个字段。"""
+    """`drop_stale` 只要求 chunk_id/doc_key/version_id 三个字段。."""
     return {
         "chunk_id": candidate.chunk_id,
         "doc_key": candidate.doc_key,
@@ -702,17 +785,21 @@ def _as_mapping(candidate: Candidate) -> dict[str, Any]:
 
 
 def _filter_json(flt: RetrievalFilter) -> dict[str, Any]:
+    """Run _filter_json."""
     from api.retrieval.hybrid import qdrant_filter_json
 
     return qdrant_filter_json(flt)
 
 
-def build_pipeline(settings: Any, pg: PgDatabase, llm: Any = None) -> RetrievalPipeline:
-    """按 `Settings` 造一条链路。装配只在这一处，路由与测试共用。
+def build_pipeline(
+    settings: Any, pg: PgDatabase, llm: Any = None
+) -> RetrievalPipeline:
+    """按 `Settings` 造一条链路。装配只在这一处，路由与测试共用。.
 
-    为什么要一个工厂而不是让路由自己 new 五个对象：这五个对象的参数全部来自配置，
-    散在路由里就会出现"某个路由忘了传 parent_child_keep，于是用默认值 2"——
-    而默认值与配置里的值不一致时，表现是"这段召回少了/多了几条"，没有报错。
+    为什么要一个工厂而不是让路由自己 new 五个对象：这五个对象的参数全部来自
+    配置，散在路由里就会出现"某个路由忘了传 parent_child_keep，于是用默认
+    值 2"——而默认值与配置里的值不一致时，表现是"这段召回少了/多了几条"，
+    没有报错。
     """
     return RetrievalPipeline(
         pg=pg,
@@ -750,7 +837,7 @@ def build_pipeline(settings: Any, pg: PgDatabase, llm: Any = None) -> RetrievalP
 
 
 def gate_config(settings: Any) -> GateConfig:
-    """`Settings` → `GateConfig`。门控的八个数只有这一个转换点。"""
+    """`Settings` → `GateConfig`。门控的八个数只有这一个转换点。."""
     return GateConfig(
         reject_none=settings.gate_reject_none,
         reject_low=settings.gate_reject_low,
@@ -764,10 +851,13 @@ def gate_config(settings: Any) -> GateConfig:
 
 
 __all__ = [
-    "EmbeddingUnavailable",
+    "EmbeddingUnavailableError",
     "QueryEmbedder",
     "RetrievalPipeline",
     "RetrievalSnapshot",
     "build_pipeline",
     "gate_config",
 ]
+
+# Backwards-compatible alias (N818: exception names use Error suffix).
+EmbeddingUnavailable = EmbeddingUnavailableError

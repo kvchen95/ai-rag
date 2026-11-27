@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""变异测试：把 A2 的关键判据逐个改坏，确认对应用例真的会红。
+"""变异测试：把 A2 的关键判据逐个改坏，确认对应用例真的会红。.
 
 **为什么必须做**：判据从没红过等于没有判据。这一卡里每一个判据都对应一条验收
 （bbox 可映射原页 / 三表示一致 / 数值对账失败不入库 / 字段缺失被拦），
@@ -34,7 +34,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 @dataclass(frozen=True, slots=True)
 class Mutation:
-    """一条变异：改哪个文件、改什么、跑哪些用例、期望红的原因。
+    """一条变异：改哪个文件、改什么、跑哪些用例、期望红的原因。.
 
     `needs_db` 的变异跑的是集成用例：没有真 PG 时它们会 **skip**，而 skip 的 rc
     也是 0。把 skip 当"检出"会让脚本在最需要它的时候（CI 没库）谎报全绿，所以
@@ -54,15 +54,20 @@ MUTATIONS: tuple[Mutation, ...] = (
     Mutation(
         key="rotation",
         path="api/parse/geometry.py",
-        old="        if self.rotation == 90:\n            return (y, self.user_height - x)",
+        old="        if self.rotation == 90:\n            return (y,"
+        " self.user_height - x)",
         new="        if self.rotation == 90:\n            return (x, y)",
-        tests=("api/tests/test_parse_geometry.py", "api/tests/test_parse_pipeline_e2e.py"),
+        tests=(
+            "api/tests/test_parse_geometry.py",
+            "api/tests/test_parse_pipeline_e2e.py",
+        ),
         why="旋转 90 度映射写错 → 旋转页 bbox 与未旋转页对不上",
     ),
     Mutation(
         key="rotation-inverse",
         path="api/parse/geometry.py",
-        old="        if self.rotation == 90:\n            return (self.user_height - y, x)",
+        old="        if self.rotation == 90:\n            return"
+        " (self.user_height - y, x)",
         new="        if self.rotation == 90:\n            return (y, x)",
         tests=("api/tests/test_parse_geometry.py",),
         why="逆映射写错 → 显示/阅读空间往返不闭合",
@@ -70,9 +75,13 @@ MUTATIONS: tuple[Mutation, ...] = (
     Mutation(
         key="header-footer",
         path="api/parse/layout.py",
-        old="            if require_margin and not in_margin_by_original.get(original, False):",
+        old="            if require_margin and not"
+        " in_margin_by_original.get(original, False):",
         new="            if False:",
-        tests=("api/tests/test_parse_layout.py", "api/tests/test_parse_pipeline_e2e.py"),
+        tests=(
+            "api/tests/test_parse_layout.py",
+            "api/tests/test_parse_pipeline_e2e.py",
+        ),
         why="去掉页边带判据 → 每页的章节标题与条款被当页眉删掉",
     ),
     Mutation(
@@ -94,7 +103,8 @@ MUTATIONS: tuple[Mutation, ...] = (
     Mutation(
         key="prose-guard",
         path="api/parse/layout.py",
-        old="    long_cells = sum(1 for text in texts if len(text) > TABLE_CELL_MAX_CHARS)",
+        old="    long_cells = sum(1 for text in texts if len(text) >"
+        " TABLE_CELL_MAX_CHARS)",
         new="    long_cells = 0",
         tests=("api/tests/test_parse_layout.py",),
         why="去掉「长单元格即非表格」→ 一段话被当成表格的一格",
@@ -110,7 +120,8 @@ MUTATIONS: tuple[Mutation, ...] = (
     Mutation(
         key="widen-expand",
         path="api/parse/model.py",
-        old="                if grid[r][c] is None:\n                    grid[r][c] = text",
+        old="                if grid[r][c] is None:\n                   "
+        " grid[r][c] = text",
         new="                grid[r][c] = text",
         tests=("api/tests/test_parse_tables.py",),
         why="合并格展开改成「后到先得」→ 左上角的值被覆盖",
@@ -118,7 +129,8 @@ MUTATIONS: tuple[Mutation, ...] = (
     Mutation(
         key="md-pipe-escape",
         path="api/parse/tables.py",
-        old='    return value.replace("\\\\", "\\\\\\\\").replace("|", "\\\\|")',
+        old='    return value.replace("\\\\", "\\\\\\\\").replace("|",'
+        ' "\\\\|")',
         new="    return value",
         tests=("api/tests/test_parse_tables.py",),
         why="md 不转义竖线 → 一行被切成更多列",
@@ -128,13 +140,17 @@ MUTATIONS: tuple[Mutation, ...] = (
         path="api/parse/figures_transcribe.py",
         old="        if not (PERCENT_SUM_MIN <= total <= PERCENT_SUM_MAX):",
         new="        if False:",
-        tests=("api/tests/test_parse_figures.py", "api/tests/test_parse_pipeline_e2e.py"),
+        tests=(
+            "api/tests/test_parse_figures.py",
+            "api/tests/test_parse_pipeline_e2e.py",
+        ),
         why="去掉占比求和检查 → 32 被读成 74 也能入库",
     ),
     Mutation(
         key="value-in-figure",
         path="api/parse/figures_transcribe.py",
-        old="    unmatched = [\n        value for value in values if not _value_supported(value, evidence, axis)\n    ]",
+        old="    unmatched = [\n        value for value in values if not"
+        " _value_supported(value, evidence, axis)\n    ]",
         new="    unmatched: list[float] = []",
         tests=("api/tests/test_parse_figures.py",),
         why="去掉「数值能在图上找到」→ 模型编的数字也能入库",
@@ -142,7 +158,8 @@ MUTATIONS: tuple[Mutation, ...] = (
     Mutation(
         key="label-in-figure",
         path="api/parse/figures_transcribe.py",
-        old="    missing_labels = [label for label in labels if not _label_supported(label, evidence)]",
+        old="    missing_labels = [label for label in labels if not"
+        " _label_supported(label, evidence)]",
         new="    missing_labels: list[str] = []",
         tests=("api/tests/test_parse_figures.py",),
         why="去掉标签检查 → 编造的类别名也能入库",
@@ -150,7 +167,9 @@ MUTATIONS: tuple[Mutation, ...] = (
     Mutation(
         key="acl-denied",
         path="api/parse/chunking.py",
-        old='        if not self.is_public and not self.allowed_depts and not self.allowed_roles:\n            missing.append("acl(everyone denied)")',
+        old='        if not self.is_public and not self.allowed_depts and not'
+        ' self.allowed_roles:\n            missing.append("acl(everyone'
+        ' denied)")',
         new="        pass",
         tests=("api/tests/test_parse_chunking.py",),
         why="放行「谁都看不到」的切片 → 六项校验少一项",
@@ -158,7 +177,8 @@ MUTATIONS: tuple[Mutation, ...] = (
     Mutation(
         key="page-num",
         path="api/parse/chunking.py",
-        old="        if not self.page_num or self.page_num < 1:\n            missing.append(\"page_num\")",
+        old='        if not self.page_num or self.page_num < 1:\n           '
+        ' missing.append("page_num")',
         new="        pass",
         tests=("api/tests/test_parse_chunking.py",),
         why="不校验页码 → 引用不能跳页的切片也能入库",
@@ -166,7 +186,8 @@ MUTATIONS: tuple[Mutation, ...] = (
     Mutation(
         key="year-matches-date",
         path="api/parse/chunking.py",
-        old="        if self.effective_date is not None and self.effective_year != self.effective_date // 10000:",
+        old="        if self.effective_date is not None and"
+        " self.effective_year != self.effective_date // 10000:",
         new="        if False:",
         tests=("api/tests/test_parse_chunking.py",),
         why="派生列不自洽 → 时间过滤按错误的年去筛",
@@ -222,7 +243,8 @@ MUTATIONS: tuple[Mutation, ...] = (
     Mutation(
         key="ocr-render-page",
         path="api/parse/ocr.py",
-        old="    image = render() if render is not None else _render_page(page, render_scale)",
+        old="    image = render() if render is not None else"
+        " _render_page(page, render_scale)",
         new="    image = _render_page(page, render_scale)",
         tests=("api/tests/test_parse_ocr.py",),
         why="不让调用方提供渲染器 → 拿 pdfplumber 的 Page 去 render，运行时崩",
@@ -230,7 +252,8 @@ MUTATIONS: tuple[Mutation, ...] = (
     Mutation(
         key="ocr-blocked",
         path="api/parse/reader.py",
-        old="    blocked = [] if draft.ocr_applied else list(draft.blocked_rects)",
+        old="    blocked = [] if draft.ocr_applied else"
+        " list(draft.blocked_rects)",
         new="    blocked = list(draft.blocked_rects)",
         tests=("api/tests/test_parse_ocr.py",),
         why="OCR 页仍按图区域遮挡 → 识别出的文字全被扣掉，一片都不入库",
@@ -273,7 +296,7 @@ MUTATIONS: tuple[Mutation, ...] = (
 
 
 def run_mutation(mutation: Mutation, workdir: Path) -> tuple[bool, str]:
-    """返回 (是否如期变红, 说明)。
+    """返回 (是否如期变红, 说明)。.
 
     **两种"绿"要分清楚**：一是用例真的通过（判据没被覆盖），二是用例被 **skip**
     （集成用例没有 DSN 就跳过）。两者 rc 都是 0，只看 rc 会把"没验到"当成
@@ -287,13 +310,24 @@ def run_mutation(mutation: Mutation, workdir: Path) -> tuple[bool, str]:
         return False, f"锚点未找到（{mutation.path}）：{mutation.old[:60]!r}"
     if mutation.needs_db and not _db_dsn():
         return False, (
-            "这条变异需要真 PG（集成用例会 skip），但没设 AI_RAG_TEST_DATABASE_URL/"
-            "DATABASE_URL —— 不把 skip 当检出"
+            "这条变异需要真 PG（集成用例会 skip），但没设 "
+            "AI_RAG_TEST_DATABASE_URL/DATABASE_URL —— 不把 skip 当检出"
         )
     try:
-        target.write_text(original.replace(mutation.old, mutation.new, 1), encoding="utf-8")
+        target.write_text(
+            original.replace(mutation.old, mutation.new, 1), encoding="utf-8"
+        )
         proc = subprocess.run(  # noqa: S603
-            [sys.executable, "-m", "pytest", "-c", "api/pytest.ini", "-x", "-q", *mutation.tests],
+            [
+                sys.executable,
+            "-m",
+            "pytest",
+            "-c",
+            "api/pytest.ini",
+            "-x",
+            "-q",
+                *mutation.tests,
+            ],
             cwd=workdir,
             capture_output=True,
             text=True,
@@ -302,23 +336,27 @@ def run_mutation(mutation: Mutation, workdir: Path) -> tuple[bool, str]:
         if proc.returncode == 0:
             skipped = "skipped" in proc.stdout
             return False, (
-                "变异后只用例被 skip 了（没有真 PG）—— 不算检出"
+            "变异后只用例被 skip 了（没有真 PG）—— 不算检出"
                 if skipped
                 else "变异后测试仍然全绿 —— 这条判据没有被任何用例覆盖"
             )
-        tail = [line for line in proc.stdout.splitlines() if "FAILED" in line or "passed" in line]
+        tail = [
+            line
+            for line in proc.stdout.splitlines()
+            if "FAILED" in line or "passed" in line
+        ]
         return True, tail[-1][:120] if tail else f"rc={proc.returncode}"
     finally:
         target.write_text(original, encoding="utf-8")
 
 
 def _db_dsn() -> str | None:
-    """集成用例认的那个 DSN（与 api/tests/conftest.py 的 `pg_dsn` 口径一致）。"""
+    """集成用例认的那个 DSN：口径与 conftest.py 的 `pg_dsn` 一致。."""
     return os.getenv("AI_RAG_TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
 
 
 def _pytest_env(mutation: Mutation) -> dict[str, str]:
-    """子进程环境：需要真库的变异把 DSN 传下去，其余沿用当前环境。
+    """子进程环境：需要真库的变异把 DSN 传下去，其余沿用当前环境。.
 
     不传 DSN 的话集成用例会 skip，rc 仍然是 0 —— 脚本会把"没验到"读成"没红"，
     进而报 `MUTATIONS NOT DETECTED`，看起来像判据失效，实际是环境没接上。
@@ -335,7 +373,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="A2 判据变异测试")
     ap.add_argument("--list", action="store_true", help="只列出变异，不执行")
     ap.add_argument("--only", help="只跑指定 key")
-    ap.add_argument("--keep", action="store_true", help="保留临时副本（调试用）")
+    ap.add_argument(
+        "--keep", action="store_true", help="保留临时副本（调试用）"
+    )
     args = ap.parse_args()
 
     selected = [m for m in MUTATIONS if args.only is None or m.key == args.only]
@@ -353,7 +393,14 @@ def main() -> int:
     shutil.copytree(
         REPO_ROOT,
         repo,
-        ignore=shutil.ignore_patterns(".git", "node_modules", "__pycache__", ".pytest_cache", ".ruff_cache", "web"),
+        ignore=shutil.ignore_patterns(
+            ".git",
+            "node_modules",
+            "__pycache__",
+            ".pytest_cache",
+            ".ruff_cache",
+            "web",
+        ),
     )
 
     failures: list[str] = []

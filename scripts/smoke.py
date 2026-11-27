@@ -2,15 +2,15 @@
 """End-to-end smoke test for the ai-rag local stack (stdlib only).
 
 Checks:
-  1. Qdrant /healthz
-  2. Postgres reachable through the api container's /healthz
-  3. Embedding service returns 512-dim L2-normalized vectors
-  4. Rerank service scores a relevant pair higher than an irrelevant one
-  5. Qdrant accepts a point with dense + BM25(sparse) in the same collection
-     and a dense+bm25 prefetch query with RRF fusion returns it
+1. Qdrant /healthz
+2. Postgres reachable through the api container's /healthz
+3. Embedding service returns 512-dim L2-normalized vectors
+4. Rerank service scores a relevant pair higher than an irrelevant one
+5. Qdrant accepts a point with dense + BM25(sparse) in the same collection
+and a dense+bm25 prefetch query with RRF fusion returns it
 
-Run with:  python3 scripts/smoke.py            (host ports from .env or defaults)
-           python3 scripts/smoke.py --in-docker (inside compose network)
+Run with:  python3 scripts/smoke.py            (host ports from .env or
+defaults) python3 scripts/smoke.py --in-docker (inside compose network)
 """
 
 from __future__ import annotations
@@ -37,7 +37,12 @@ def _get(url: str, timeout: float = 10.0) -> tuple[int, str]:
 
 def _post(url: str, payload: dict, timeout: float = 30.0) -> tuple[int, str]:
     data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url, data=data, method="POST", headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(
+        url,
+        data=data,
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.status, r.read().decode("utf-8", "replace")
@@ -47,7 +52,12 @@ def _post(url: str, payload: dict, timeout: float = 30.0) -> tuple[int, str]:
 
 def _put(url: str, payload: dict, timeout: float = 30.0) -> tuple[int, str]:
     data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url, data=data, method="PUT", headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(
+        url,
+        data=data,
+        method="PUT",
+        headers={"Content-Type": "application/json"},
+    )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.status, r.read().decode("utf-8", "replace")
@@ -57,7 +67,11 @@ def _put(url: str, payload: dict, timeout: float = 30.0) -> tuple[int, str]:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--in-docker", action="store_true", help="use compose-internal service names")
+    ap.add_argument(
+        "--in-docker",
+        action="store_true",
+        help="use compose-internal service names",
+    )
     args = ap.parse_args()
 
     if args.in_docker:
@@ -90,7 +104,10 @@ def main() -> int:
         failures.append("api healthz")
 
     # 3. embedding
-    code, body = _post(f"{embedding}/embeddings", {"input": ["2025年差旅住宿标准是多少", "差旅报销规定"], "model": "bge"})
+    code, body = _post(
+        f"{embedding}/embeddings",
+        {"input": ["2025年差旅住宿标准是多少", "差旅报销规定"], "model": "bge"},
+    )
     if code != 200:
         print(f"[3] embedding -> {code} {body[:200]}")
         failures.append("embedding")
@@ -107,7 +124,13 @@ def main() -> int:
     # 4. rerank
     code, body = _post(
         f"{rerank}/rerank",
-        {"query": "2025年差旅住宿标准是多少", "texts": ["住宿费每晚上限500元，超标自理。", "公司年度营收同比增长12%。"]},
+        {
+            "query": "2025年差旅住宿标准是多少",
+            "texts": [
+                "住宿费每晚上限500元，超标自理。",
+                "公司年度营收同比增长12%。",
+            ],
+        },
     )
     if code != 200:
         print(f"[4] rerank -> {code} {body[:200]}")
@@ -122,15 +145,30 @@ def main() -> int:
     # 5. Qdrant upsert (dense + server-side BM25 sparse) + hybrid RRF query
     if len(failures) == 0:
         point_id = 9000
-        dense_vec = json.loads(_post(f"{embedding}/embeddings", {"input": ["住宿费每晚上限500元，超标自理。"]})[1])["data"][0]["embedding"]
+        dense_vec = json.loads(
+            _post(
+                f"{embedding}/embeddings",
+                {"input": ["住宿费每晚上限500元，超标自理。"]},
+            )[1]
+        )["data"][0]["embedding"]
         code, body = _put(
             f"{qdrant}/collections/{collection}/points?wait=true",
             {
                 "points": [
                     {
                         "id": point_id,
-                        "vector": {"dense": dense_vec, "bm25": {"text": "住宿费每晚上限500元，超标自理。", "model": "qdrant/bm25"}},
-                        "payload": {"doc_key": "policy/travel-cn", "is_public": True, "effective_year": 2025},
+                        "vector": {
+                            "dense": dense_vec,
+                            "bm25": {
+                                "text": "住宿费每晚上限500元，超标自理。",
+                                "model": "qdrant/bm25",
+                            },
+                        },
+                        "payload": {
+                            "doc_key": "policy/travel-cn",
+                            "is_public": True,
+                            "effective_year": 2025,
+                        },
                     }
                 ]
             },
@@ -139,13 +177,22 @@ def main() -> int:
         if code != 200:
             failures.append("qdrant upsert")
         else:
-            query_dense = json.loads(_post(f"{embedding}/embeddings", {"input": ["差旅住宿标准"]})[1])["data"][0]["embedding"]
+            query_dense = json.loads(
+                _post(f"{embedding}/embeddings", {"input": ["差旅住宿标准"]})[1]
+            )["data"][0]["embedding"]
             code, body = _post(
                 f"{qdrant}/collections/{collection}/points/query",
                 {
                     "prefetch": [
                         {"query": query_dense, "using": "dense", "limit": 5},
-                        {"query": {"text": "差旅住宿标准", "model": "qdrant/bm25"}, "using": "bm25", "limit": 5},
+                        {
+                            "query": {
+                                "text": "差旅住宿标准",
+                                "model": "qdrant/bm25",
+                            },
+                            "using": "bm25",
+                            "limit": 5,
+                        },
                     ],
                     "query": {"fusion": "rrf"},
                     "limit": 3,
@@ -160,7 +207,9 @@ def main() -> int:
                 ids = [p["id"] for p in pts]
                 print(f"[5b] hybrid RRF query -> 200 ids={ids}")
                 if point_id not in ids:
-                    failures.append("hybrid query did not return the upserted point")
+                    failures.append(
+                        "hybrid query did not return the upserted point"
+                    )
 
     print()
     if failures:

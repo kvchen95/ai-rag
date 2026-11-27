@@ -20,7 +20,10 @@ def test_trace_writes_one_json_line_with_request_id(monkeypatch, tmp_path):
     finally:
         request_id_var.reset(token)
 
-    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    rows = [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+    ]
     assert len(rows) == 1
     assert rows[0]["request_id"] == "rid-1"
     assert rows[0]["event"] == "unit.event"

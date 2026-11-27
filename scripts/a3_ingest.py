@@ -1,30 +1,34 @@
 #!/usr/bin/env python3
-"""A3 运维入口：写向量、翻牌、同步、对账、回收（详细设计.md §4）。
+"""A3 运维入口：写向量、翻牌、同步、对账、回收（详细设计.md §4）。.
 
 子命令：
 
-    index     <version_id>            写 Qdrant 点（dense + bm25），回填 embedding_dense
-    promote   <version_id>            索引 -> 翻牌 -> 同步 -> 对账（一条命令把版本转正）
-    flip      <version_id>            只翻牌（旧版下线、新版生效、切片状态同步）
-    rollback  <version_id>            24h 内把旧版翻回生效
-    sync                              消费期望状态（改 payload.status / 删点）
-    reconcile [--doc-key K] [--dry-run] 两边对账；默认按 PG 修好
-    reclaim   [--doc-key K] [--dry-run] 删过窗口的旧版本（切片+点+图）
-    status                            一眼看现状：版本状态分布、待同步、未修漂移
+- `index <version_id>`：写 Qdrant 点（dense + bm25），回填 embedding_dense。
+- `promote <version_id>`：索引 -> 翻牌 -> 同步 -> 对账，一条命令把版本转正。
+- `flip <version_id>`：只翻牌（旧版下线、新版生效、切片状态同步）。
+- `rollback <version_id>`：24h 内把旧版翻回生效。
+- `sync`：消费期望状态（改 payload.status / 删点）。
+- `reconcile [--doc-key K] [--dry-run]`：两边对账，默认按 PG 修好。
+- `reclaim [--doc-key K] [--dry-run]`：删过窗口的旧版本（切片+点+图）。
+- `status`：一眼看现状：版本状态分布、待同步、未修漂移。
 
 设计取向：每个子命令都**可重复执行**，失败都有非零退出码。运维脚本最怕"跑完了
-不知道算不算成功"，所以每条路径都打印一行机器可读 JSON（`--json`）加一行人类摘要。
+不知道算不算成功"，所以每条路径都打印一行机器可读 JSON（`--json`）加一行人类
+摘要。
 
 用法（容器内，源码挂载所以改完即生效）：
 
     docker compose exec -T api python scripts/a3_ingest.py status
-    docker compose exec -T api python scripts/a3_ingest.py promote policy/travel-cn#7b0bcd16bc6b
+    docker compose exec -T api python scripts/a3_ingest.py promote \
+        policy/travel-cn#7b0bcd16bc6b
     docker compose exec -T api python scripts/a3_ingest.py reconcile --dry-run
-    docker compose exec -T api python scripts/a3_ingest.py reclaim --retention-hours 0
+    docker compose exec -T api python scripts/a3_ingest.py reclaim -h
 
 宿主也能跑（需要 psycopg / httpx 与可达的 PG/Qdrant）：
-    DATABASE_URL=postgresql://... QDRANT_URL=http://127.0.0.1:6333 \
-    EMBEDDING_BASE_URL=http://127.0.0.1:7997/v1 ... python scripts/a3_ingest.py status
+
+    export DATABASE_URL=postgresql://...
+    export QDRANT_URL=http://127.0.0.1:6333
+    python scripts/a3_ingest.py status
 """
 
 from __future__ import annotations
@@ -47,7 +51,11 @@ from api.ingest.pipeline import promote  # noqa: E402
 from api.ingest.reclaim import reclaim  # noqa: E402
 from api.ingest.reconcile import reconcile  # noqa: E402
 from api.ingest.sync import drain, pending_count  # noqa: E402
-from api.ingest.vectors import Embedder, QdrantVectorStore, index_version  # noqa: E402
+from api.ingest.vectors import (  # noqa: E402
+    Embedder,
+    QdrantVectorStore,
+    index_version,
+)
 
 EXIT_OK = 0
 EXIT_FAILED = 1
@@ -58,7 +66,11 @@ EXIT_USAGE = 2
 
 
 def normalise_dsn(dsn: str) -> str:
-    for prefix in ("postgresql+psycopg://", "postgresql+psycopg2://", "postgres+psycopg://"):
+    for prefix in (
+        "postgresql+psycopg://",
+        "postgresql+psycopg2://",
+        "postgres+psycopg://",
+    ):
         if dsn.startswith(prefix):
             return "postgresql://" + dsn[len(prefix) :]
     return dsn
@@ -81,8 +93,10 @@ def resolve_dsn(arg: str | None) -> str:
 
 def build_embedder(args: argparse.Namespace) -> Embedder:
     return Embedder(
-        base_url=args.embedding_url or os.getenv("EMBEDDING_BASE_URL", "http://127.0.0.1:7997/v1"),
-        model=args.embedding_model or os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-zh-v1.5"),
+        base_url=args.embedding_url
+        or os.getenv("EMBEDDING_BASE_URL", "http://127.0.0.1:7997/v1"),
+        model=args.embedding_model
+        or os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-zh-v1.5"),
         dim=args.dim or int(os.getenv("EMBEDDING_DIM", "512")),
         api_key=os.getenv("EMBEDDING_API_KEY", "local"),
         batch_size=args.batch_size,
@@ -91,8 +105,10 @@ def build_embedder(args: argparse.Namespace) -> Embedder:
 
 def build_store(args: argparse.Namespace) -> QdrantVectorStore:
     return QdrantVectorStore(
-        base_url=args.qdrant_url or os.getenv("QDRANT_URL", "http://127.0.0.1:6333"),
-        collection=args.collection or os.getenv("QDRANT_COLLECTION", "kb_chunks"),
+        base_url=args.qdrant_url
+        or os.getenv("QDRANT_URL", "http://127.0.0.1:6333"),
+        collection=args.collection
+        or os.getenv("QDRANT_COLLECTION", "kb_chunks"),
         api_key=os.getenv("QDRANT_API_KEY", ""),
     )
 
@@ -110,7 +126,9 @@ def emit(payload: dict, *, args: argparse.Namespace, human: str) -> None:
     else:
         print(human)
         if args.verbose:
-            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+            print(
+                json.dumps(payload, ensure_ascii=False, indent=2, default=str)
+            )
 
 
 # --- 子命令 -------------------------------------------------------------------
@@ -136,8 +154,10 @@ def cmd_index(args: argparse.Namespace) -> int:
             {"index": report.as_dict(), "ok": report.ok},
             args=args,
             human=(
-                f"indexed {report.points}/{report.rows} chunk(s) of {report.version_id} "
-                f"(skipped={len(report.skipped)}, dense_back={report.dense_written})"
+                f"indexed {report.points}/{report.rows} chunk(s) of "
+                f"{report.version_id} "
+                f"(skipped={len(report.skipped)}, "
+                f"dense_back={report.dense_written})"
             ),
         )
         return EXIT_OK if report.ok else EXIT_FAILED
@@ -187,13 +207,17 @@ def _promote_summary(payload: dict) -> str:
     drain_payload = payload.get("drain") or {}
     rec = payload.get("reconcile") or {}
     lines = [
-        f"promote {payload['version_id']}: {'OK' if payload['ok'] else 'FAILED'}",
-        f"  index    : points={index.get('points')}/{index.get('rows')} skipped={index.get('skipped')}",
+        f"promote {payload['version_id']}: "
+        f"{'OK' if payload['ok'] else 'FAILED'}",
+        f"  index    : points={index.get('points')}/{index.get('rows')} "
+        f"skipped={index.get('skipped')}",
         f"  flip     : previous={flip_payload.get('previous_active')} "
         f"activated_chunks={flip_payload.get('activated_chunks')}",
-        f"  sync     : done={drain_payload.get('done')} retried={drain_payload.get('retried')} "
+        f"  sync     : done={drain_payload.get('done')} "
+        f"retried={drain_payload.get('retried')} "
         f"failed={drain_payload.get('failed')}",
-        f"  reconcile: healed={rec.get('healed')} remaining={rec.get('remaining')} "
+        f"  reconcile: healed={rec.get('healed')} "
+        f"remaining={rec.get('remaining')} "
         f"drift={rec.get('drift_counts')}",
     ]
     if payload.get("error"):
@@ -212,25 +236,37 @@ def cmd_flip(args: argparse.Namespace) -> int:
             conn.commit()
         # 翻牌后立刻推一次同步：翻牌本身不做 Qdrant 调用（见 flip.py 说明），
         # 但运维命令跑完就该是"线上已经对了"的状态，否则要等 worker 的下一轮。
-        sync = drain(
-            pool,
-            store,
-            max_attempts=args.sync_max_attempts,
-            backoff_s=args.sync_backoff,
-        ) if not args.no_sync else None
-        payload = {"flip": result.as_dict(), "drain": sync.as_dict() if sync else None}
+        sync = (
+            drain(
+                pool,
+                store,
+                max_attempts=args.sync_max_attempts,
+                backoff_s=args.sync_backoff,
+            )
+            if not args.no_sync
+            else None
+        )
+        payload = {
+            "flip": result.as_dict(),
+            "drain": sync.as_dict() if sync else None,
+        }
         emit(
             payload,
             args=args,
             human=(
-                f"flipped {result.version_id} (previous={result.previous_active}, "
+                f"flipped {result.version_id} "
+                f"(previous={result.previous_active}, "
                 f"chunks={result.activated_chunks}, "
                 f"sync_done={sync.done if sync else 'skipped'})"
             ),
         )
         return EXIT_OK if (sync is None or sync.ok) else EXIT_FAILED
     except FlipError as exc:
-        emit({"ok": False, "error": str(exc)}, args=args, human=f"flip refused: {exc}")
+        emit(
+            {"ok": False, "error": str(exc)},
+            args=args,
+            human=f"flip refused: {exc}",
+        )
         return EXIT_FAILED
     finally:
         embedder.close()
@@ -247,11 +283,21 @@ def cmd_rollback(args: argparse.Namespace) -> int:
         with pool.connection() as conn:
             result = rollback_to(conn, args.version_id)
             conn.commit()
-        sync = drain(
-            pool, store, max_attempts=args.sync_max_attempts, backoff_s=args.sync_backoff
-        ) if not args.no_sync else None
+        sync = (
+            drain(
+                pool,
+                store,
+                max_attempts=args.sync_max_attempts,
+                backoff_s=args.sync_backoff,
+            )
+            if not args.no_sync
+            else None
+        )
         emit(
-            {"rollback": result.as_dict(), "drain": sync.as_dict() if sync else None},
+            {
+                "rollback": result.as_dict(),
+                "drain": sync.as_dict() if sync else None,
+            },
             args=args,
             human=(
                 f"rolled back to {result.restored} (demoted={result.demoted}, "
@@ -260,7 +306,11 @@ def cmd_rollback(args: argparse.Namespace) -> int:
         )
         return EXIT_OK if (sync is None or sync.ok) else EXIT_FAILED
     except FlipError as exc:
-        emit({"ok": False, "error": str(exc)}, args=args, human=f"rollback refused: {exc}")
+        emit(
+            {"ok": False, "error": str(exc)},
+            args=args,
+            human=f"rollback refused: {exc}",
+        )
         return EXIT_FAILED
     finally:
         embedder.close()
@@ -301,7 +351,11 @@ def cmd_reconcile(args: argparse.Namespace) -> int:
     try:
         with pool.connection() as conn:
             report = reconcile(
-                conn, store, doc_key=args.doc_key, dry_run=args.dry_run, log_drift=not args.no_log
+                conn,
+                store,
+                doc_key=args.doc_key,
+                dry_run=args.dry_run,
+                log_drift=not args.no_log,
             )
             conn.commit()
         payload = report.as_dict()
@@ -346,7 +400,10 @@ def cmd_reclaim(args: argparse.Namespace) -> int:
         sync = None
         if not args.dry_run and report.purged:
             sync = drain(
-                pool, store, max_attempts=args.sync_max_attempts, backoff_s=args.sync_backoff
+                pool,
+                store,
+                max_attempts=args.sync_max_attempts,
+                backoff_s=args.sync_backoff,
             )
         payload = report.as_dict()
         if sync is not None:
@@ -356,7 +413,8 @@ def cmd_reclaim(args: argparse.Namespace) -> int:
             args=args,
             human=(
                 f"reclaim{'(dry-run)' if args.dry_run else ''}: "
-                f"purged={report.purged} chunks={payload['chunks']} figures={payload['figures']} "
+                f"purged={report.purged} chunks={payload['chunks']} "
+                f"figures={payload['figures']} "
                 f"backfilled={report.skipped_unknown_time}"
                 + (f" sync_failed={sync.failed}" if sync else "")
             ),
@@ -387,9 +445,11 @@ WHERE status = 'active' AND (%(doc_key)s::text IS NULL OR doc_key = %(doc_key)s)
 GROUP BY 1 HAVING count(*) > 1
 """
 
-DRIFT_SQL = """
-SELECT kind, count(*) AS n FROM vector_drift_log WHERE NOT fixed GROUP BY 1 ORDER BY 1
-"""
+DRIFT_SQL = (
+                "\n"
+                "SELECT kind, count(*) AS n FROM vector_drift_log WHERE NOT "
+                "fixed GROUP BY 1 ORDER BY 1\n"
+            )
 
 
 def cmd_status(args: argparse.Namespace) -> int:
@@ -397,9 +457,14 @@ def cmd_status(args: argparse.Namespace) -> int:
     pool = build_pool(dsn)
     store = build_store(args)
     try:
-        with pool.connection() as conn, conn.cursor(row_factory=dict_row) as cur:
+        with (
+            pool.connection() as conn,
+            conn.cursor(row_factory=dict_row) as cur,
+        ):
             cur.execute(STATUS_SQL, {"doc_key": args.doc_key})
-            versions = {r["version_status"]: int(r["n"]) for r in cur.fetchall()}
+            versions = {
+                r["version_status"]: int(r["n"]) for r in cur.fetchall()
+            }
             cur.execute(CHUNK_STATUS_SQL, {"doc_key": args.doc_key})
             chunks = {r["chunk_status"]: int(r["n"]) for r in cur.fetchall()}
             cur.execute(ACTIVE_SQL, {"doc_key": args.doc_key})
@@ -436,62 +501,105 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--dsn", help="postgresql:// DSN (default: $DATABASE_URL)")
-    common.add_argument("--qdrant-url", help="default: $QDRANT_URL or http://127.0.0.1:6333")
-    common.add_argument("--collection", help="default: $QDRANT_COLLECTION or kb_chunks")
+    common.add_argument(
+        "--dsn", help="postgresql:// DSN (default: $DATABASE_URL)"
+    )
+    common.add_argument(
+        "--qdrant-url", help="default: $QDRANT_URL or http://127.0.0.1:6333"
+    )
+    common.add_argument(
+        "--collection", help="default: $QDRANT_COLLECTION or kb_chunks"
+    )
     common.add_argument("--embedding-url", help="default: $EMBEDDING_BASE_URL")
     common.add_argument("--embedding-model", help="default: $EMBEDDING_MODEL")
-    common.add_argument("--dim", type=int, help="default: $EMBEDDING_DIM or 512")
+    common.add_argument(
+        "--dim", type=int, help="default: $EMBEDDING_DIM or 512"
+    )
     common.add_argument("--batch-size", type=int, default=32)
     common.add_argument("--sync-max-attempts", type=int, default=4)
     common.add_argument("--sync-backoff", type=float, default=1.0)
-    common.add_argument("--json", action="store_true", help="print one JSON object")
+    common.add_argument(
+        "--json", action="store_true", help="print one JSON object"
+    )
     common.add_argument("--verbose", "-v", action="store_true")
 
-    ap = argparse.ArgumentParser(description="A3: 双向量入库 / 翻牌 / 同步 / 对账 / 回收")
+    ap = argparse.ArgumentParser(
+        description="A3: 双向量入库 / 翻牌 / 同步 / 对账 / 回收"
+    )
     sub = ap.add_subparsers(dest="command", required=True)
 
-    p = sub.add_parser("index", parents=[common], help="write dense+bm25 points for a version")
+    p = sub.add_parser(
+        "index", parents=[common], help="write dense+bm25 points for a version"
+    )
     p.add_argument("version_id")
     p.add_argument("--no-dense-backfill", action="store_true")
     p.set_defaults(func=cmd_index)
 
-    p = sub.add_parser("promote", parents=[common], help="index -> flip -> sync -> reconcile")
+    p = sub.add_parser(
+        "promote", parents=[common], help="index -> flip -> sync -> reconcile"
+    )
     p.add_argument("version_id")
     p.add_argument("--no-reconcile", action="store_true")
     p.set_defaults(func=cmd_promote)
 
-    p = sub.add_parser("flip", parents=[common], help="flip a pending version to active")
+    p = sub.add_parser(
+        "flip", parents=[common], help="flip a pending version to active"
+    )
     p.add_argument("version_id")
     p.add_argument("--no-sync", action="store_true")
     p.set_defaults(func=cmd_flip)
 
-    p = sub.add_parser("rollback", parents=[common], help="restore a deprecated version (24h window)")
+    p = sub.add_parser(
+        "rollback",
+        parents=[common],
+        help="restore a deprecated version (24h window)",
+    )
     p.add_argument("version_id")
     p.add_argument("--no-sync", action="store_true")
     p.set_defaults(func=cmd_rollback)
 
-    p = sub.add_parser("sync", parents=[common], help="push pending desired states to Qdrant")
+    p = sub.add_parser(
+        "sync", parents=[common], help="push pending desired states to Qdrant"
+    )
     p.add_argument("--limit", type=int, default=200)
     p.set_defaults(func=cmd_sync)
 
-    p = sub.add_parser("reconcile", parents=[common], help="diff PG vs Qdrant and heal")
+    p = sub.add_parser(
+        "reconcile", parents=[common], help="diff PG vs Qdrant and heal"
+    )
     p.add_argument("--doc-key")
     p.add_argument("--dry-run", action="store_true")
-    p.add_argument("--no-log", action="store_true", help="do not write vector_drift_log")
+    p.add_argument(
+        "--no-log", action="store_true", help="do not write vector_drift_log"
+    )
     p.set_defaults(func=cmd_reconcile)
 
-    p = sub.add_parser("reclaim", parents=[common], help="purge versions past the retention window")
+    p = sub.add_parser(
+        "reclaim",
+        parents=[common],
+        help="purge versions past the retention window",
+    )
     p.add_argument("--doc-key")
-    p.add_argument("--version-id", help="purge this version regardless of window (must be deprecated)")
-    p.add_argument("--retention-hours", type=int, default=int(os.getenv("VECTOR_RETENTION_HOURS", "24")))
+    p.add_argument(
+        "--version-id",
+        help="purge this version regardless of window (must be deprecated)",
+    )
+    p.add_argument(
+        "--retention-hours",
+        type=int,
+        default=int(os.getenv("VECTOR_RETENTION_HOURS", "24")),
+    )
     p.add_argument("--figures-dir", help="default: $FIGURES_DIR or figures")
-    p.add_argument("--no-figures", action="store_true", help="skip figure deletion")
+    p.add_argument(
+        "--no-figures", action="store_true", help="skip figure deletion"
+    )
     p.add_argument("--limit", type=int, default=100)
     p.add_argument("--dry-run", action="store_true")
     p.set_defaults(func=cmd_reclaim)
 
-    p = sub.add_parser("status", parents=[common], help="version/chunk/sync/drift overview")
+    p = sub.add_parser(
+        "status", parents=[common], help="version/chunk/sync/drift overview"
+    )
     p.add_argument("--doc-key")
     p.set_defaults(func=cmd_status)
 

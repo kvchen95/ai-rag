@@ -15,13 +15,13 @@ from api.generate.llm import Draft, Fact, LlmClient, parse_draft
 from api.retrieval.hybrid import Candidate
 from api.retrieval.texts import ChunkText
 from api.verify.checks import (
-    CHECKS,
     CHECK_CITATION_RANGE,
     CHECK_CONSISTENCY,
     CHECK_DRAFT_STATUS,
     CHECK_EVERY_CLAIM,
     CHECK_GROUNDING,
     CHECK_NLI,
+    CHECKS,
     FALLBACK_ORIGINAL_ONLY,
     TIER_BY_CHECK,
     check_citation_range,
@@ -32,7 +32,13 @@ from api.verify.checks import (
 )
 
 
-def _cand(chunk_id: str, *, doc_key: str = "policy/travel", page_num: int = 47, score: float = 0.62) -> Candidate:
+def _cand(
+    chunk_id: str,
+    *,
+    doc_key: str = "policy/travel",
+    page_num: int = 47,
+    score: float = 0.62,
+) -> Candidate:
     return Candidate(
         chunk_id=chunk_id,
         doc_key=doc_key,
@@ -44,7 +50,13 @@ def _cand(chunk_id: str, *, doc_key: str = "policy/travel", page_num: int = 47, 
     )
 
 
-def _text(chunk_id: str, body: str, *, doc_key: str = "policy/travel", page_num: int = 47) -> ChunkText:
+def _text(
+    chunk_id: str,
+    body: str,
+    *,
+    doc_key: str = "policy/travel",
+    page_num: int = 47,
+) -> ChunkText:
     return ChunkText(
         chunk_id=chunk_id,
         doc_key=doc_key,
@@ -61,7 +73,9 @@ def pack():
     return build_evidence_pack(
         [_cand("ch_a"), _cand("ch_b", page_num=48, score=0.55)],
         {
-            "ch_a": _text("ch_a", "住宿费标准：每人每天 500 元，按职级限额报销。"),
+            "ch_a": _text(
+                "ch_a", "住宿费标准：每人每天 500 元，按职级限额报销。"
+            ),
             "ch_b": _text("ch_b", "市内交通费单次不超过 100 元。", page_num=48),
         },
         max_chars=6000,
@@ -86,7 +100,8 @@ class _Judge(LlmClient):
         return f'{{"verdict":"{self.verdict}","reason":"stub"}}'
 
 
-# --- 第一道：引用的 evidence_id 存在 -------------------------------------------
+# --- 第一道：引用的 evidence_id 存在
+# -------------------------------------------
 
 
 def test_first_check_passes_when_every_evidence_id_exists(pack) -> None:
@@ -112,7 +127,8 @@ def test_first_check_scans_all_facts(pack) -> None:
     assert "ch_missing" in failure.offenders
 
 
-# --- 第二道：每条 fact 至少一个 evidence_id ------------------------------------
+# --- 第二道：每条 fact 至少一个 evidence_id
+# ------------------------------------
 
 
 def test_second_check_passes_when_every_fact_has_evidence(pack) -> None:
@@ -203,7 +219,9 @@ def test_fourth_check_fails_when_judge_says_not_supported(pack) -> None:
     assert report.gate2_verdict == "not_supported"
 
 
-def test_missing_judge_client_fails_closed_but_is_auditable_as_skipped(pack) -> None:
+def test_missing_judge_client_fails_closed_but_is_auditable_as_skipped(
+    pack,
+) -> None:
     report = verify_draft(
         _draft(Fact("每人每天 500 元", ("ch_a",))), pack, question="住宿标准"
     )
@@ -284,10 +302,16 @@ def test_fifth_check_allows_the_same_value_twice(pack) -> None:
 
 def test_checks_stop_at_the_first_failure(pack) -> None:
     report = verify_draft(
-        _draft(Fact("每人每天 500 元", ("ch_z",))), pack, question="q", judge_client=_Judge()
+        _draft(Fact("每人每天 500 元", ("ch_z",))),
+        pack,
+        question="q",
+        judge_client=_Judge(),
     )
     assert report.checks_run == (CHECK_CITATION_RANGE,)
-    assert report.failure is not None and report.failure.check == CHECK_CITATION_RANGE
+    assert (
+        report.failure is not None
+        and report.failure.check == CHECK_CITATION_RANGE
+    )
 
 
 def test_checks_run_in_the_documented_order(pack) -> None:
@@ -302,7 +326,10 @@ def test_checks_run_in_the_documented_order(pack) -> None:
 
 def test_all_five_run_on_a_clean_draft(pack) -> None:
     report = verify_draft(
-        _draft(Fact("每人每天 500 元", ("ch_a",))), pack, question="q", judge_client=_Judge()
+        _draft(Fact("每人每天 500 元", ("ch_a",))),
+        pack,
+        question="q",
+        judge_client=_Judge(),
     )
     assert report.passed is True
     assert report.checks_run == CHECKS
@@ -336,16 +363,23 @@ def test_content_failures_all_degrade_to_original_only(pack) -> None:
         _draft(Fact("每人每天 500 元", ("ch_z",))),
         _draft(Fact("每人每天 500 元", ("ch_a",)), Fact("另外还有餐补", ())),
         _draft(Fact("住宿费标准一般是 400 元", ("ch_a",))),
-        _draft(Fact("住宿费限额为 500 元", ("ch_a",)), Fact("住宿费限额为 800 元", ("ch_a",))),
+        _draft(
+            Fact("住宿费限额为 500 元", ("ch_a",)),
+            Fact("住宿费限额为 800 元", ("ch_a",)),
+        ),
     ]
     for draft in cases:
-        report = verify_draft(draft, pack, question="q", judge_client=_Judge("SUPPORTED"))
+        report = verify_draft(
+            draft, pack, question="q", judge_client=_Judge("SUPPORTED")
+        )
         if report.passed:
             continue
         assert report.fallback_tier == FALLBACK_ORIGINAL_ONLY
 
 
-def test_failed_verification_still_carries_evidence_for_the_original_text(pack) -> None:
+def test_failed_verification_still_carries_evidence_for_the_original_text(
+    pack,
+) -> None:
     report = verify_draft(
         _draft(Fact("住宿费标准一般是 400 元", ("ch_a",))),
         pack,
@@ -353,7 +387,9 @@ def test_failed_verification_still_carries_evidence_for_the_original_text(pack) 
         judge_client=_Judge("SUPPORTED"),
     )
     assert report.passed is False
-    assert report.cited_evidence, "校验不过时要带上被引证据，供 fallback 展示原文"
+    assert (
+        report.cited_evidence
+    ), "校验不过时要带上被引证据，供 fallback 展示原文"
     assert report.cited_evidence[0].chunk_id == "ch_a"
 
 
@@ -390,9 +426,13 @@ def test_report_audit_is_json_safe_and_names_the_failing_check(pack) -> None:
 
 def test_parse_then_verify_end_to_end(pack) -> None:
     draft = parse_draft(
-        '{"status":"answered","facts":[{"text":"根据经验，这类费用一般是 400 元","evidence_ids":["ch_a"]}]}'
+        '{"status":"answered",'
+        '"facts":[{"text":"根据经验，这类费用一般是 400 元",'
+        '"evidence_ids":["ch_a"]}]}'
     )
-    report = verify_draft(draft, pack, question="住宿标准", judge_client=_Judge())
+    report = verify_draft(
+        draft, pack, question="住宿标准", judge_client=_Judge()
+    )
     assert report.passed is False
     assert report.failure is not None
     assert report.failure.check == CHECK_GROUNDING

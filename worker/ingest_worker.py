@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""ai-rag 摄取 worker：把 `ingest_jobs` 从 queued 跑到 succeeded（详细设计.md §3.1）。
+"""ai-rag 摄取 worker：把 `ingest_jobs` 从 queued 跑到 succeeded。.
 
-链路是 claim -> 定位样本 -> parse_document -> 批量 INSERT chunks -> succeed_job。
+详细设计.md §3.1。链路是 claim -> 定位样本 -> parse_document -> 批量 INSERT
+chunks -> succeed_job。
 
 为什么没有 index 这一步
 ----------------------
 
-这里只产出 **pending** 切片，不写 Qdrant。写点、翻牌、同步是 A3 `promote()` 的事：
+这里只产出 **pending** 切片，不写 Qdrant。写点、翻牌、同步是 A3
+`promote()` 的事：
 Qdrant 没有事务，把写点和 PG 提交绑在同一个 worker 事务里，网络一抖就会出现
 "PG 说成功、点没写进去"的隐性漂移（见 `api/ingest/pipeline.py` 的注释）。
 worker 的角色是把材料变成可检索**候选**， promote 再一次性让它可见。
@@ -29,43 +31,55 @@ ACL 从样本路径规则来（`acl_for_sample`），绝不传 `Acl()`：空权�
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import logging
 import signal
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+# 按脚本路径启动（python worker/xxx.py）时也能导入 api 包。
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from api.clients.pg import PgDatabase  # noqa: E402
-from api.config import get_settings  # noqa: E402
-from api.ingest import jobs as job_store  # noqa: E402
-from api.ingest.fingerprint import (  # noqa: E402
+from api.clients.pg import PgDatabase
+from api.config import get_settings
+from api.ingest import jobs as job_store
+from api.ingest.fingerprint import (
     DocKeyNeedsPinyin,
     doc_key_for,
     file_hash,
     iter_sample_paths,
     version_id_for,
 )
-from api.observability import configure_logging, get_logger, log_event, log_exception  # noqa: E402
-from api.parse.chunking import Acl  # noqa: E402
-from api.parse.pipeline import MissingAcl, ParseOutcome, parse_document  # noqa: E402
+from api.observability import (
+    configure_logging,
+    get_logger,
+    log_event,
+    log_exception,
+)
+from api.parse.chunking import Acl
+from api.parse.pipeline import (
+    MissingAcl,
+    ParseOutcome,
+    parse_document,
+)
 
 logger = get_logger("worker.ingest")
 
-# 与 scripts/verify_parse_pipeline.py:91 / api/tests/test_parse_persist_integration.py
+# 与 scripts/verify_parse_pipeline.py:91 /
+# api/tests/test_parse_persist_integration.py
 # 同一份落库形状（含 004 迁移的 table_cells / notes）。
 INSERT_SQL = """
 INSERT INTO chunks (
     chunk_id, doc_key, version_id, chunk_type, parent_id, page_num, bbox,
     image_path, content_text, table_html, table_md, table_cells, notes,
     effective_date, effective_year,
-    date_confidence, is_public, allowed_depts, allowed_roles, token_count, status
+    date_confidence, is_public, allowed_depts, allowed_roles,
+    token_count, status
 ) VALUES (
     %(chunk_id)s, %(doc_key)s, %(version_id)s, %(chunk_type)s, %(parent_id)s,
     %(page_num)s, %(bbox)s::jsonb, %(image_path)s, %(content_text)s,
@@ -79,32 +93,64 @@ INSERT INTO chunks (
 # 幂等的落点：重跑同一个 version_id 时先删旧切片，再插新的。
 DELETE_VERSION_SQL = "DELETE FROM chunks WHERE version_id = %s"
 
-# 开发期 ACL 口径：`eval/golden_questions_v1.jsonl` 全部是 `pdf_reports/*` 研报，检索身份
-# 是 depts=('fin',) / roles=('staff',)（eval/run_eval.py 的 --dept/--role 默认值）。
+# 开发期 ACL 口径：`eval/golden_questions_v1.jsonl` 全部是 `pdf_reports/*`
+# 研报，检索身份是 depts=('fin',) / roles=('staff')
+# （eval/run_eval.py 的 --dept/--role 默认值）。
 # 所以研报给 fin+staff；原有 policy/hr/layout 样本保持 fin+hr+staff，避免把已有
 # 的可检索材料变成"谁都看不到"。未列出的目录必须报错，不给隐式放行。
 ACL_RULES: tuple[tuple[str, Acl], ...] = (
-    ("pdf_reports/", Acl(is_public=False, allowed_depts=("fin",), allowed_roles=("staff",))),
-    ("policy/", Acl(is_public=False, allowed_depts=("fin", "hr"), allowed_roles=("staff",))),
-    ("hr/", Acl(is_public=False, allowed_depts=("fin", "hr"), allowed_roles=("staff",))),
-    ("layout/", Acl(is_public=False, allowed_depts=("fin", "hr"), allowed_roles=("staff",))),
+    (
+        "pdf_reports/",
+        Acl(is_public=False, allowed_depts=("fin",), allowed_roles=("staff",)),
+    ),
+    (
+        "policy/",
+        Acl(
+            is_public=False,
+            allowed_depts=("fin", "hr"),
+            allowed_roles=("staff",),
+        ),
+    ),
+    (
+        "hr/",
+        Acl(
+            is_public=False,
+            allowed_depts=("fin", "hr"),
+            allowed_roles=("staff",),
+        ),
+    ),
+    (
+        "layout/",
+        Acl(
+            is_public=False,
+            allowed_depts=("fin", "hr"),
+            allowed_roles=("staff",),
+        ),
+    ),
 )
 
 
-class SampleNotFound(LookupError):
-    """样本目录里没有这条 job 对应的文件。"""
+class SampleNotFoundError(LookupError):
+    """样本目录里没有这条 job 对应的文件。."""
 
 
-class VersionMismatch(RuntimeError):
-    """文件还在，但字节变了（旧 version 的 job 不该拿新文件内容解析）。"""
+class VersionMismatchError(RuntimeError):
+    """文件还在，但字节变了（旧 version 的 job 不该拿新文件内容解析）。."""
 
 
-class UnsupportedSamplePath(ValueError):
-    """路径没有对应的 ACL 规则。宁可失败，也不猜一个权限。"""
+class UnsupportedSamplePathError(ValueError):
+    """路径没有对应的 ACL 规则。宁可失败，也不猜一个权限。."""
 
 
-class EmptyParse(RuntimeError):
-    """解析成功但一片都没切出来：翻牌会据此拒绝，worker 也不该记 succeeded。"""
+class EmptyParseError(RuntimeError):
+    """解析成功但一片都没切出来：翻牌会据此拒绝，worker 也不该记 succeeded。."""
+
+
+# 兼容旧名（api/tests 与历史脚本仍按下述名字导入）；新代码用 *Error。
+SampleNotFound = SampleNotFoundError
+VersionMismatch = VersionMismatchError
+UnsupportedSamplePath = UnsupportedSamplePathError
+EmptyParse = EmptyParseError
 
 
 Parser = Callable[..., ParseOutcome]
@@ -112,6 +158,7 @@ Parser = Callable[..., ParseOutcome]
 
 @dataclass(slots=True)
 class IngestOutcome:
+    """单条 job 的处理结果：状态、错误原因与是否可重试。."""
     job_id: int
     doc_key: str
     version_id: str
@@ -120,6 +167,7 @@ class IngestOutcome:
     error: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
+        """单条 job 处理结果的字典形式。."""
         return {
             "job_id": self.job_id,
             "doc_key": self.doc_key,
@@ -131,16 +179,20 @@ class IngestOutcome:
 
 
 def acl_for_sample(rel_path: str) -> Acl:
-    """按 `samples/` 下的相对路径选 ACL。显式、可枚举、不可隐式放行。"""
+    """按 `samples/` 下的相对路径选 ACL。显式、可枚举、不可隐式放行。."""
     normalized = rel_path.replace("\\", "/").lstrip("/")
     for prefix, acl in ACL_RULES:
         if normalized.startswith(prefix):
             return acl
-    raise UnsupportedSamplePath(f"no ACL rule for sample path: {rel_path}")
+    raise UnsupportedSamplePathError(
+        f"no ACL rule for sample path: {rel_path}"
+    )
 
 
-def find_sample(samples_root: Path, doc_key: str, version_id: str | None) -> Path:
-    """job 的 (doc_key, version_id) -> 样本文件。
+def find_sample(
+    samples_root: Path, doc_key: str, version_id: str | None
+) -> Path:
+    """Job 的 (doc_key, version_id) -> 样本文件。.
 
     没有直接用 `list_samples()`：它会为**每个**样本算 doc_key，其中中文文件名
     需要 pypinyin；少装一个依赖就让所有 ASCII job 一起卡住。这里逐文件算，缺
@@ -148,7 +200,7 @@ def find_sample(samples_root: Path, doc_key: str, version_id: str | None) -> Pat
     """
     root = samples_root.resolve()
     if not version_id:
-        raise VersionMismatch(f"{doc_key}: job has no version_id")
+        raise VersionMismatchError(f"{doc_key}: job has no version_id")
     for path in iter_sample_paths(root):
         rel = path.relative_to(root).as_posix()
         try:
@@ -159,15 +211,18 @@ def find_sample(samples_root: Path, doc_key: str, version_id: str | None) -> Pat
             continue
         expected = version_id_for(doc_key, file_hash(path))
         if expected != version_id:
-            raise VersionMismatch(
-                f"{doc_key}: job version {version_id} does not match on-disk {expected}"
+            raise VersionMismatchError(
+                f"{doc_key}: job version {version_id} does not match "
+                f"on-disk {expected}"
             )
         return path
-    raise SampleNotFound(f"{doc_key}: no sample under {root} matches this job")
+    raise SampleNotFoundError(
+        f"{doc_key}: no sample under {root} matches this job"
+    )
 
 
 def _insert_params(chunk: Any) -> dict[str, Any]:
-    """`Chunk.as_row()` -> psycopg 能直接吃的 dict（jsonb 列显式序列化）。"""
+    """`Chunk.as_row()` -> psycopg 能直接吃的 dict（jsonb 列显式序列化）。."""
     row = chunk.as_row()
     return {
         **row,
@@ -181,20 +236,28 @@ def _insert_params(chunk: Any) -> dict[str, Any]:
 
 
 def _error_text(exc: BaseException, *, prefix: str = "") -> str:
+    """把异常压成一行错误文本（带类名与截断的细节）。."""
     detail = str(exc).strip().replace("\n", " ")
-    text = f"{prefix}{type(exc).__name__}: {detail}" if detail else f"{prefix}{type(exc).__name__}"
+    text = (
+        f"{prefix}{type(exc).__name__}: {detail}"
+        if detail
+        else f"{prefix}{type(exc).__name__}"
+    )
     return text[:500]
 
 
 def _terminal_fail(pg: PgDatabase, job_id: int, error: str) -> None:
+    """把 job 标成终态失败并落错误原因。."""
     with pg.connection() as conn:
         job_store.terminal_fail_job(conn, job_id, error)
 
 
 def _fail(pg: PgDatabase, job_id: int, error: str, max_retries: int) -> str:
-    """返回 job 的新状态（queued 还能试，failed 是终态）。"""
+    """返回 job 的新状态（queued 还能试，failed 是终态）。."""
     with pg.connection() as conn:
-        status, retry_count = job_store.fail_job(conn, job_id, error, max_retries=max_retries)
+        status, retry_count = job_store.fail_job(
+            conn, job_id, error, max_retries=max_retries
+        )
     return status.value
 
 
@@ -208,9 +271,10 @@ def process_one(
     figures_dir: Path | None = None,
     max_retries: int = 3,
 ) -> IngestOutcome | None:
-    """领一条 queued job 并跑完整条链路。队列空返回 None。
+    """领一条 queued job 并跑完整条链路。队列空返回 None。.
 
-    `doc_key` 可选：定向处理某份文档（测试隔离、单文档重跑），不传就是全局 FIFO。
+    `doc_key` 可选：定向处理某份文档（测试隔离、单文档重跑），
+    不传就是全局 FIFO。
     `parser` / `acl_for` 是依赖注入点：测试用假 parser 验编排，生产用真解析器。
     """
     with pg.connection() as conn:
@@ -226,20 +290,37 @@ def process_one(
         path = find_sample(samples_root, doc_key, version_id)
         acl = acl_for(path.relative_to(samples_root.resolve()).as_posix())
         outcome = parser(
-            path, doc_key=doc_key, version_id=version_id, acl=acl, figures_dir=figures_dir
+            path,
+            doc_key=doc_key,
+            version_id=version_id,
+            acl=acl,
+            figures_dir=figures_dir,
         )
         chunks = list(outcome.chunks)
         if not chunks:
-            raise EmptyParse(f"{doc_key}: parser produced no chunks")
-    except (SampleNotFound, VersionMismatch, UnsupportedSamplePath, MissingAcl) as exc:
+            raise EmptyParseError(f"{doc_key}: parser produced no chunks")
+    except (
+        SampleNotFoundError,
+        VersionMismatchError,
+        UnsupportedSamplePathError,
+        MissingAcl,
+    ) as exc:
         error = _error_text(exc)
         _terminal_fail(pg, job_id, error)
-        log_event(logger, "ingest_terminal_failed", job_id=job_id, doc_key=doc_key, error=error)
+        log_event(
+            logger,
+            "ingest_terminal_failed",
+            job_id=job_id,
+            doc_key=doc_key,
+            error=error,
+        )
         return IngestOutcome(job_id, doc_key, version_id, "failed", 0, error)
     except Exception as exc:  # noqa: BLE001 - 解析异常要记进 job，不能让 worker 退出
         error = _error_text(exc, prefix="parse: ")
         status = _fail(pg, job_id, error, max_retries)
-        log_exception(logger, "ingest_parse_failed", job_id=job_id, doc_key=doc_key)
+        log_exception(
+            logger, "ingest_parse_failed", job_id=job_id, doc_key=doc_key
+        )
         return IngestOutcome(job_id, doc_key, version_id, status, 0, error)
 
     try:
@@ -252,19 +333,25 @@ def process_one(
     except Exception as exc:  # noqa: BLE001 - 落库异常同样要有明确失败原因
         error = _error_text(exc, prefix="persist: ")
         status = _fail(pg, job_id, error, max_retries)
-        log_exception(logger, "ingest_persist_failed", job_id=job_id, doc_key=doc_key)
+        log_exception(
+            logger, "ingest_persist_failed", job_id=job_id, doc_key=doc_key
+        )
         return IngestOutcome(job_id, doc_key, version_id, status, 0, error)
 
     log_event(
-        logger, "ingest_job_succeeded", job_id=job_id, doc_key=doc_key,
-        version_id=version_id, chunks=len(chunks),
+        logger,
+        "ingest_job_succeeded",
+        job_id=job_id,
+        doc_key=doc_key,
+        version_id=version_id,
+        chunks=len(chunks),
     )
     return IngestOutcome(job_id, doc_key, version_id, "succeeded", len(chunks))
 
 
 @dataclass(slots=True)
 class RoundReport:
-    """一轮消费的计数。failed 是终态失败，retried 是还能重试的失败。"""
+    """一轮消费的计数。failed 是终态失败，retried 是还能重试的失败。."""
 
     processed: int = 0
     succeeded: int = 0
@@ -274,9 +361,11 @@ class RoundReport:
 
     @property
     def ok(self) -> bool:
+        """本轮没有失败 job 即为 ok。."""
         return self.failed == 0
 
     def as_dict(self) -> dict[str, Any]:
+        """本轮统计的字典形式。."""
         return {
             "processed": self.processed,
             "succeeded": self.succeeded,
@@ -298,7 +387,10 @@ def run_once(
     figures_dir: Path | None = None,
     max_retries: int = 3,
 ) -> RoundReport:
-    """消费到队列空或达到 max_jobs。上限防止"失败后立刻回 queued"把单轮跑成死循环。"""
+    """消费到队列空或达到 max_jobs。.
+
+    上限防止"失败后立刻回 queued"把单轮跑成死循环。.
+    """
     report = RoundReport()
     for _ in range(max_jobs):
         outcome = process_one(
@@ -327,35 +419,58 @@ STOP = False
 
 
 def _handle_stop(signum: int, _frame: object) -> None:
+    """收到 SIGTERM/SIGINT 后置停止标志，跑完当前 job 再退。."""
     global STOP
-    logger.info("received signal %s, shutting down after the current round", signum)
+    logger.info(
+        "received signal %s, shutting down after the current round", signum
+    )
     STOP = True
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="consume ingest_jobs: parse -> persist -> succeed")
-    ap.add_argument("--once", action="store_true", help="drain the queue once, then exit")
-    ap.add_argument("--interval", type=float, default=None, help="poll interval in loop mode")
-    ap.add_argument("--max-jobs", type=int, default=500, help="cap for one round")
+    """入口：claim -> parse -> persist -> succeed 的主循环。."""
+    ap = argparse.ArgumentParser(
+        description="consume ingest_jobs: parse -> persist -> succeed"
+    )
+    ap.add_argument(
+        "--once", action="store_true", help="drain the queue once, then exit"
+    )
+    ap.add_argument(
+        "--interval",
+        type=float,
+        default=None,
+        help="poll interval in loop mode",
+    )
+    ap.add_argument(
+        "--max-jobs", type=int, default=500, help="cap for one round"
+    )
     ap.add_argument("--doc-key", help="only consume jobs for this doc_key")
     ap.add_argument("--samples-dir", help="override INGEST_SAMPLES_DIR")
     ap.add_argument("--figures-dir", help="override FIGURES_DIR")
-    ap.add_argument("--json", action="store_true", help="print the round report as JSON")
+    ap.add_argument(
+        "--json", action="store_true", help="print the round report as JSON"
+    )
     args = ap.parse_args(argv)
 
     settings = get_settings()
     configure_logging(
-        level=settings.log_level, service=f"{settings.service_name}-ingest-worker",
+        level=settings.log_level,
+        service=f"{settings.service_name}-ingest-worker",
         env=settings.app_env,
     )
     if args.json:
-        # 机器可读输出独占 stdout：结构化日志挪到 stderr，避免 JSON 里混进日志行。
+        # 机器可读输出独占 stdout：结构化日志挪到 stderr，
+        # 避免 JSON 里混进日志行。
         for handler in logging.getLogger().handlers:
             if getattr(handler, "_ai_rag_json", False) and isinstance(
                 handler, logging.StreamHandler
             ):
                 handler.setStream(sys.stderr)
-    interval = args.interval if args.interval is not None else settings.ingest_poll_interval_s
+    interval = (
+        args.interval
+        if args.interval is not None
+        else settings.ingest_poll_interval_s
+    )
     samples_root = Path(args.samples_dir or settings.ingest_samples_dir)
     figures_dir = Path(args.figures_dir or settings.figures_dir)
     max_retries = settings.ingest_max_retries
@@ -378,7 +493,10 @@ def main(argv: list[str] | None = None) -> int:
             log_exception(logger, "ingest_worker_ready_file_failed")
     pg.open()
     log_event(
-        logger, "ingest_worker_started", once=args.once, interval_s=interval,
+        logger,
+        "ingest_worker_started",
+        once=args.once,
+        interval_s=interval,
         samples_dir=str(samples_root),
     )
     try:
@@ -403,16 +521,26 @@ def main(argv: list[str] | None = None) -> int:
                     print(json.dumps(report.as_dict(), ensure_ascii=False))
                 else:
                     print(
-                        f"ingest-once: processed={report.processed} succeeded={report.succeeded} "
+                        f"ingest-once: processed={report.processed} "
+                        f"succeeded={report.succeeded} "
                         f"failed={report.failed} retried={report.retried}"
                     )
                 return 0 if report.ok else 1
 
             if report.processed:
-                log_event(logger, "ingest_round", **{
-                    key: getattr(report, key)
-                    for key in ("processed", "succeeded", "failed", "retried")
-                })
+                log_event(
+                    logger,
+                    "ingest_round",
+                    **{
+                        key: getattr(report, key)
+                        for key in (
+                            "processed",
+                            "succeeded",
+                            "failed",
+                            "retried",
+                        )
+                    },
+                )
             slept = 0.0
             while slept < interval and not STOP:
                 time.sleep(min(1.0, interval - slept))
@@ -422,10 +550,8 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         pg.close()
         if not args.once:
-            try:
+            with contextlib.suppress(OSError):
                 ready.unlink(missing_ok=True)
-            except OSError:
-                pass
         log_event(logger, "ingest_worker_stopped")
     return 0
 
@@ -434,8 +560,11 @@ __all__ = [
     "IngestOutcome",
     "RoundReport",
     "SampleNotFound",
+    "SampleNotFoundError",
     "UnsupportedSamplePath",
+    "UnsupportedSamplePathError",
     "VersionMismatch",
+    "VersionMismatchError",
     "acl_for_sample",
     "find_sample",
     "main",

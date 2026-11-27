@@ -109,7 +109,9 @@ def test_audit_snapshot_satisfies_qa_log_contract() -> None:
     settings = make_settings(AUTH_JWT_SECRET=SECRET)
     token = mint_dev_token(settings, user_id="u_x", depts=("fin",), admin=True)
     client = TestClient(_app())
-    body = client.get("/whoami", headers={"Authorization": f"Bearer {token}"}).json()
+    body = client.get(
+        "/whoami", headers={"Authorization": f"Bearer {token}"}
+    ).json()
     assert body["identity"]["admin"] is True
     entry = QaLogEntry(
         **body["audit"],
@@ -126,7 +128,9 @@ def test_admin_access_is_visible_in_both_filter_and_audit() -> None:
     settings = make_settings(AUTH_JWT_SECRET=SECRET)
     token = mint_dev_token(settings, user_id="u_admin", depts=(), admin=True)
     client = TestClient(_app())
-    body = client.get("/whoami", headers={"Authorization": f"Bearer {token}"}).json()
+    body = client.get(
+        "/whoami", headers={"Authorization": f"Bearer {token}"}
+    ).json()
     assert body["audit"]["is_admin"] is True
     assert body["filter"]["audit_flags"] == ["admin_access"]
     # 管理员不带 ACL 分支，但 status=active 仍在（版本兜底另算）。
@@ -134,7 +138,10 @@ def test_admin_access_is_visible_in_both_filter_and_audit() -> None:
 
 
 def test_no_depts_user_is_not_rejected() -> None:
-    """新入职没分配部门：能登录、能看公开，而不是 403。这条最容易被写成"拒绝"。"""
+    """新入职没分配部门：能登录、能看公开，而不是 403。
+
+    这条最容易被写成"拒绝"。
+    """
     settings = make_settings(AUTH_JWT_SECRET=SECRET)
     token = mint_dev_token(settings, user_id="u_new")
     client = TestClient(_app())
@@ -147,20 +154,34 @@ def test_no_depts_user_is_not_rejected() -> None:
 
 @pytest.mark.parametrize(
     "header",
-    ["", "Bearer", "Bearer not-a-jwt", "Basic dXNlcjpwYXNz", "Bearer " + "a" * 40],
+    [
+        "",
+        "Bearer",
+        "Bearer not-a-jwt",
+        "Basic dXNlcjpwYXNz",
+        "Bearer " + "a" * 40,
+    ],
 )
 def test_every_bad_authorization_shape_is_401(header: str) -> None:
     client = TestClient(_app())
-    resp = client.get("/whoami", headers={"Authorization": header} if header else {})
+    resp = client.get(
+        "/whoami", headers={"Authorization": header} if header else {}
+    )
     assert resp.status_code == 401
     assert resp.json()["error"]["code"] == "auth_invalid"
 
 
 def test_mock_header_mode_end_to_end() -> None:
-    client = TestClient(_app(AUTH_MODE="mock_header", AUTH_MOCK_USER_ID="u_mock"))
+    client = TestClient(
+        _app(AUTH_MODE="mock_header", AUTH_MOCK_USER_ID="u_mock")
+    )
     resp = client.get(
         "/whoami",
-        headers={"X-User-Id": "u_mock", "X-User-Depts": "hr", "X-User-Roles": "staff"},
+        headers={
+            "X-User-Id": "u_mock",
+            "X-User-Depts": "hr",
+            "X-User-Roles": "staff",
+        },
     )
     assert resp.status_code == 200
     body = resp.json()

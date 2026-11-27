@@ -1,4 +1,4 @@
-"""扫描判定（详细设计.md §3.1 的判定表 + §4.4 的重复入库口径）。
+"""扫描判定（详细设计.md §3.1 的判定表 + §4.4 的重复入库口径）。.
 
 把"这轮扫到这个文件该做什么"抽成纯函数，因为它是整张卡里最容易被改错的地方：
 判定表有五格，每格对应一种写库动作，混掉一格就会悄悄多出一个版本、或者把
@@ -45,7 +45,7 @@ from enum import StrEnum
 
 
 class VersionStatus(StrEnum):
-    """`doc_versions.status`（附录 A.2 / `ck_doc_versions_status`）。"""
+    """`doc_versions.status`（附录 A.2 / `ck_doc_versions_status`）。."""
 
     PENDING = "pending"
     ACTIVE = "active"
@@ -56,7 +56,7 @@ class VersionStatus(StrEnum):
 
 
 class Outcome(StrEnum):
-    """一文件的扫描结论。写库动作与报告口径都由它决定。"""
+    """一文件的扫描结论。写库动作与报告口径都由它决定。."""
 
     # 建文档 + 建 pending 版本 + 入队（documents 行这次新建 -> 报 added）
     ADD = "add"
@@ -69,7 +69,7 @@ class Outcome(StrEnum):
 
 
 class SkipReason(StrEnum):
-    """跳过/失败的原因码。机器可读，直接进响应与日志。"""
+    """跳过/失败的原因码。机器可读，直接进响应与日志。."""
 
     UNCHANGED = "unchanged"
     VERSION_FAILED = "version_failed"
@@ -94,7 +94,7 @@ REVERT_STATUSES: frozenset[str] = frozenset(
 def classify(
     *, doc_exists: bool, existing_status: str | None
 ) -> tuple[Outcome, SkipReason | None]:
-    """(文档是否已存在, 同指纹版本的状态) -> 该做什么。
+    """(文档是否已存在, 同指纹版本的状态) -> 该做什么。.
 
     `existing_status` 为 `None` 表示这个 (doc_key, file_hash) 还没有版本行。
     未知状态值会抛 `ValueError`——不替数据库猜枚举，让坏值在最早的地方炸。

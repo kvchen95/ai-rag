@@ -51,7 +51,11 @@ def main() -> int:
     if not args.dry_run and not args.apply:
         parser.error("use --dry-run or --apply")
 
-    pg = PgDatabase(os.getenv("DATABASE_URL", "postgresql://ai_rag:ai_rag@postgres:5432/ai_rag"))
+    pg = PgDatabase(
+        os.getenv(
+            "DATABASE_URL", "postgresql://ai_rag:ai_rag@postgres:5432/ai_rag"
+        )
+    )
     pg.open()
     try:
         rows = pg.fetch_all(_SQL)
@@ -67,7 +71,9 @@ def main() -> int:
                 report_period_end=str(row["report_period_end"]),
                 table_md=str(row["table_md"]),
                 unit=unit,
-                period_granularity=str(row.get("period_granularity") or "range"),
+                period_granularity=str(
+                    row.get("period_granularity") or "range"
+                ),
             )
             all_facts.extend(facts)
             print(f"{row['chunk_id']}: {len(facts)} facts")
@@ -83,7 +89,9 @@ def main() -> int:
         repo = TemporalFactRepository(pg)
         cleared = repo.clear_all()
         inserted = repo.upsert(all_facts)
-        print(f"applied: cleared {cleared} old facts, upserted {inserted} facts")
+        print(
+            f"applied: cleared {cleared} old facts, upserted {inserted} facts"
+        )
         return 0
     finally:
         pg.close()

@@ -1,12 +1,15 @@
-"""问答编排：§5–§10 一条链路，出口是 SSE 事件（详细设计.md §9 / §10 / 附录 C）。
+"""问答编排：§5–§10 一条链路，出口是 SSE 事件。.
 
-这个模块只做**编排**与**接口适配**，不实现任何一步的规则：检索归 `retrieval.pipeline`，
-证据包归 `generate.evidence`，五道校验归 `verify.checks`。它的职责是决定"哪一步的结果
-该走哪个出口"，以及把结果翻译成附录 C.2 的六类事件与一条 `qa_log`。
+出处：详细设计.md §9 / §10 / 附录 C。
+
+这个模块只做**编排**与**接口适配**，不实现任何一步的规则：检索归
+`retrieval.pipeline`，证据包归 `generate.evidence`，五道校验归
+`verify.checks`。它的职责是决定"哪一步的结果该走哪个出口"，以及把结果
+翻译成附录 C.2 的六类事件与一条 `qa_log`。
 
 出口映射（`decision.verdict` → 事件序列）是这一层的核心，写死在这里的理由是：
-它是**跨模块的契约**，散在两个地方写迟早出现"verdict=reject_low 但走了 fallback 的
-system 档"这种组合。
+它是**跨模块的契约**，散在两个地方写迟早出现"verdict=reject_low 但走了
+fallback 的 system 档"这种组合。
 
     pass      → step… → token* → citations → done(pass)
     partial   → step… → token* + 未覆盖说明 → citations → done(partial)
@@ -17,25 +20,28 @@ system 档"这种组合。
 
 四条取舍值得写下来：
 
-1. **`token` 在校验之后**。这不是放弃流式，而是 §10 的要求："答案要等下一章校验
-   通过才算数"。代价是首字延迟包含生成与校验；收益是屏幕上不会出现一句后来被撤掉的
-   结论。生成本身是严格 JSON 的非流式调用（§9.2 的四个字段必须先拿到才能校验）。
-2. **系统陈述与模型主张分开**。未覆盖清单（§8.3）、证据超长说明（§9.3）、补年份
-   假设（§5.3）都是**系统**说的话，它们不需要引用。写进被校验正文会让第二道
-   （每句都要引用）判它们失败，而它们本来就不该被引用。所以它们作为 `token` 尾巴
-   发出，且不参与五道校验。
-3. **系统档（模型不可用/超时）不给原文**。§10.3 的原话是"一句稍后重试，不暴露内部
-   细节"：那一次我们连"证据是否相关"都没验证完，把原文推给用户等于用噪声掩盖故障。
-   档一（校验不过）才给原文——那时证据已经过门控且被精排选出来了。
-4. **一条流只有一个收尾**。`done` 在 `finally` 里发，异常路径也发：前端没有别的
-   "结束"信号，缺它就一直转圈。
+1. **`token` 在校验之后**。这不是放弃流式，而是 §10 的要求："答案要等下一章
+   校验通过才算数"。代价是首字延迟包含生成与校验；收益是屏幕上不会出现一句
+   后来被撤掉的结论。生成本身是严格 JSON 的非流式调用（§9.2 的四个字段必须
+   先拿到才能校验）。
+2. **系统陈述与模型主张分开**。未覆盖清单（§8.3）、证据超长说明（§9.3）、
+   补年份假设（§5.3）都是**系统**说的话，它们不需要引用。写进被校验正文会让
+   第二道（每句都要引用）判它们失败，而它们本来就不该被引用。所以它们作为
+   `token` 尾巴发出，且不参与五道校验。
+3. **系统档（模型不可用/超时）不给原文**。§10.3 的原话是"一句稍后重试，
+   不暴露内部细节"：那一次我们连"证据是否相关"都没验证完，把原文推给用户
+   等于用噪声掩盖故障。档一（校验不过）才给原文——那时证据已经过门控且被
+   精排选出来了。
+4. **一条流只有一个收尾**。`done` 在 `finally` 里发，异常路径也发：前端没有
+   别的"结束"信号，缺它就一直转圈。
 """
 
 from __future__ import annotations
 
 import time
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Callable, Sequence
+from typing import Any
 
 from api.audit import QaLogEntry
 from api.errors import ErrorCode, spec_for
@@ -50,7 +56,6 @@ from api.generate.llm import (
 )
 from api.identity import IdentitySnapshot
 from api.observability import get_logger, log_event
-from api.trace import trace as trace_event
 from api.qa import events as ev
 from api.qa.events import SseEvent
 from api.retrieval.pipeline import RetrievalPipeline, RetrievalSnapshot
@@ -58,11 +63,13 @@ from api.retrieval.texts import doc_names, fetch_texts
 from api.temporal.context import merge_evidence, temporal_evidence
 from api.temporal.query import resolve_fact_query
 from api.temporal.repository import TemporalFactRepository
+from api.trace import trace as trace_event
 from api.verify.checks import VerificationReport, verify_draft
 
 logger = get_logger("api.qa.orchestrator")
 
-# 最终判定词：§8.4 的门控五态 + 校验层的第六种出口（见 `api/qa/events.py::done`）。
+# 最终判定词：§8.4 的门控五态 + 校验层的第六种出口（见
+# `api/qa/events.py::done`）。
 VERDICT_UNVERIFIABLE = "unverifiable"
 
 # 用户文案一律取 §11.3 的表：文案与告警口径必须同源，这里不自己写一套。
@@ -80,7 +87,7 @@ FALLBACK_MESSAGES: dict[ErrorCode, str] = {
 
 @dataclass
 class QaOutcome:
-    """一次问答的终态。`audit` 是给 `AuditWriter` 的那一行。"""
+    """一次问答的终态。`audit` 是给 `AuditWriter` 的那一行。."""
 
     question: str
     verdict: str
@@ -101,23 +108,28 @@ class QaOutcome:
 
     @property
     def refused(self) -> bool:
+        """Run refused."""
         return self.error_code is not None
 
     @property
     def gate1_verdict(self) -> str:
-        """`qa_log.gate1_verdict` 的四取值（DB 的 CHECK 只认这四个）。
+        """`qa_log.gate1_verdict` 的四取值（DB 的 CHECK 只认这四个）。.
 
-        `partial` → `pass`：它过了门控（§8.4 说 partial 要带证据给下一步），未覆盖
-        清单进 `score_snapshot.uncovered`。
-        `unverifiable` → `pass`：门控放行了、校验拦住了。写成 reject_low 会污染
-        "低置信"的统计，而两者处置完全不同（一个有疑似文档、一个连答案都生成了）。
+        `partial` → `pass`：它过了门控（§8.4 说 partial 要带证据给下一步），
+        未覆盖清单进 `score_snapshot.uncovered`。`unverifiable` → `pass`：
+        门控放行了、校验拦住了。写成 reject_low 会污染"低置信"的统计，
+        而两者处置完全不同（一个有疑似文档、一个连答案都生成了）。
         """
-        return self.verdict if self.verdict in ("reject_none", "reject_low", "clarify") else "pass"
+        return (
+            self.verdict
+            if self.verdict in ("reject_none", "reject_low", "clarify")
+            else "pass"
+        )
 
 
 @dataclass(slots=True)
 class QaService:
-    """一条问答链路的全部依赖。字段就是依赖清单，没有隐藏单例。"""
+    """一条问答链路的全部依赖。字段就是依赖清单，没有隐藏单例。."""
 
     pipeline: RetrievalPipeline
     llm: LlmClient | None
@@ -140,7 +152,7 @@ class QaService:
         previous_entities: Sequence[str] | None = None,
         emit: Callable[[SseEvent], None] | None = None,
     ) -> QaOutcome:
-        """跑完一次问答，边跑边 `emit` 事件。
+        """跑完一次问答，边跑边 `emit` 事件。.
 
         为什么用回调而不是返回事件列表：`step` 必须在**进入阶段时**发出去
         （附录 C.2"进入阶段或跳次"），而列表要等全部跑完才能返回——那样前端在
@@ -150,12 +162,15 @@ class QaService:
         sent = 0
 
         def send(event: SseEvent) -> None:
+            """Run send."""
             nonlocal sent
             sent += 1
             if emit is not None:
                 emit(event)
 
-        outcome = QaOutcome(question=question, verdict="internal", identity=identity)
+        outcome = QaOutcome(
+            question=question, verdict="internal", identity=identity
+        )
         try:
             self._run(
                 question,
@@ -174,7 +189,12 @@ class QaService:
                 level=40,
                 error=f"{type(exc).__name__}: {str(exc)[:300]}",
             )
-            self._system_fallback(send, outcome, ErrorCode.INTERNAL, f"{type(exc).__name__}: {exc}")
+            self._system_fallback(
+                send,
+                outcome,
+                ErrorCode.INTERNAL,
+                f"{type(exc).__name__}: {exc}",
+            )
         finally:
             latency = (time.perf_counter() - started) * 1000
             outcome.latency_ms = latency
@@ -185,7 +205,9 @@ class QaService:
                     latency_ms=latency,
                     hop_count=outcome.hop_count,
                     verdict=outcome.verdict,
-                    code=None if outcome.error_code is None else outcome.error_code.value,
+                    code=None
+                    if outcome.error_code is None
+                    else outcome.error_code.value,
                     uncovered=uncovered,
                 )
             )
@@ -194,7 +216,9 @@ class QaService:
             trace_event(
                 "qa.exit",
                 verdict=outcome.verdict,
-                code=None if outcome.error_code is None else outcome.error_code.value,
+                code=None
+                if outcome.error_code is None
+                else outcome.error_code.value,
                 hops=outcome.hop_count,
                 latency_ms=round(latency, 1),
                 events_sent=sent,
@@ -217,6 +241,7 @@ class QaService:
         time_range: Any,
         previous_entities: Sequence[str] | None,
     ) -> None:
+        """Run _run."""
         send(ev.step(ev.PHASE_RETRIEVAL, elapsed_ms=_ms(started)))
         snapshot = self.pipeline.run(
             question,
@@ -264,22 +289,36 @@ class QaService:
         if not pack:
             # 门控放行了但证据包是空的（候选都取不到正文）。这不是"模型没说好"，
             # 是"我们没东西给它"，所以按无证据收口，不去调模型烧一次 token。
-            self._emit_reject(send, outcome, snapshot, force_code=ErrorCode.NO_EVIDENCE)
+            self._emit_reject(
+                send, outcome, snapshot, force_code=ErrorCode.NO_EVIDENCE
+            )
             return
 
         notices = self._notices(pack, snapshot)
-        send(ev.step(ev.PHASE_GENERATE, hop=snapshot.hop_count, elapsed_ms=_ms(started)))
+        send(
+            ev.step(
+                ev.PHASE_GENERATE,
+                hop=snapshot.hop_count,
+                elapsed_ms=_ms(started),
+            )
+        )
         if self.llm is None:
             self._system_fallback(
-                send, outcome, ErrorCode.MODEL_TIMEOUT, "未配置生成模型（LLM_MODEL 为空）"
+                send,
+                outcome,
+                ErrorCode.MODEL_TIMEOUT,
+                "未配置生成模型（LLM_MODEL 为空）",
             )
             return
 
         try:
-            draft = generate_draft(self.llm, question, pack.render(), model=self.model_name)
+            draft = generate_draft(
+                self.llm, question, pack.render(), model=self.model_name
+            )
         except DraftFormatError as exc:
-            # §9.2："非 JSON / 缺字段 / answered 但空答案 → 降级"。落档一（只给原文）：
-            # 证据在手，用户读原文比读"稍后重试"有用。档三留给真正的基础设施故障。
+            # §9.2："非 JSON / 缺字段 / answered 但空答案 → 降级"。
+            # 落档一（只给原文）：证据在手，用户读原文比读"稍后重试"有用。
+            # 档三留给真正的基础设施故障。
             log_event(logger, "draft_format_error", level=30, reason=exc.reason)
             self._emit_verification_failure(
                 send,
@@ -291,12 +330,20 @@ class QaService:
             )
             return
         except GenerationUnavailable as exc:
-            self._system_fallback(send, outcome, ErrorCode.MODEL_TIMEOUT, str(exc))
+            self._system_fallback(
+                send, outcome, ErrorCode.MODEL_TIMEOUT, str(exc)
+            )
             return
 
         trace_event("qa.draft", **draft.as_audit())
-        send(ev.step(ev.PHASE_VERIFY, hop=snapshot.hop_count, elapsed_ms=_ms(started)))
-        report = verify_draft(draft, pack, question=question, judge_client=self.judge_client)
+        send(
+            ev.step(
+                ev.PHASE_VERIFY, hop=snapshot.hop_count, elapsed_ms=_ms(started)
+            )
+        )
+        report = verify_draft(
+            draft, pack, question=question, judge_client=self.judge_client
+        )
         outcome.verification = report
         outcome.judge = report.judge
         trace_event("qa.verify", **report.as_audit())
@@ -307,7 +354,9 @@ class QaService:
                 pack,
                 notices,
                 code=report.error_code or ErrorCode.UNVERIFIABLE,
-                detail=report.failure.detail if report.failure else "校验未通过",
+                detail=report.failure.detail
+                if report.failure
+                else "校验未通过",
                 report=report,
             )
             return
@@ -326,7 +375,10 @@ class QaService:
         notices: tuple[str, ...],
         draft: Draft,
     ) -> None:
-        """校验通过：逐字 → 系统陈述 → 引用（附录 C.2 的 token* → citations）。"""
+        """校验通过：逐字 → 系统陈述 → 引用。.
+
+        对应附录 C.2 的 token* → citations。
+        """
         answer = report.answer
         outcome.answer = answer
         outcome.notices = notices
@@ -335,7 +387,9 @@ class QaService:
             send(ev.token(piece))
         for notice in notices:
             send(ev.token(notice))
-        send(ev.citations([item.as_citation() for item in report.cited_evidence]))
+        send(
+            ev.citations([item.as_citation() for item in report.cited_evidence])
+        )
         outcome.detail = (
             f"checks={len(report.checks_run)} judge={report.gate2_verdict} "
             f"evidence={pack.n_items} facts={len(draft.facts)}"
@@ -355,10 +409,13 @@ class QaService:
         outcome: QaOutcome,
         snapshot: RetrievalSnapshot,
     ) -> None:
+        """Run _emit_clarify."""
         decision = snapshot.decision
         options = [opt.as_dict() for opt in decision.clarify_options]
         question = (
-            "请确认要查的是哪一份资料：" if options else "请补充查询条件（例如所属部门或年份）："
+            "请确认要查的是哪一份资料："
+            if options
+            else "请补充查询条件（例如所属部门或年份）："
         )
         outcome.verdict = "clarify"
         outcome.detail = decision.reason
@@ -372,17 +429,19 @@ class QaService:
         *,
         force_code: ErrorCode | None = None,
     ) -> None:
-        """门控拒答：不调模型、不发 token（§8.1 / §10.4）。
+        """门控拒答：不调模型、不发 token（§8.1 / §10.4）。.
 
-        疑似文档只来自 `decision.suspected_docs`——它由门控从**已过前置过滤**的候选
-        聚合而来（§8.1"≤3 份且都有权限"），所以这里不再筛一遍。
+        疑似文档只来自 `decision.suspected_docs`——它由门控从**已过前置过滤**的候
+        选聚合而来（§8.1"≤3 份且都有权限"），所以这里不再筛一遍。
         """
         decision = snapshot.decision
         code = force_code or decision.reject_code or ErrorCode.NO_EVIDENCE
         outcome.verdict = snapshot.verdict
         outcome.error_code = code
         outcome.detail = decision.reason
-        names = doc_names(self.pipeline.pg, [doc.doc_key for doc in decision.suspected_docs])
+        names = doc_names(
+            self.pipeline.pg, [doc.doc_key for doc in decision.suspected_docs]
+        )
         docs = [
             {
                 "doc_key": doc.doc_key,
@@ -412,13 +471,17 @@ class QaService:
         detail: str,
         report: VerificationReport | None = None,
     ) -> None:
-        """校验不过 / 输出不可用：档一"只给原文"，不发 token（§10.3）。
+        """校验不过 / 输出不可用：档一"只给原文"，不发 token（§10.3）。.
 
         档一与档三的区别就在 `docs`：这里有原文可给（证据已过门控并被选出来），
         档三（系统异常）没有。
         """
         outcome.error_code = code
-        outcome.verdict = VERDICT_UNVERIFIABLE if code is ErrorCode.UNVERIFIABLE else "reject_none"
+        outcome.verdict = (
+            VERDICT_UNVERIFIABLE
+            if code is ErrorCode.UNVERIFIABLE
+            else "reject_none"
+        )
         outcome.detail = detail
         outcome.notices = notices
         if report is not None:
@@ -453,17 +516,19 @@ class QaService:
         code: ErrorCode,
         detail: str,
     ) -> None:
-        """档三：系统异常。**不给原文**（§10.3"不暴露内部细节"）。"""
+        """档三：系统异常。**不给原文**（§10.3"不暴露内部细节"）。."""
         outcome.error_code = code
         if outcome.verdict in ("internal", "pass", "partial"):
-            outcome.verdict = "internal" if code is ErrorCode.INTERNAL else code.value
+            outcome.verdict = (
+                "internal" if code is ErrorCode.INTERNAL else code.value
+            )
         outcome.detail = detail
         send(ev.fallback(code.value, FALLBACK_MESSAGES[code], []))
 
     # --- 取数 -----------------------------------------------------------------
 
     def _build_pack(self, snapshot: RetrievalSnapshot) -> EvidencePack:
-        """证据包：候选 → 按类型取文本 → 同父片合并 → 封顶 6000 字 → 编号 1..n。
+        """证据包：候选→按类型取文本→同父片合并→封顶 6000 字→编号 1..n。.
 
         正文从 PG 再取一次（`pipeline` 内部的 `texts` 不外露）。多一次主键查询换
         一个干净的模块边界：证据包不该知道精排内部怎么存正文。
@@ -483,7 +548,7 @@ class QaService:
         snapshot: RetrievalSnapshot,
         pack: EvidencePack,
     ) -> EvidencePack:
-        """命中时序图时补充跨期事实；未命中保持原证据包。"""
+        """命中时序图时补充跨期事实；未命中保持原证据包。."""
         if self.temporal_repo is None or pack is None:
             return pack
         try:
@@ -513,8 +578,10 @@ class QaService:
             )
             return pack
 
-    def _notices(self, pack: EvidencePack, snapshot: RetrievalSnapshot) -> tuple[str, ...]:
-        """系统陈述，写在被校验正文之外（见模块头第 2 条）。
+    def _notices(
+        self, pack: EvidencePack, snapshot: RetrievalSnapshot
+    ) -> tuple[str, ...]:
+        """系统陈述，写在被校验正文之外（见模块头第 2 条）。.
 
         三句话各有硬要求：
         - 证据超长（§9.3"在答案里说明仅依据前 N 条"）
@@ -527,21 +594,26 @@ class QaService:
             notices.append(truncation)
         uncovered = tuple(snapshot.decision.uncovered)
         if uncovered:
-            notices.append(f"（以下问题本次未查到可验证依据：{'、'.join(uncovered)}）")
+            notices.append(
+                f"（以下问题本次未查到可验证依据：{'、'.join(uncovered)}）"
+            )
         time_note = getattr(snapshot.plan.time, "note", None)
         if time_note:
             notices.append(f"（时间口径：{time_note}）")
         return tuple(notices)
 
 
-def _audit_entry(outcome: QaOutcome, latency_ms: float, model: str) -> QaLogEntry:
-    """把一次问答翻译成 `qa_log` 的一行（附录 A.4 + §11.2）。
+def _audit_entry(
+    outcome: QaOutcome, latency_ms: float, model: str
+) -> QaLogEntry:
+    """把一次问答翻译成 `qa_log` 的一行（附录 A.4 + §11.2）。.
 
     四条配对口径都在这里落地（`QaLogEntry` 的模型校验会再拦一遍）：
     - 拒答（reject_*）必须带 `reject_reason`；
     - `no_evidence` / `low_confidence` 只能配拒答判定；
     - `unverifiable` 不能与 `gate2=supported` 并存；
-    - 只有校验通过的才写 `citations`（草稿被撤掉时那条映射不能留在审计里当"引用"）。
+    - 只有校验通过的才写 `citations`（草稿被撤掉时那条映射不能留在审计里当"引
+      用"）。
     """
     identity = outcome.identity
     if identity is None:  # pragma: no cover - `run()` 一定传了身份
@@ -560,7 +632,9 @@ def _audit_entry(outcome: QaOutcome, latency_ms: float, model: str) -> QaLogEntr
     passthrough = (
         None
         if outcome.verification is None or not outcome.verification.passed
-        else [item.as_citation() for item in outcome.verification.cited_evidence]
+        else [
+            item.as_citation() for item in outcome.verification.cited_evidence
+        ]
     )
     return QaLogEntry(
         **identity.to_audit(),
@@ -569,7 +643,9 @@ def _audit_entry(outcome: QaOutcome, latency_ms: float, model: str) -> QaLogEntr
         score_snapshot=score,
         gate1_verdict=outcome.gate1_verdict,  # type: ignore[arg-type]
         gate2_verdict=(
-            None if outcome.verification is None else outcome.verification.gate2_verdict  # type: ignore[arg-type]
+            None
+            if outcome.verification is None
+            else outcome.verification.gate2_verdict  # type: ignore[arg-type]
         ),
         hop_count=outcome.hop_count,
         answer=outcome.answer or None,
@@ -581,6 +657,7 @@ def _audit_entry(outcome: QaOutcome, latency_ms: float, model: str) -> QaLogEntr
 
 
 def _ms(started: float) -> float:
+    """Run _ms."""
     return (time.perf_counter() - started) * 1000
 
 

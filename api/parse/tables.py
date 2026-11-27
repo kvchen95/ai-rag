@@ -1,4 +1,4 @@
-"""表格三表示（详细设计.md §3.3）。
+"""表格三表示（详细设计.md §3.3）。.
 
 一份存档、两份派生，分工写死在这里，别处不再做转换：
 
@@ -33,9 +33,9 @@ table_html）都要靠它。
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Sequence
 from html import escape
 from html.parser import HTMLParser
-from typing import Iterable, Sequence
 
 from api.parse.model import TableCell, TableData, expand_to_matrix
 
@@ -50,7 +50,7 @@ _WS = re.compile(r"[ \t\u00a0]+")
 
 
 def clean_cell_text(text: str | None) -> str:
-    """单元格文本归一：去换行、收空白、去首尾。
+    """单元格文本归一：去换行、收空白、去首尾。.
 
     不做全角/半角转换、不做数字格式化——`table_cells` 是校验用的证据，
     改一个字符就可能让"数字能否在被引证据里定位"判错。
@@ -72,17 +72,19 @@ def render_html(
     *,
     header_inferred: bool = False,
 ) -> str:
-    """cells -> 保真 HTML。
+    """Cells -> 保真 HTML。.
 
     合并格按 (row, col) 落在网格上，被覆盖的格**不输出 `<td>`**——这正是 HTML
     表达合并的方式（`rowspan`/`colspan` 占位，其余格让位）。反过来若把被覆盖的
     格也输出，浏览器会把它挤到下一行，渲染出来的表整个错位。
 
-    表头 `<th>` 的条件：`is_header=True` 的格。`header_inferred`（首行推断成表头）
-    时仍然用 `<th>`：保真的意思是"我以为它是表头"，不是"它一定是表头"，
-    这个区分由 `header_inferred` 字段承载，不靠标签。
+    表头 `<th>` 的条件：`is_header=True` 的格。`header_inferred`
+    （首行推断成表头）时仍然用 `<th>`：保真的意思是"我以为它是表头"，
+    不是"它一定是表头"，这个区分由 `header_inferred` 字段承载，不靠标签。
     """
-    grid: list[list[TableCell | None]] = [[None] * col_count for _ in range(row_count)]
+    grid: list[list[TableCell | None]] = [
+        [None] * col_count for _ in range(row_count)
+    ]
     for cell in cells:
         if not (0 <= cell.row < row_count and 0 <= cell.col < col_count):
             raise ValueError(f"cell out of bounds: {cell.row},{cell.col}")
@@ -108,7 +110,9 @@ def render_html(
             if cell.col_span > 1:
                 attrs.append(f'colspan="{cell.col_span}"')
             for r in range(row, min(row_count, row + max(1, cell.row_span))):
-                for c in range(col, min(col_count, col + max(1, cell.col_span))):
+                for c in range(
+                    col, min(col_count, col + max(1, cell.col_span))
+                ):
                     if (r, c) != (row, col):
                         taken.add((r, c))
             attr_text = (" " + " ".join(attrs)) if attrs else ""
@@ -123,48 +127,63 @@ def render_html(
 # --- cells -> markdown ------------------------------------------------------
 
 
-def render_md(cells: Sequence[TableCell], row_count: int, col_count: int) -> str:
-    """cells -> Markdown 表。
+def render_md(
+    cells: Sequence[TableCell], row_count: int, col_count: int
+) -> str:
+    """Cells -> Markdown 表。.
 
     先 `expand_to_matrix` 再排成 md：合并格展开、空格补 `-`。转义 `|`：
-    单元格文本里真的有竖线（"标准 500|380"是真实写法），不转义会把一行切成更多列，
-    再解析回来列数就对不上了。
+    单元格文本里真的有竖线（"标准 500|380"是真实写法），不转义会把一行
+    切成更多列，再解析回来列数就对不上了。
     """
     if row_count <= 0 or col_count <= 0:
         return ""
     matrix = expand_to_matrix(cells, row_count, col_count, blank=BLANK_CELL)
-    rows = ["| " + " | ".join(_escape_md_cell(value) for value in row) + " |" for row in matrix]
+    rows = [
+        "| " + " | ".join(_escape_md_cell(value) for value in row) + " |"
+        for row in matrix
+    ]
     header_sep = "| " + " | ".join(["---"] * col_count) + " |"
     return "\n".join([rows[0], header_sep, *rows[1:]])
 
 
 def _escape_md_cell(value: str) -> str:
+    """Run _escape_md_cell."""
     return value.replace("\\", "\\\\").replace("|", "\\|")
 
 
 def parse_md(md: str) -> list[list[str]]:
-    """md 表 -> 矩阵。往返测试用，也是"md 可重建 cells"的可执行检查。
+    """Md 表 -> 矩阵。往返测试用，也是"md 可重建 cells"的可执行检查。.
 
     只认标准 GFM 形状（首行表头 + 分隔行 + 数据行）。畸形输入抛 `ValueError`
     而不是尽量猜：md 的列数不对时猜出来的表一定是错的，早炸比晚炸好。
     """
     lines = [line.strip() for line in md.strip().splitlines() if line.strip()]
     if len(lines) < 2:
-        raise ValueError(f"markdown table needs a header and a separator, got {len(lines)} line(s)")
+        raise ValueError(
+            "markdown table needs a header and a separator, "
+            f"got {len(lines)} line(s)"
+        )
     header = _split_md_row(lines[0])
     separator = _split_md_row(lines[1])
-    if len(header) != len(separator) or not all(set(cell) <= {"-", ":"} and cell for cell in separator):
+    if len(header) != len(separator) or not all(
+        set(cell) <= {"-", ":"} and cell for cell in separator
+    ):
         raise ValueError(f"malformed markdown separator row: {lines[1]!r}")
     rows = [header]
     for line in lines[2:]:
         cells = _split_md_row(line)
         if len(cells) != len(header):
-            raise ValueError(f"row has {len(cells)} cells, header has {len(header)}: {line!r}")
+            raise ValueError(
+                f"row has {len(cells)} cells, header has {len(header)}: "
+                f"{line!r}"
+            )
         rows.append(cells)
     return rows
 
 
 def _split_md_row(line: str) -> list[str]:
+    """Run _split_md_row."""
     if not line.startswith("|") or not line.endswith("|"):
         raise ValueError(f"markdown row must start and end with '|': {line!r}")
     body = line[1:-1]
@@ -190,13 +209,14 @@ def _split_md_row(line: str) -> list[str]:
 
 
 class _TableParser(HTMLParser):
-    """把 render_html 的输出还原成 cells（含 rowspan/colspan 的占位重建）。
+    """把 render_html 的输出还原成 cells（含 rowspan/colspan 的占位重建）。.
 
     只实现我们自己的输出形状，不做通用 HTML 表格解析：要通用就会引入
     "遇到不认识的标签怎么办"的一堆猜测，而这里的目标是往返一致。
     """
 
     def __init__(self) -> None:
+        """Initialize the instance."""
         super().__init__(convert_charrefs=True)
         self.rows: list[list[dict[str, object]]] = []
         self._row: list[dict[str, object]] | None = None
@@ -204,7 +224,10 @@ class _TableParser(HTMLParser):
         self._buffer: list[str] = []
         self._depth = 0
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+    def handle_starttag(
+        self, tag: str, attrs: list[tuple[str, str | None]]
+    ) -> None:
+        """Run handle_starttag."""
         if tag == "table":
             self._depth += 1
             return
@@ -224,6 +247,7 @@ class _TableParser(HTMLParser):
             self._buffer.append(" ")
 
     def handle_endtag(self, tag: str) -> None:
+        """Run handle_endtag."""
         if tag in {"td", "th"} and self._cell is not None:
             assert self._row is not None
             self._cell["text"] = "".join(self._buffer)
@@ -239,11 +263,13 @@ class _TableParser(HTMLParser):
             self._depth -= 1
 
     def handle_data(self, data: str) -> None:
+        """Run handle_data."""
         if self._cell is not None:
             self._buffer.append(data)
 
 
 def _as_int(value: str | None, default: int) -> int:
+    """Run _as_int."""
     if value is None:
         return default
     try:
@@ -253,7 +279,7 @@ def _as_int(value: str | None, default: int) -> int:
 
 
 def cells_from_html(html: str) -> tuple[list[TableCell], int, int]:
-    """HTML -> (cells, row_count, col_count)。
+    """HTML -> (cells, row_count, col_count)。.
 
     被 `rowspan`/`colspan` 覆盖的位置在 HTML 里没有标签，这里按占位表补回来——
     还原出来的 cells 与 `render_html` 的输入逐个相等（同一位置、同一 span）。
@@ -302,14 +328,16 @@ def build_table(
     header_inferred: bool = False,
     continued: bool = False,
 ) -> TableData:
-    """一次的入口：cells 进，三表示一起出。
+    """一次的入口：cells 进，三表示一起出。.
 
     `header_inferred`：首行被当表头用了（原文没有表头）。校验阶段据此决定
     要不要拿首行当字段名——它可能只是一行数据，拿它当字段名会让"数字定位"
     把 500 当成列名。
     """
     cell_list = tuple(cells)
-    html = render_html(cell_list, row_count, col_count, header_inferred=header_inferred)
+    html = render_html(
+        cell_list, row_count, col_count, header_inferred=header_inferred
+    )
     md = render_md(cell_list, row_count, col_count)
     return TableData(
         cells=cell_list,
@@ -323,11 +351,12 @@ def build_table(
 
 
 def table_content_text(table: TableData, *, title: str | None = None) -> str:
-    """表格切片的 `content_text`。
+    """表格切片的 `content_text`。.
 
-    **不是 md 原文**：`content_text` 要进 BM25 与向量，md 的竖线与分隔行是纯噪声。
-    这里按行拼成"自然语言"：`City: Shanghai | Lodging cap: 500 | Region: tier-1`，
-    表头作为键——这样"上海住宿限额多少"这类问句在词法上能命中 `Shanghai` 与 `500`。
+    **不是 md 原文**：`content_text` 要进 BM25 与向量，md 的竖线与分隔行是
+    纯噪声。这里按行拼成"自然语言"：
+    `City: Shanghai | Lodging cap: 500 | Region: tier-1`，表头作为键——
+    这样"上海住宿限额多少"这类问句在词法上能命中 `Shanghai` 与 `500`。
 
     表头推断出来的（`header_inferred`）就不加键：拿一行数据当列名会让文本变成
     `500: 380 | tier-2: tier-3` 这种胡说。退化成"逐行空格连接"更诚实。
@@ -344,18 +373,20 @@ def table_content_text(table: TableData, *, title: str | None = None) -> str:
         if header is not None:
             pairs = [
                 f"{key}: {value}"
-                for key, value in zip(header, row)
+                for key, value in zip(header, row, strict=False)
                 if value and value != BLANK_CELL
             ]
             lines.append(" | ".join(pairs) if pairs else "")
         else:
-            joined = " ".join(value for value in row if value and value != BLANK_CELL)
+            joined = " ".join(
+                value for value in row if value and value != BLANK_CELL
+            )
             lines.append(joined)
     return "\n".join(line for line in lines if line.strip())
 
 
 def is_label_table(table: TableData) -> bool:
-    """单行单列表格（§3.3 边界表）：这种"表格"其实是标签，该转成一句文本。"""
+    """单行单列表格（§3.3 边界表）：这种"表格"其实是标签，该转成一句文本。."""
     return table.row_count <= 1 and table.col_count <= 1
 
 

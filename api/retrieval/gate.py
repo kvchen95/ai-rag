@@ -1,10 +1,11 @@
-"""三段门控（详细设计.md §8.1 / §8.2）。
+"""三段门控（详细设计.md §8.1 / §8.2）。.
 
 只看精排后的最高分，分三段处置。中间那一档的存在理由在文档里写得很清楚：
 "有一点像"和"完全没有"在用户那里的感受完全不同——前者该告诉他"可能有这几份"，
 后者只能说"库里没有"。
 
-五态出口（§8.4）：`pass` / `clarify` / `reject_none` / `reject_low` / `partial`。
+五态出口（§8.4）：
+`pass` / `clarify` / `reject_none` / `reject_low` / `partial`。
 
 为什么 `partial` 不在 `gate1` 上看分数：它只由多跳收敛情况产生（§8.3 三跳后仍缺
 一部分）。所以门控接受一个显式的 `partial_reason`，由编排层在多跳结束时传进来；
@@ -15,10 +16,10 @@
 1. **0.38–0.42 之间不单靠分数**（§8.1）。这个带由配置给（`gate_borderline_*`），
    落进带里必须看辅助条件：有效证据条数（复杂问题 ≥2 条且分属不同段落）、
    关键实体是否在证据里出现。
-2. **分数刚好低于 0.20 但关键词强命中 → 仍拒答**（§8.1 边界表）。关键词命中不构成
-   证据，所以这里**不看** BM25 分数——只有精排分能决定 verdict。这条最容易被
-   "优化召回"的人改坏，所以 `test_bm25_strength_never_overrides_gate` 用一条
-   BM25 分数极高的候选钉住它。
+2. **分数刚好低于 0.20 但关键词强命中 → 仍拒答**（§8.1 边界表）。关键词命中
+   不构成证据，所以这里**不看** BM25 分数——只有精排分能决定 verdict。这条最
+   容易被"优化召回"的人改坏，所以用一条 BM25 分数极高的候选钉住它
+   （`test_bm25_strength_never_overrides_gate`）。
 3. **最高分高但只有一条证据**：单事实放行，多实体拒答（§8.1 边界表）。
    "多实体"的判定来自 `QueryPlan.mode == "multi"` 或实体数 > 1。
 
@@ -29,11 +30,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Literal, Sequence
+from typing import Any, Literal
 
-from api.observability import get_logger, log_event
 from api.errors import ErrorCode
+from api.observability import get_logger, log_event
 from api.retrieval.hybrid import Candidate
 
 logger = get_logger("api.retrieval.gate")
@@ -52,7 +54,7 @@ VERDICTS: tuple[Verdict, ...] = (
 
 @dataclass(frozen=True, slots=True)
 class GateConfig:
-    """门控阈值。全部来自 `Settings`，这里不设默认值。
+    """门控阈值。全部来自 `Settings`，这里不设默认值。.
 
     做成独立 dataclass 而不是直接吃 `Settings`：门控的单测要能在没有完整配置
     （没有 PG/Qdrant/模型名）的情况下跑，而 `Settings` 是"缺一项就启动失败"的。
@@ -68,6 +70,7 @@ class GateConfig:
     evidence_min_paras: int
 
     def __post_init__(self) -> None:
+        """Run __post_init__."""
         if not (0 < self.reject_none < self.reject_low <= 1):
             raise ValueError(
                 f"门控阈值必须 0 < reject_none < reject_low <= 1，"
@@ -75,12 +78,13 @@ class GateConfig:
             )
         if self.borderline_low >= self.borderline_high:
             raise ValueError(
-                f"临界带必须递增，实际 [{self.borderline_low}, {self.borderline_high}]"
+                f"临界带必须递增，实际 "
+                f"[{self.borderline_low}, {self.borderline_high}]"
             )
 
     @property
     def effective_borderline(self) -> tuple[float, float] | None:
-        """裁到门控区间内的临界带；裁剪后为空则返回 None（= 不做临界带判定）。
+        """裁到门控区间内的临界带；裁剪后为空则返回 None（= 不做临界带判定）。.
 
         为什么裁剪而不是拒绝：门控阈值随模型与语料重标定（§12.2 波谷法），
         `0.38–0.42` 只是当前模型下的一个位置，不是真理。把三个数硬绑在一起会让
@@ -98,7 +102,7 @@ class GateConfig:
 
 @dataclass(frozen=True, slots=True)
 class ClarifyOption:
-    """§8.2：选项只能从检索到的事实里取，每个带一个可回填的参数。"""
+    """§8.2：选项只能从检索到的事实里取，每个带一个可回填的参数。."""
 
     label: str
     doc_key: str
@@ -107,22 +111,33 @@ class ClarifyOption:
     params: dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
-        return {"label": self.label, "doc_key": self.doc_key, "params": dict(self.params)}
+        """Run as_dict."""
+        return {
+            "label": self.label,
+            "doc_key": self.doc_key,
+            "params": dict(self.params),
+        }
 
 
 @dataclass(frozen=True, slots=True)
 class SuspectedDoc:
-    """拒答时给的疑似文档（§8.1：≤3 份，只含有权限文档）。"""
+    """拒答时给的疑似文档（§8.1：≤3 份，只含有权限文档）。."""
 
     doc_key: str
     best_score: float
 
     def as_dict(self) -> dict[str, Any]:
-        return {"doc_key": self.doc_key, "best_score": round(self.best_score, 6)}
+        """Run as_dict."""
+        return {
+            "doc_key": self.doc_key,
+            "best_score": round(self.best_score, 6),
+        }
 
 
 @dataclass(frozen=True, slots=True)
 class GateDecision:
+    """GateDecision."""
+
     verdict: Verdict
     # 进证据包的候选。只有 pass / partial 有；其余为空。
     evidence: tuple[Candidate, ...] = ()
@@ -140,9 +155,10 @@ class GateDecision:
     uncovered: tuple[str, ...] = ()
     # 拒答原因码（§11.3）。由 `decide()` 按 verdict 填，不由调用方各写一份：
     # 两处各写迟早出现"verdict=reject_low 但 reason=no_evidence"的组合。
-    reject_code: "ErrorCode | None" = None
+    reject_code: ErrorCode | None = None
 
     def as_audit(self) -> dict[str, Any]:
+        """Run as_audit."""
         return {
             "verdict": self.verdict,
             "top1": None if self.top1 is None else round(self.top1, 6),
@@ -158,7 +174,7 @@ class GateDecision:
 
 
 def effective_score(candidate: Candidate) -> float:
-    """门控看的分数：精排分。没有精排分时是 0.0（不是融合分）。
+    """门控看的分数：精排分。没有精排分时是 0.0（不是融合分）。.
 
     为什么不用融合分兜底：融合分是名次的函数（k=1 时第一名恒为 1.0），拿它和
     0.20/0.40 比没有意义——任何候选只要排第一就"过阈"，门控等于不存在。
@@ -168,7 +184,7 @@ def effective_score(candidate: Candidate) -> float:
 
 
 def _distinct_paragraphs(evidence: Sequence[Candidate]) -> int:
-    """"分属不同段落"的可操作口径：(doc_key, page_num) 的去重数。
+    """分属不同段落"的可操作口径：(doc_key, page_num) 的去重数。.
 
     页是最接近"段落"的稳定标识：切片没有段落编号，而相邻子片往往同页；
     用 chunk_type 或 parent_id 都会把"同一页的两段"算成两段。
@@ -176,8 +192,12 @@ def _distinct_paragraphs(evidence: Sequence[Candidate]) -> int:
     return len({(item.doc_key, item.page_num) for item in evidence})
 
 
-def _entity_present(entities: Sequence[str], evidence: Sequence[Candidate], texts: dict[str, str]) -> bool:
-    """关键实体是否在证据里出现（§8.1 的第二个辅助条件）。
+def _entity_present(
+    entities: Sequence[str],
+    evidence: Sequence[Candidate],
+    texts: dict[str, str],
+) -> bool:
+    """关键实体是否在证据里出现（§8.1 的第二个辅助条件）。.
 
     实体一个都没抽到时返回 True——"没有可检查的实体"不等于"实体缺失"，
     顺手判 False 会让所有没抽到实体的问句一律拒答。
@@ -195,7 +215,7 @@ def decorate_clarify_options(
     max_options: int,
     reasons: Sequence[str] = (),
 ) -> tuple[ClarifyOption, ...]:
-    """从证据里生成澄清选项（§8.2）。
+    """从证据里生成澄清选项（§8.2）。.
 
     选项的两个字段都必须来自检索结果：
     - `label` = 文档标题（有就给）+ 命中页；不编造章节名——章节名在 payload 里
@@ -211,12 +231,19 @@ def decorate_clarify_options(
             continue
         seen.add(candidate.doc_key)
         name = doc_names.get(candidate.doc_key) or candidate.doc_key
-        label = f"{name}（第 {candidate.page_num} 页）" if candidate.page_num else name
+        label = (
+            f"{name}（第 {candidate.page_num} 页）"
+            if candidate.page_num
+            else name
+        )
         options.append(
             ClarifyOption(
                 label=label,
                 doc_key=candidate.doc_key,
-                params={"doc_keys": [candidate.doc_key], **({"reasons": list(reasons)} if reasons else {})},
+                params={
+                    "doc_keys": [candidate.doc_key],
+                    **({"reasons": list(reasons)} if reasons else {}),
+                },
             )
         )
         if len(options) >= max_options:
@@ -227,7 +254,7 @@ def decorate_clarify_options(
 def _needs_clarify(
     candidates: Sequence[Candidate], cfg: GateConfig
 ) -> tuple[bool, str]:
-    """条件缺失或多文档同分（§8.2 的两种触发情形）。
+    """条件缺失或多文档同分（§8.2 的两种触发情形）。.
 
     实现上只判第二种（"候选来自两份以上文档且分数接近"）：第一种（没说部门/年份）
     在检索前就已经由调用方处理了（缺条件该在 `understand()` 那侧触发澄清），
@@ -246,7 +273,10 @@ def _needs_clarify(
     ordered = sorted(by_doc.values(), reverse=True)
     delta = ordered[0] - ordered[1]
     if delta < cfg.clarify_score_delta:
-        return True, f"两份文档分数接近（Δ={delta:.3f} < {cfg.clarify_score_delta}）"
+        return (
+            True,
+            f"两份文档分数接近（Δ={delta:.3f} < {cfg.clarify_score_delta}）",
+        )
     return False, ""
 
 
@@ -263,14 +293,14 @@ def decide(
     uncovered: Sequence[str] = (),
     evidence_cap: int | None = None,
 ) -> GateDecision:
-    """一条判定（§8.1 / §8.2 / §8.4）。
+    """一条判定（§8.1 / §8.2 / §8.4）。.
 
-    `candidates` 必须已按精排分降序（`rerank_candidates()` 的产物）。这里不重排：
-    重排会让"取前 N"和"最高分"两个口径分裂成两处实现。
+    `candidates` 必须已按精排分降序（`rerank_candidates()` 的产物）。这里不
+    重排：重排会让"取前 N"和"最高分"两个口径分裂成两处实现。
 
-    `uncovered` 非空表示多跳已收敛但未覆盖全部 → `partial`。它优先于分数判定，
-    因为部分结论是有价值的（§8.3"断链时交出去的是已经查实的部分 + 断在哪一步"），
-    把它降级成 `reject_low` 会让用户看不到任何已查实的东西。
+    `uncovered` 非空表示多跳已收敛但未覆盖全部 → `partial`。它优先于分数
+    判定，因为部分结论是有价值的（§8.3"断链时交出去的是已经查实的部分 +
+    断在哪一步"），把它降级成 `reject_low` 会让用户看不到任何已查实的东西。
     """
     texts = texts or {}
     doc_names = doc_names or {}
@@ -292,9 +322,8 @@ def decide(
 
     # --- 第一段：无相关 ---
     if top1 < cfg.reject_none:
-        reason = (
-            f"top1={top1:.3f} < {cfg.reject_none}"
-            + ("（精排降级，分数不可用）" if not any_scored else "")
+        reason = f"top1={top1:.3f} < {cfg.reject_none}" + (
+            "（精排降级，分数不可用）" if not any_scored else ""
         )
         return GateDecision(
             verdict="reject_none",
@@ -308,8 +337,9 @@ def decide(
     # --- 临界带：用辅助条件**替代**分数判定（§8.1）---
     # §8.1 原话："最高分在 0.38–0.42 之间 → 按辅助条件决定，不单独靠分数"。
     # 所以这一带里辅助条件说了算：满足就当作过线，不满足就落 reject_low。
-    # 早先的写法是"判完辅助条件再继续走 `top1 < reject_low`"——那样 0.39 会因为
-    # 没到 0.40 被拒，辅助条件等于白判。"替代"与"补充"是两种语义，这里必须是替代。
+    # 早先的写法是"判完辅助条件再继续走 `top1 < reject_low`"——那样 0.39
+    # 会因为没到 0.40 被拒，辅助条件等于白判。"替代"与"补充"是两种语义，
+    # 这里必须是替代。
     #
     # 带宽由 `effective_borderline` 给出：门控阈值重标定后带宽会跟着裁，
     # 裁空了（None）就退化成纯阈值判定。
@@ -351,7 +381,10 @@ def decide(
         return GateDecision(
             verdict="reject_low",
             top1=top1,
-            reason=f"top1={top1:.3f} 落在 [{cfg.reject_none}, {cfg.reject_low})",
+            reason=(
+                f"top1={top1:.3f} 落在 "
+                f"[{cfg.reject_none}, {cfg.reject_low})"
+            ),
             borderline_used=borderline_used,
             suspected_docs=_suspects(items, cfg.suspected_docs_max),
             degraded=degraded,
@@ -366,7 +399,10 @@ def decide(
         return GateDecision(
             verdict="reject_low",
             top1=top1,
-            reason=f"多实体问题但只有 {distinct} 段证据（要求 >= {cfg.evidence_min_paras}）",
+            reason=(
+                f"多实体问题但只有 {distinct} 段证据"
+                f"（要求 >= {cfg.evidence_min_paras}）"
+            ),
             suspected_docs=_suspects(items, cfg.suspected_docs_max),
             degraded=degraded,
             degrade_reason=degrade_reason,
@@ -427,7 +463,7 @@ def decide(
 def _suspects(
     candidates: Sequence[Candidate], limit: int
 ) -> tuple[SuspectedDoc, ...]:
-    """拒答时给的疑似文档：按文档聚合取最高分，最多 `limit` 份（§8.1）。
+    """拒答时给的疑似文档：按文档聚合取最高分，最多 `limit` 份（§8.1）。.
 
     只含"有权限的文档"这件事由上游保证——进到这里的候选全都经过了前置过滤
     （§5.2 / §7.1），所以这里不再过滤一次。多过滤一次会让"列表为空"有两种原因
@@ -441,7 +477,9 @@ def _suspects(
         if score > best.get(candidate.doc_key, -1.0):
             best[candidate.doc_key] = score
     ordered = sorted(best.items(), key=lambda kv: -kv[1])[:limit]
-    return tuple(SuspectedDoc(doc_key=key, best_score=score) for key, score in ordered)
+    return tuple(
+        SuspectedDoc(doc_key=key, best_score=score) for key, score in ordered
+    )
 
 
 __all__ = [

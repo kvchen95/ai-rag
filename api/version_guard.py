@@ -1,4 +1,4 @@
-"""版本兜底校验（详细设计.md §7.4）。
+"""版本兜底校验（详细设计.md §7.4）。.
 
 前置过滤表达不了"切片所属版本是不是该文档的当前生效版本"：
 
@@ -21,14 +21,16 @@
 
 from __future__ import annotations
 
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from api.clients.pg import PgDatabase
 from api.observability import get_logger, log_event
 
 logger = get_logger("api.version_guard")
 
-# 一次查出所有相关文档的当前生效版本。`ux_active_version` 保证每 doc_key 至多一行。
+# 一次查出所有相关文档的当前生效版本。`ux_active_version` 保证每 doc_key
+# 至多一行。
 ACTIVE_VERSIONS_SQL = """
 SELECT d.doc_key, v.version_id
 FROM doc_versions AS v
@@ -37,8 +39,10 @@ WHERE v.status = 'active' AND v.doc_key = ANY(%s)
 """
 
 
-def active_version_map(pg: PgDatabase, doc_keys: Iterable[str]) -> dict[str, str]:
-    """{doc_key: 当前生效 version_id}。没有生效版本的文档不出现在结果里。"""
+def active_version_map(
+    pg: PgDatabase, doc_keys: Iterable[str]
+) -> dict[str, str]:
+    """{doc_key: 当前生效 version_id}。没有生效版本的文档不出现在结果里。."""
     keys = sorted({key for key in doc_keys if key})
     if not keys:
         return {}
@@ -49,14 +53,18 @@ def active_version_map(pg: PgDatabase, doc_keys: Iterable[str]) -> dict[str, str
 def drop_stale(
     pg: PgDatabase, candidates: Iterable[dict[str, Any]]
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """丢掉版本不是当前生效的候选。返回 (保留, 丢弃)，丢弃的带原因供日志与审计。
+    """丢掉版本不是当前生效的候选。.
+
+    返回 (保留, 丢弃)，丢弃的带原因供日志与审计。.
 
     入参每条只需要 `chunk_id` / `doc_key` / `version_id` 三个字段。
     不做"猜"：文档查不到生效版本时，它的候选**全部丢弃**——Fail-Closed。
     少召回会落进门控的低置信，多召回会把已废止条款送进答案，两者代价不对等。
     """
     items = list(candidates)
-    versions = active_version_map(pg, (item.get("doc_key", "") for item in items))
+    versions = active_version_map(
+        pg, (item.get("doc_key", "") for item in items)
+    )
     kept: list[dict[str, Any]] = []
     dropped: list[dict[str, Any]] = []
     for item in items:

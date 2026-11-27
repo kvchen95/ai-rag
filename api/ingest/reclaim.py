@@ -1,4 +1,4 @@
-"""回收：旧版本先下线、留 24 小时、再删（详细设计.md §4.3）。
+"""回收：旧版本先下线、留 24 小时、再删（详细设计.md §4.3）。.
 
 删除是级联的：切片行、向量点、切片图一起清；**样本原件不删**（它是测试资产）。
 删除失败不卡线上：先删库行（用户可感知的那一面已经安全），向量点进期望状态
@@ -44,18 +44,24 @@ from api.observability import get_logger, log_event, log_exception
 logger = get_logger("api.ingest.reclaim")
 
 
-class RetentionNotReached(RuntimeError):
-    """还没到回收时间。给"人工点一次回收"用：明确告诉你最早什么时候能删。"""
+class RetentionNotReachedError(RuntimeError):
+    """还没到回收时间。给"人工点一次回收"用：明确告诉你最早什么时候能删。."""
 
-    def __init__(self, version_id: str, deprecated_at: Any, retention_hours: int) -> None:
+    def __init__(
+        self, version_id: str, deprecated_at: Any, retention_hours: int
+    ) -> None:
+        """Initialize the instance."""
         super().__init__(
-            f"version {version_id} deprecated at {deprecated_at}, retention is {retention_hours}h"
+            f"version {version_id} deprecated at {deprecated_at}, "
+            f"retention is {retention_hours}h"
         )
         self.version_id = version_id
 
 
 @dataclass(slots=True)
 class ReclaimItem:
+    """ReclaimItem."""
+
     version_id: str
     doc_key: str
     chunks: int = 0
@@ -66,6 +72,7 @@ class ReclaimItem:
     error: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
+        """Run as_dict."""
         return {
             "version_id": self.version_id,
             "doc_key": self.doc_key,
@@ -79,6 +86,8 @@ class ReclaimItem:
 
 @dataclass(slots=True)
 class ReclaimReport:
+    """ReclaimReport."""
+
     retention_hours: int
     dry_run: bool
     items: list[ReclaimItem] = field(default_factory=list)
@@ -87,9 +96,11 @@ class ReclaimReport:
 
     @property
     def purged(self) -> int:
+        """Run purged."""
         return len(self.items)
 
     def as_dict(self) -> dict[str, Any]:
+        """Run as_dict."""
         return {
             "retention_hours": self.retention_hours,
             "dry_run": self.dry_run,
@@ -134,7 +145,8 @@ CHUNK_IDS_SQL = "SELECT chunk_id FROM chunks WHERE version_id = %s"
 DELETE_CHUNKS_SQL = "DELETE FROM chunks WHERE version_id = %s"
 
 MARK_PURGED_SQL = """
-UPDATE doc_versions SET status = 'purged' WHERE version_id = %s AND status = 'deprecated'
+UPDATE doc_versions SET status = 'purged'
+WHERE version_id = %s AND status = 'deprecated'
 """
 
 
@@ -148,17 +160,20 @@ def reclaim(
     dry_run: bool = False,
     only_version: str | None = None,
 ) -> ReclaimReport:
-    """回收过期版本。**调用方负责 commit**（每个版本一个事务边界更清楚，见下方说明）。
+    """回收过期版本。.
 
-    `only_version` 用于定向回收（脚本/测试），此时忽略窗口与 limit——但仍然要求
-    该版本确实是 `deprecated`。
+    **调用方负责 commit**（每个版本一个事务边界更清楚，见下方说明）。
+
+    `only_version` 用于定向回收（脚本/测试），此时忽略窗口与 limit——但仍然
+    要求该版本确实是 `deprecated`。
     """
     report = ReclaimReport(retention_hours=retention_hours, dry_run=dry_run)
 
     if only_version is not None:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
-                "SELECT version_id, doc_key, status, deprecated_at FROM doc_versions "
+                "SELECT version_id, doc_key, status, deprecated_at "
+                "FROM doc_versions "
                 "WHERE version_id = %s",
                 (only_version,),
             )
@@ -166,13 +181,18 @@ def reclaim(
         if row is None:
             return report
         if str(row["status"]) != "deprecated":
-            raise ReclaimError(f"version {only_version} is {row['status']}, not deprecated")
+            raise ReclaimError(
+                f"version {only_version} is {row['status']}, not deprecated"
+            )
         candidates = [row]
     else:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(UNKNOWN_TIME_SQL, {"limit": limit})
             unknown = list(cur.fetchall())
-            cur.execute(DUE_SQL, {"hours": retention_hours, "doc_key": doc_key, "limit": limit})
+            cur.execute(
+                DUE_SQL,
+                {"hours": retention_hours, "doc_key": doc_key, "limit": limit},
+            )
             candidates = list(cur.fetchall())
 
         # 未知下线时间：补时间戳、跳过本轮（见模块说明）
@@ -211,6 +231,8 @@ def reclaim(
 
 
 class ReclaimError(RuntimeError):
+    """ReclaimError."""
+
     pass
 
 
@@ -222,11 +244,12 @@ def _reclaim_one(
     figures_dir: Path | None,
     dry_run: bool,
 ) -> ReclaimItem:
+    """Run _reclaim_one."""
     item = ReclaimItem(version_id=version_id, doc_key=doc_key)
 
-    # 与扫描/翻牌抢同一把文档锁：回收正在删某版本的切片时，翻牌不该把它翻回 active
-    # （那会得到"版本 active 但切片已被删"的行）。dry_run 不拿锁——它什么都改不了，
-    # 拿锁只会给线上的翻牌添堵。
+    # 与扫描/翻牌抢同一把文档锁：回收正在删某版本的切片时，翻牌不该把它翻回
+    # active（那会得到"版本 active 但切片已被删"的行）。dry_run 不拿锁——它
+    # 什么都改不了，拿锁只会给线上的翻牌添堵。
     if not dry_run:
         lock_document(conn, doc_key)
 
@@ -238,18 +261,24 @@ def _reclaim_one(
     if dry_run:
         return item
 
-    # 先写"点该删"的期望状态，再删库行：反过来如果进程崩在中间，库里已经没有版本行，
-    # 就再也没有东西能告诉同步器"这些点该删"——向量库里会留下永久孤儿点。
-    upsert_desired(conn, doc_key=doc_key, version_id=version_id, desired_status="purged")
+    # 先写"点该删"的期望状态，再删库行：反过来如果进程崩在中间，库里已经没有
+    # 版本行，就再也没有东西能告诉同步器"这些点该删"——向量库里会留下永久孤儿点。
+    upsert_desired(
+        conn, doc_key=doc_key, version_id=version_id, desired_status="purged"
+    )
 
     with conn.cursor() as cur:
         cur.execute(DELETE_CHUNKS_SQL, (version_id,))
         cur.execute(MARK_PURGED_SQL, (version_id,))
         if cur.rowcount == 0:  # pragma: no cover - 候选查询已限定 deprecated
-            raise ReclaimError(f"version {version_id} left deprecated state during reclaim")
+            raise ReclaimError(
+                f"version {version_id} left deprecated state during reclaim"
+            )
 
     if figures_dir is not None:
-        item.figures, item.figure_errors = _delete_figures(figures_dir, chunk_ids)
+        item.figures, item.figure_errors = _delete_figures(
+            figures_dir, chunk_ids
+        )
 
     log_event(
         logger,
@@ -263,11 +292,12 @@ def _reclaim_one(
 
 
 def _delete_figures(figures_dir: Path, chunk_ids: list[str]) -> tuple[int, int]:
-    """删 `figures/{chunk_id}.webp`。返回 (真删掉的, 失败数)。
+    """删 `figures/{chunk_id}.webp`。返回 (真删掉的, 失败数)。.
 
-    只把**真的删掉了文件**计进返回值。`missing_ok=True` 让"文件本来就不存在"不报错
-    （表格/正文切片没有图，这是常态），但它也不该被算成"删了一张图"——否则报告上的
-    数字会随目录里的残留状态变化，运维没法用它判断磁盘是否真的清干净了。
+    只把**真的删掉了文件**计进返回值。`missing_ok=True` 让"文件本来就不存在"
+    不报错（表格/正文切片没有图，这是常态），但它也不该被算成"删了一张
+    图"——否则报告上的数字会随目录里的残留状态变化，运维没法用它判断磁盘
+    是否真的清干净了。
 
     失败不抛：图丢了可以重裁，库一致性不受影响；但计数要报出来，否则磁盘会被悄悄
     吃满。
@@ -282,12 +312,22 @@ def _delete_figures(figures_dir: Path, chunk_ids: list[str]) -> tuple[int, int]:
                 deleted += 1
         except OSError:
             errors += 1
-            log_exception(logger, "figure_delete_failed", chunk_id=chunk_id, path=str(path))
+            log_exception(
+                logger,
+                "figure_delete_failed",
+                chunk_id=chunk_id,
+                path=str(path),
+            )
     return deleted, errors
 
 
-def due_count(conn: Connection[Any], *, retention_hours: int = 24, doc_key: str | None = None) -> int:
-    """还有多少个版本已过窗口（回收任务的"待办"指标）。"""
+def due_count(
+    conn: Connection[Any],
+    *,
+    retention_hours: int = 24,
+    doc_key: str | None = None,
+) -> int:
+    """还有多少个版本已过窗口（回收任务的"待办"指标）。."""
     with conn.cursor() as cur:
         cur.execute(
             "SELECT count(*) FROM doc_versions WHERE status = 'deprecated' "
@@ -304,7 +344,10 @@ __all__ = [
     "ReclaimError",
     "ReclaimItem",
     "ReclaimReport",
-    "RetentionNotReached",
+    "RetentionNotReachedError",
     "due_count",
     "reclaim",
 ]
+
+# Backwards-compatible alias (N818: exception names use Error suffix).
+RetentionNotReached = RetentionNotReachedError

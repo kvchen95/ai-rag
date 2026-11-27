@@ -1,4 +1,4 @@
-"""往 PG 灌一批切片，验证过滤条件的执行计划（跑完清理）。
+"""往 PG 灌一批切片，验证过滤条件的执行计划（跑完清理）。.
 
 存在的目的：功能测试无法区分 `&&` 与 `<@`、`is_public` 与 `is_public = true`
 在执行计划上的差别。要证明"确权条件能走索引"，必须有足够的行数让计划器
@@ -67,7 +67,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--dsn",
-        default=os.getenv("DATABASE_URL") or os.getenv("AI_RAG_TEST_DATABASE_URL"),
+        default=os.getenv("DATABASE_URL")
+        or os.getenv("AI_RAG_TEST_DATABASE_URL"),
     )
     ap.add_argument("--rows", type=int, default=20000)
     ap.add_argument("--keep", action="store_true", help="跑完不清理")
@@ -85,30 +86,41 @@ def main() -> int:
             (DOC_KEY, f"{DOC_KEY}.pdf"),
         )
         conn.execute(
-            "INSERT INTO doc_versions (version_id, doc_key, file_hash, status, activated_at) "
-            "VALUES (%s, %s, %s, 'active', now()) ON CONFLICT (version_id) DO NOTHING",
+            "INSERT INTO doc_versions (version_id, doc_key, file_hash, status,"
+            " activated_at) "
+            "VALUES (%s, %s, %s, 'active', now()) ON CONFLICT (version_id) DO"
+            " NOTHING",
             (VERSION, DOC_KEY, HASH),
         )
         rows = build_rows(args.rows)
         with conn.cursor() as cur:
             cur.executemany(
-                """
-                INSERT INTO chunks (chunk_id, doc_key, version_id, chunk_type, page_num, bbox,
-                                    content_text, effective_date, effective_year,
-                                    date_confidence, is_public, allowed_depts, allowed_roles, status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (chunk_id) DO NOTHING
-                """,
+                (
+                    "\n"
+                    "                INSERT INTO chunks (chunk_id, doc_key, "
+                    "version_id, chunk_type, page_num, bbox,\n"
+                    "                                    content_text, "
+                    "effective_date, effective_year,\n"
+                    "                                    date_confidence, "
+                    "is_public, allowed_depts, allowed_roles, status)\n"
+                    "                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, "
+                    "%s, %s, %s, %s, %s, %s)\n"
+                    "                ON CONFLICT (chunk_id) DO NOTHING\n"
+                    "                "
+                ),
                 rows,
             )
         conn.execute("ANALYZE chunks")
         total = conn.execute("SELECT count(*) FROM chunks").fetchone()[0]
         print(
-            f"seeded rows={len(rows)} (总行数 {total}) 用时 {time.monotonic() - started:.1f}s"
+            f"seeded rows={len(rows)} (总行数 {total}) "
+            f"用时 {time.monotonic() - started:.1f}s"
         )
         if not args.keep:
             conn.execute("DELETE FROM chunks WHERE doc_key = %s", (DOC_KEY,))
-            conn.execute("DELETE FROM doc_versions WHERE doc_key = %s", (DOC_KEY,))
+            conn.execute(
+                "DELETE FROM doc_versions WHERE doc_key = %s", (DOC_KEY,)
+            )
             conn.execute("DELETE FROM documents WHERE doc_key = %s", (DOC_KEY,))
             left = conn.execute("SELECT count(*) FROM chunks").fetchone()[0]
             print(f"cleaned: 剩余 {left} 行")

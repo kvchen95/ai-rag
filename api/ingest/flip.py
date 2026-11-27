@@ -1,4 +1,4 @@
-"""翻牌：一个事务里改三处（详细设计.md §4.1）。
+"""翻牌：一个事务里改三处（详细设计.md §4.1）。.
 
     BEGIN
       pg_advisory_xact_lock(hashtext(doc_key))      -- 同一份文档不能同时翻两次
@@ -28,9 +28,9 @@ Qdrant 没有事务，把它塞进 PG 事务里只有两种结局：网络一抖
 新版本的前置条件
 ----------------
 
-翻牌只接受 `pending` 版本，且**必须已经有切片**：没有切片的版本置 active 会让旧版
-立刻下线、而新版一条也召不回——这是"翻牌把服务翻没了"的最短路径。空版本的正确
-处理是把它判 failed（解析没产出东西），不是生效。
+翻牌只接受 `pending` 版本，且**必须已经有切片**：没有切片的版本置 active 会让
+旧版立刻下线、而新版一条也召不回——这是"翻牌把服务翻没了"的最短路径。空版本的
+正确处理是把它判 failed（解析没产出东西），不是生效。
 """
 
 from __future__ import annotations
@@ -49,34 +49,46 @@ logger = get_logger("api.ingest.flip")
 
 
 class FlipError(RuntimeError):
-    """翻牌前置条件不满足。消息面向运维，包含 doc_key 与 version_id。"""
+    """翻牌前置条件不满足。消息面向运维，包含 doc_key 与 version_id。."""
 
 
-class VersionNotFound(FlipError):
+class VersionNotFoundError(FlipError):
+    """VersionNotFoundError."""
+
     def __init__(self, version_id: str) -> None:
+        """Initialize the instance."""
         super().__init__(f"version not found: {version_id}")
         self.version_id = version_id
 
 
-class NotPending(FlipError):
-    """要翻的版本不是 pending。重复翻牌会走到这里——那是幂等的正常结果，不是 bug。"""
+class NotPendingError(FlipError):
+    """要翻的版本不是 pending。.
+
+    重复翻牌会走到这里——那是幂等的正常结果，不是 bug。
+    """
 
     def __init__(self, version_id: str, status: str) -> None:
+        """Initialize the instance."""
         super().__init__(f"version {version_id} is {status}, not pending")
         self.version_id = version_id
         self.status = status
 
 
-class EmptyVersion(FlipError):
-    """版本下没有可检索切片。翻它等于把线上服务翻空。"""
+class EmptyVersionError(FlipError):
+    """版本下没有可检索切片。翻它等于把线上服务翻空。."""
 
     def __init__(self, version_id: str) -> None:
-        super().__init__(f"version {version_id} has no chunks; refusing to activate")
+        """Initialize the instance."""
+        super().__init__(
+            f"version {version_id} has no chunks; refusing to activate"
+        )
         self.version_id = version_id
 
 
 @dataclass(slots=True)
 class FlipResult:
+    """FlipResult."""
+
     doc_key: str
     version_id: str
     previous_active: str | None = None
@@ -86,6 +98,7 @@ class FlipResult:
     desired: dict[str, str] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
+        """Run as_dict."""
         return {
             "doc_key": self.doc_key,
             "version_id": self.version_id,
@@ -134,7 +147,9 @@ UPDATE chunks SET status = 'deprecated'
 WHERE version_id = %s AND status = 'active'
 """
 
-DOCUMENT_ACTIVE_SQL = "UPDATE documents SET status = 'active' WHERE doc_key = %s"
+DOCUMENT_ACTIVE_SQL = (
+    "UPDATE documents SET status = 'active' WHERE doc_key = %s"
+)
 
 
 def flip(
@@ -143,52 +158,59 @@ def flip(
     *,
     wait_for_lock: bool = True,
 ) -> FlipResult:
-    """把 `version_id` 翻成该文档的唯一生效版本。**调用方负责 commit/rollback。**
+    """把 `version_id` 翻成该文档的唯一生效版本。.
+
+    **调用方负责 commit/rollback。**
 
     幂等性：
-      - 重复翻同一个版本 → `NotPending`（已 active）。调用方可以把它当"已完成"。
-      - 已被别的版本取代（deprecated）→ 也走 `NotPending`，走回滚请用 `rollback_to`。
+      - 重复翻同一个版本 → `NotPendingError`（已 active）。调用方可以把它当
+        "已完成"。
+      - 已被别的版本取代（deprecated）→ 也走 `NotPendingError`，走回滚请用
+        `rollback_to`。
     """
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(SELECT_VERSION_SQL, (version_id,))
         row = cur.fetchone()
     if row is None:
-        raise VersionNotFound(version_id)
+        raise VersionNotFoundError(version_id)
 
     doc_key = str(row["doc_key"])
     status = str(row["status"])
 
-    # 锁必须在**读状态之后、写之前**拿不到才安全——反过来（先读后锁）会读到别人
-    # 事务中间的状态。所以顺序是：先锁文档，再重读状态。这里为了给出准确的
-    # VersionNotFound 先读了一次，锁住后还会再读一次（用锁内的状态做判断）。
+    # 锁必须在**读状态之后、写之前**拿不到才安全——反过来（先读后锁）会读到
+    # 别人事务中间的状态。所以顺序是：先锁文档，再重读状态。这里为了给出准确
+    # 的 VersionNotFoundError 先读了一次，锁住后还会再读一次（用锁内的状态做
+    # 判断）。
     lock_document(conn, doc_key, wait=wait_for_lock)
 
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(SELECT_VERSION_SQL, (version_id,))
         locked = cur.fetchone()
     if locked is None:
-        raise VersionNotFound(version_id)
+        raise VersionNotFoundError(version_id)
     status = str(locked["status"])
     if status != "pending":
-        raise NotPending(version_id, status)
+        raise NotPendingError(version_id, status)
 
     with conn.cursor() as cur:
         cur.execute(COUNT_CHUNKS_SQL, (version_id,))
         chunk_count = int(cur.fetchone()[0])
     if chunk_count == 0:
-        raise EmptyVersion(version_id)
+        raise EmptyVersionError(version_id)
 
     result = FlipResult(doc_key=doc_key, version_id=version_id)
 
     with conn.cursor() as cur:
         cur.execute(DEPRECATE_ACTIVE_SQL, (version_id, doc_key, version_id))
         result.deprecated_versions = [str(r[0]) for r in cur.fetchall()]
-    result.previous_active = result.deprecated_versions[0] if result.deprecated_versions else None
+    result.previous_active = (
+        result.deprecated_versions[0] if result.deprecated_versions else None
+    )
 
     with conn.cursor() as cur:
         cur.execute(ACTIVATE_SQL, (version_id,))
         if cur.fetchone() is None:  # pragma: no cover - 上面的状态检查已保证
-            raise NotPending(version_id, status)
+            raise NotPendingError(version_id, status)
 
     with conn.cursor() as cur:
         cur.execute(ACTIVATE_CHUNKS_SQL, (version_id,))
@@ -207,7 +229,9 @@ def flip(
     for old_version in result.deprecated_versions:
         result.desired[old_version] = "deprecated"
     for target, desired in result.desired.items():
-        upsert_desired(conn, doc_key=doc_key, version_id=target, desired_status=desired)
+        upsert_desired(
+            conn, doc_key=doc_key, version_id=target, desired_status=desired
+        )
 
     log_event(
         logger,
@@ -222,6 +246,8 @@ def flip(
 
 @dataclass(slots=True)
 class RollbackResult:
+    """RollbackResult."""
+
     doc_key: str
     restored: str
     demoted: list[str] = field(default_factory=list)
@@ -229,6 +255,7 @@ class RollbackResult:
     desired: dict[str, str] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
+        """Run as_dict."""
         return {
             "doc_key": self.doc_key,
             "restored": self.restored,
@@ -255,13 +282,15 @@ RETURNING version_id
 """
 
 
-def rollback_to(conn: Connection[Any], version_id: str, *, wait_for_lock: bool = True) -> RollbackResult:
-    """把一个已下线的版本翻回生效（回滚窗口内）。切道路径与 flip 完全对称。"""
+def rollback_to(
+    conn: Connection[Any], version_id: str, *, wait_for_lock: bool = True
+) -> RollbackResult:
+    """把一个已下线的版本翻回生效（回滚窗口内）。切道路径与 flip 完全对称。."""
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(SELECT_VERSION_SQL, (version_id,))
         row = cur.fetchone()
     if row is None:
-        raise VersionNotFound(version_id)
+        raise VersionNotFoundError(version_id)
     doc_key = str(row["doc_key"])
     lock_document(conn, doc_key, wait=wait_for_lock)
 
@@ -269,9 +298,9 @@ def rollback_to(conn: Connection[Any], version_id: str, *, wait_for_lock: bool =
         cur.execute(SELECT_VERSION_SQL, (version_id,))
         locked = cur.fetchone()
     if locked is None:
-        raise VersionNotFound(version_id)
+        raise VersionNotFoundError(version_id)
     if str(locked["status"]) != "deprecated":
-        raise NotPending(version_id, str(locked["status"]))
+        raise NotPendingError(version_id, str(locked["status"]))
 
     result = RollbackResult(doc_key=doc_key, restored=version_id)
 
@@ -279,8 +308,9 @@ def rollback_to(conn: Connection[Any], version_id: str, *, wait_for_lock: bool =
         cur.execute(DEMOTE_ACTIVE_SQL, (version_id, doc_key, version_id))
         result.demoted = [str(r[0]) for r in cur.fetchall()]
 
-    # 顺序：先把当前 active 降级，再把目标版翻上来。反过来会撞 `ux_active_version`
-    # ——两个 active 在库里同时存在的瞬间就被拒（实测 UniqueViolation）。
+    # 顺序：先把当前 active 降级，再把目标版翻上来。反过来会撞
+    # `ux_active_version`——两个 active 在库里同时存在的瞬间就被拒
+    # （实测 UniqueViolation）。
     # flip() 里的顺序是"降级 -> 激活"，这里必须一致。
     with conn.cursor() as cur:
         cur.execute(RESTORE_SQL, (version_id,))
@@ -301,7 +331,9 @@ def rollback_to(conn: Connection[Any], version_id: str, *, wait_for_lock: bool =
     for demoted in result.demoted:
         result.desired[demoted] = "deprecated"
     for target, desired in result.desired.items():
-        upsert_desired(conn, doc_key=doc_key, version_id=target, desired_status=desired)
+        upsert_desired(
+            conn, doc_key=doc_key, version_id=target, desired_status=desired
+        )
 
     log_event(
         logger,
@@ -314,9 +346,11 @@ def rollback_to(conn: Connection[Any], version_id: str, *, wait_for_lock: bool =
 
 
 def active_version(conn: Connection[Any], doc_key: str) -> str | None:
+    """Run active_version."""
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT version_id FROM doc_versions WHERE doc_key = %s AND status = 'active'",
+            "SELECT version_id FROM doc_versions "
+            "WHERE doc_key = %s AND status = 'active'",
             (doc_key,),
         )
         row = cur.fetchone()
@@ -324,13 +358,22 @@ def active_version(conn: Connection[Any], doc_key: str) -> str | None:
 
 
 __all__ = [
-    "EmptyVersion",
+    "EmptyVersionError",
     "FlipError",
     "FlipResult",
-    "NotPending",
+    "NotPendingError",
     "RollbackResult",
-    "VersionNotFound",
+    "VersionNotFoundError",
     "active_version",
     "flip",
     "rollback_to",
 ]
+
+# Backwards-compatible alias (N818: exception names use Error suffix).
+VersionNotFound = VersionNotFoundError
+
+# Backwards-compatible alias (N818: exception names use Error suffix).
+NotPending = NotPendingError
+
+# Backwards-compatible alias (N818: exception names use Error suffix).
+EmptyVersion = EmptyVersionError

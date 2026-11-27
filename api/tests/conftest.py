@@ -85,7 +85,8 @@ def pg_dsn() -> str:
     dsn = os.getenv("AI_RAG_TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
     if not dsn:
         pytest.skip(
-            "neither AI_RAG_TEST_DATABASE_URL nor DATABASE_URL is set (integration needs a real PostgreSQL)"
+            "neither AI_RAG_TEST_DATABASE_URL nor DATABASE_URL is set "
+            "(integration needs a real PostgreSQL)"
         )
     assert dsn
     return dsn

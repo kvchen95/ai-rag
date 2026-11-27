@@ -2,8 +2,10 @@
 
 验收第三条是"切片字段缺失被校验拦截"。这条的可执行形式有两层：
 
-1. `Chunk.missing_fields()` 逐项点名缺什么（`page_num` / `bbox` / `acl(...)`…）；
-2. `Chunk.require_complete()` / `validate_chunks()` 在入库前抛 `IncompleteChunk`。
+1. `Chunk.missing_fields()` 逐项点名缺什么
+   （`page_num` / `bbox` / `acl(...)`…）；
+2. `Chunk.require_complete()` / `validate_chunks()` 在入库前抛
+   `IncompleteChunk`。
 
 两层都要测：只测"能抛"会让"缺的是哪一项"说不清，而排障时最需要的正是这一句。
 六项逐项都要有**反例**——只测正向的话，某个字段的校验被删掉不会有人发现。
@@ -30,9 +32,8 @@ from api.parse.chunking import (
     validate_chunks,
 )
 from api.parse.geometry import PageSpace, Rect
-from api.parse.model import Line, Region, RegionKind
+from api.parse.model import Line, Region, RegionKind, TableCell
 from api.parse.tables import build_table
-from api.parse.model import TableCell
 
 BBOX = [[0.1, 0.1, 0.5, 0.2]]
 ACL = Acl(is_public=False, allowed_depts=("fin",), allowed_roles=("staff",))
@@ -73,7 +74,9 @@ PERMISSION_CASES = [
 
 
 @pytest.mark.parametrize(("field", "overrides"), PERMISSION_CASES)
-def test_each_accompanying_field_is_enforced(field: str, overrides: dict[str, object]) -> None:
+def test_each_accompanying_field_is_enforced(
+    field: str, overrides: dict[str, object]
+) -> None:
     """六项随行信息里每一项都要有反例：缺一项，后面就有一处功能不可用。"""
     chunk = _chunk(**overrides)
     assert field in chunk.missing_fields()
@@ -104,12 +107,16 @@ def test_public_chunk_needs_no_depts_or_roles() -> None:
 
 def test_explicit_confidence_without_a_date_is_rejected() -> None:
     """声称"这是原文显式时间"却拿不出日期 —— 时间过滤会把这个谎当成真。"""
-    chunk = _chunk(effective_date=None, effective_year=None, date_confidence="explicit")
+    chunk = _chunk(
+        effective_date=None, effective_year=None, date_confidence="explicit"
+    )
     assert any("effective_date" in field for field in chunk.missing_fields())
 
 
 def test_inferred_confidence_without_a_date_is_fine() -> None:
-    chunk = _chunk(effective_date=None, effective_year=None, date_confidence="inferred")
+    chunk = _chunk(
+        effective_date=None, effective_year=None, date_confidence="inferred"
+    )
     assert chunk.missing_fields() == []
 
 
@@ -210,7 +217,9 @@ def test_chunk_id_is_filesystem_safe() -> None:
     第一版用 `version_id + 序号` 拼，得到 `policy/travel-cn#a91f#c001000-000`
     ——目录不存在，`#` 在 URL 里还是 fragment 分隔符，取图必 404。
     """
-    chunk_id = chunk_id_for("policy/travel-cn#a91f2b3c4d5e", page_num=1, kind="figure", index=0)
+    chunk_id = chunk_id_for(
+        "policy/travel-cn#a91f2b3c4d5e", page_num=1, kind="figure", index=0
+    )
     assert "/" not in chunk_id
     assert "#" not in chunk_id
     assert chunk_id.startswith("ch_")
@@ -254,7 +263,9 @@ def test_pieces_cover_the_whole_text() -> None:
     rebuilt = pieces[0]
     for piece in pieces[1:]:
         overlap = _overlap(rebuilt, piece)
-        assert overlap >= CHILD_OVERLAP_CHARS - 5, f"overlap {overlap} too small"
+        assert (
+            overlap >= CHILD_OVERLAP_CHARS - 5
+        ), f"overlap {overlap} too small"
         rebuilt += piece[overlap:]
     assert rebuilt == text
 
@@ -275,7 +286,7 @@ def _overlap(built: str, piece: str) -> int:
 def test_overlap_is_about_the_configured_size() -> None:
     pieces = build_child_pieces(_long_text(2000))
     assert len(pieces) >= 4
-    for previous, current in zip(pieces, pieces[1:]):
+    for previous, current in zip(pieces, pieces[1:], strict=False):
         overlap = _overlap(previous, current)
         assert CHILD_OVERLAP_CHARS - 5 <= overlap <= CHILD_OVERLAP_CHARS + 30
 
@@ -311,7 +322,9 @@ def test_empty_text_yields_nothing() -> None:
         ("分号；也算一句", ["分号；", "也算一句"]),
     ],
 )
-def test_split_sentences_keeps_the_punctuation(text: str, expected: list[str]) -> None:
+def test_split_sentences_keeps_the_punctuation(
+    text: str, expected: list[str]
+) -> None:
     assert split_sentences(text) == expected
 
 
@@ -366,7 +379,12 @@ def _region(text: str, *, lines: int = 3) -> Region:
     line_objs = tuple(
         Line(
             text=chunk,
-            rect=Rect(72.0, 100.0 + index * 16, 72.0 + len(chunk) * 5, 110.0 + index * 16),
+            rect=Rect(
+                72.0,
+                100.0 + index * 16,
+                72.0 + len(chunk) * 5,
+                110.0 + index * 16,
+            ),
             page_num=1,
             font_size=10.0,
         )
@@ -461,7 +479,10 @@ def test_child_bbox_covers_only_its_own_lines() -> None:
         acl=ACL,
         date=BusinessDate(),
         parent_id=None,
-        child_ids=[chunk_id_for("v#abc", page_num=1, kind="child", index=0, part=part) for part in range(child_piece_count(region))],
+        child_ids=[
+            chunk_id_for("v#abc", page_num=1, kind="child", index=0, part=part)
+            for part in range(child_piece_count(region))
+        ],
     )
     assert len(children) == child_piece_count(region)
     for child in children:
@@ -478,12 +499,21 @@ def test_table_chunk_keeps_all_three_representations() -> None:
     from api.parse.dates import BusinessDate
 
     table = build_table(
-        [TableCell(0, 0, "City", is_header=True), TableCell(0, 1, "Cap", is_header=True),
-         TableCell(1, 0, "Shanghai"), TableCell(1, 1, "500")],
+        [
+            TableCell(0, 0, "City", is_header=True),
+            TableCell(0, 1, "Cap", is_header=True),
+            TableCell(1, 0, "Shanghai"),
+            TableCell(1, 1, "500"),
+        ],
         row_count=2,
         col_count=2,
     )
-    region = Region(kind=RegionKind.TABLE, page_num=1, rect=Rect(72, 100, 500, 200), table=table)
+    region = Region(
+        kind=RegionKind.TABLE,
+        page_num=1,
+        rect=Rect(72, 100, 500, 200),
+        table=table,
+    )
     chunk = build_table_chunk(
         doc_key="policy/x",
         version_id="v#abc",

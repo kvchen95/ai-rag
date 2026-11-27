@@ -2,15 +2,17 @@
 
 **这一组能证明什么、不能证明什么**（读之前先看这段）：
 
-能证明：证据包是从**真库**组装的——citations 里的 `doc_key` / `page_num` / `bbox` /
-`snippet` / `chunk_id` 全部来自 `chunks` 表的真实行；门控五态在这批真数据上给出的是它
-该给的那一态；事件顺序符合附录 C.2；拒答路径没有 `token`；审计行能插进 `qa_log`
-（真表的 CHECK 约束会拦下口径不一致的行）。
+能证明：证据包是从**真库**组装的——citations 里的 `doc_key` /
+`page_num` / `bbox` / `snippet` / `chunk_id` 全部来自 `chunks` 表的真实行；
+门控五态在这批真数据上给出的是它该给的那一态；事件顺序符合附录 C.2；拒答
+路径没有 `token`；审计行能插进 `qa_log`（真表的 CHECK 约束会拦下口径不一致
+的行）。
 
-不能证明：**生成质量**。这台机器没有配置 LLM 网关（`LLM_BASE_URL` / `LLM_MODEL` 为空），
-所以生成与判别都是脚本化替身。也就是说，"五道校验能拦住幻觉"这件事在这里验的是
-"拦住的动作与出口正确"，不是"模型真的会说错话并且被拦住"——后者要在配了网关的
-环境里跑 `eval/run_eval.py`（黄金 50 题）才算数。这一点不能含糊过去。
+不能证明：**生成质量**。这台机器没有配置 LLM 网关（`LLM_BASE_URL` /
+`LLM_MODEL` 为空），所以生成与判别都是脚本化替身。也就是说，“五道校验能拦
+住幻觉”这件事在这里验的是“拦住的动作与出口正确”，不是“模型真的会说错话并
+且被拦住”——后者要在配了网关的环境里跑 `eval/run_eval.py`（黄金 50 题）才
+算数。这一点不能含糊过去。
 
 跳过策略：缺 PG / Qdrant / TEI / rerank 任一项就 skip，绝不假装跑过。
 """
@@ -41,7 +43,9 @@ def _events(names):  # 小工具：只留事件名，断言读起来短
 
 
 def _delta_text(events) -> str:
-    return "".join(event.payload["delta"] for event in events if event.name == "token")
+    return "".join(
+        event.payload["delta"] for event in events if event.name == "token"
+    )
 
 
 def _fallback(events):
@@ -54,10 +58,10 @@ def _fallback(events):
 def test_pass_path_citations_come_from_the_real_chunk_rows(
     conn, store, embedder, retriever, reranker, b3_pg, settings
 ) -> None:
-    """验收原句："citations 含 doc/page/bbox/snippet/chunk_id"。
+    """验收原句：citations 含 doc/page/bbox/snippet/chunk_id。
 
-    造一条真切片（页码 47、真 bbox），让它过门控与校验，断言 citations 里的五个字段
-    与 `chunks` 表里的行**逐字一致**——不是与测试里写的字面量一致。
+    造一条真切片（页码 47、真 bbox），让它过门控与校验，断言 citations 里的
+    五个字段与 `chunks` 表里的行**逐字一致**——不是与测试里写的字面量一致。
     """
     name = unique("pass")
     publish(
@@ -77,11 +81,17 @@ def test_pass_path_citations_come_from_the_real_chunk_rows(
     llm = ScriptedLlm(
         generation=(
             '{"status":"answered","answer":"住宿费标准为每人每天 500 元[1]。",'
-            '"citations":[1],"claims":[{"text":"住宿费标准为每人每天 500 元","citations":[1]}]}'
+            '"citations":[1],"claims":[{"text":"住宿费标准为每人每天 500 元",'
+            '"citations":[1]}]}'
         )
     )
     service = build_qa_service(
-        b3_pg=b3_pg, settings=settings, embedder=embedder, retriever_client=retriever, reranker_client=reranker, llm=llm
+        b3_pg=b3_pg,
+        settings=settings,
+        embedder=embedder,
+        retriever_client=retriever,
+        reranker_client=reranker,
+        llm=llm,
     )
     sent = []
     try:
@@ -94,16 +104,27 @@ def test_pass_path_citations_come_from_the_real_chunk_rows(
     assert names[0] == "step" and names[-1] == "done"
     assert "citations" in names
 
-    items = next(event.payload["items"] for event in sent if event.name == "citations")
+    items = next(
+        event.payload["items"] for event in sent if event.name == "citations"
+    )
     assert items
     item = items[0]
-    assert set(item) == {"n", "doc_key", "doc_name", "page_num", "bbox", "snippet", "chunk_id"}
+    assert set(item) == {
+        "n",
+        "doc_key",
+        "doc_name",
+        "page_num",
+        "bbox",
+        "snippet",
+        "chunk_id",
+    }
     assert item["chunk_id"] == f"ch_{name}_hot"
     assert item["doc_key"] == doc_key(name)
     # 与真库对拍：页码与 bbox 必须就是那一行
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT page_num, bbox FROM chunks WHERE chunk_id = %s", (f"ch_{name}_hot",)
+            "SELECT page_num, bbox FROM chunks WHERE chunk_id = %s",
+            (f"ch_{name}_hot",),
         )
         page_num, bbox = cur.fetchone()
     assert item["page_num"] == page_num
@@ -126,17 +147,27 @@ def test_pass_path_audit_row_passes_the_real_table_constraints(
         name=name,
         tag="v1",
         chunks=[
-            make_chunk(chunk_id=f"ch_{name}_a", text="住宿费标准：每人每天 500 元。", page_num=47)
+            make_chunk(
+                chunk_id=f"ch_{name}_a",
+                text="住宿费标准：每人每天 500 元。",
+                page_num=47,
+            )
         ],
     )
     llm = ScriptedLlm(
         generation=(
             '{"status":"answered","answer":"住宿费标准为每人每天 500 元[1]。",'
-            '"citations":[1],"claims":[{"text":"住宿费标准为每人每天 500 元","citations":[1]}]}'
+            '"citations":[1],"claims":[{"text":"住宿费标准为每人每天 500 元",'
+            '"citations":[1]}]}'
         )
     )
     service = build_qa_service(
-        b3_pg=b3_pg, settings=settings, embedder=embedder, retriever_client=retriever, reranker_client=reranker, llm=llm
+        b3_pg=b3_pg,
+        settings=settings,
+        embedder=embedder,
+        retriever_client=retriever,
+        reranker_client=reranker,
+        llm=llm,
     )
     try:
         outcome = service.run("住宿费标准是多少", FIN)
@@ -177,18 +208,29 @@ def test_irrelevant_question_rejects_without_calling_the_model(
         name=name,
         tag="v1",
         chunks=[
-            make_chunk(chunk_id=f"ch_{name}_a", text="住宿费标准：每人每天 500 元。", page_num=47)
+            make_chunk(
+                chunk_id=f"ch_{name}_a",
+                text="住宿费标准：每人每天 500 元。",
+                page_num=47,
+            )
         ],
     )
     llm = ScriptedLlm(
         generation='{"status":"answered","answer":"不应被调用[1]","citations":[1],"claims":[]}'
     )
     service = build_qa_service(
-        b3_pg=b3_pg, settings=settings, embedder=embedder, retriever_client=retriever, reranker_client=reranker, llm=llm
+        b3_pg=b3_pg,
+        settings=settings,
+        embedder=embedder,
+        retriever_client=retriever,
+        reranker_client=reranker,
+        llm=llm,
     )
     sent = []
     try:
-        outcome = service.run("如何申报个人所得税专项附加扣除", FIN, emit=sent.append)
+        outcome = service.run(
+            "如何申报个人所得税专项附加扣除", FIN, emit=sent.append
+        )
     finally:
         service.pipeline.close()
 
@@ -216,10 +258,19 @@ def test_rejected_audit_row_also_satisfies_the_table_constraints(
         embedder,
         name=name,
         tag="v1",
-        chunks=[make_chunk(chunk_id=f"ch_{name}_a", text="住宿费标准：每人每天 500 元。")],
+        chunks=[
+            make_chunk(
+                chunk_id=f"ch_{name}_a", text="住宿费标准：每人每天 500 元。"
+            )
+        ],
     )
     service = build_qa_service(
-        b3_pg=b3_pg, settings=settings, embedder=embedder, retriever_client=retriever, reranker_client=reranker, llm=None
+        b3_pg=b3_pg,
+        settings=settings,
+        embedder=embedder,
+        retriever_client=retriever,
+        reranker_client=reranker,
+        llm=None,
     )
     try:
         outcome = service.run("如何申报个人所得税专项附加扣除", FIN)
@@ -229,7 +280,9 @@ def test_rejected_audit_row_also_satisfies_the_table_constraints(
     result = AuditWriter(b3_pg, retention_days=1).record(outcome.audit)
     assert result.ok is True, result.error
     with conn.cursor() as cur:
-        cur.execute("SELECT reject_reason FROM qa_log WHERE id = %s", (result.audit_id,))
+        cur.execute(
+            "SELECT reject_reason FROM qa_log WHERE id = %s", (result.audit_id,)
+        )
         (reason,) = cur.fetchone()
     assert reason in ("no_evidence", "low_confidence")
 
@@ -254,18 +307,26 @@ def test_hallucinated_number_degrades_to_original_text(
         tag="v1",
         chunks=[
             make_chunk(
-                chunk_id=f"ch_{name}_a", text="住宿费标准：每人每天 500 元。", page_num=47
+                chunk_id=f"ch_{name}_a",
+                text="住宿费标准：每人每天 500 元。",
+                page_num=47,
             )
         ],
     )
     llm = ScriptedLlm(
         generation=(
             '{"status":"answered","answer":"住宿费标准一般是 400 元[1]。",'
-            '"citations":[1],"claims":[{"text":"住宿费标准一般是 400 元","citations":[1]}]}'
+            '"citations":[1],"claims":[{"text":"住宿费标准一般是 400 元",'
+            '"citations":[1]}]}'
         )
     )
     service = build_qa_service(
-        b3_pg=b3_pg, settings=settings, embedder=embedder, retriever_client=retriever, reranker_client=reranker, llm=llm
+        b3_pg=b3_pg,
+        settings=settings,
+        embedder=embedder,
+        retriever_client=retriever,
+        reranker_client=reranker,
+        llm=llm,
     )
     sent = []
     try:
@@ -303,10 +364,19 @@ def test_no_llm_configured_is_the_system_tier(
         embedder,
         name=name,
         tag="v1",
-        chunks=[make_chunk(chunk_id=f"ch_{name}_a", text="住宿费标准：每人每天 500 元。")],
+        chunks=[
+            make_chunk(
+                chunk_id=f"ch_{name}_a", text="住宿费标准：每人每天 500 元。"
+            )
+        ],
     )
     service = build_qa_service(
-        b3_pg=b3_pg, settings=settings, embedder=embedder, retriever_client=retriever, reranker_client=reranker, llm=None
+        b3_pg=b3_pg,
+        settings=settings,
+        embedder=embedder,
+        retriever_client=retriever,
+        reranker_client=reranker,
+        llm=None,
     )
     sent = []
     try:
@@ -316,7 +386,8 @@ def test_no_llm_configured_is_the_system_tier(
 
     fallback = _fallback(sent)
     if fallback is None:
-        # 门控没放行（例如这批数据上 PR 分没过阈）→ 那是拒答路径，也算"没输出幻觉"。
+        # 门控没放行（例如这批数据上 PR 分没过阈）→ 那是拒答路径，也算"没输出幻
+        # 觉"。
         assert outcome.verdict in ("reject_none", "reject_low")
         return
     assert fallback.payload["code"] == "model_timeout"
@@ -338,17 +409,27 @@ def test_every_frame_is_valid_sse_and_done_is_last(
         name=name,
         tag="v1",
         chunks=[
-            make_chunk(chunk_id=f"ch_{name}_a", text="住宿费标准：每人每天 500 元。", page_num=47)
+            make_chunk(
+                chunk_id=f"ch_{name}_a",
+                text="住宿费标准：每人每天 500 元。",
+                page_num=47,
+            )
         ],
     )
     llm = ScriptedLlm(
         generation=(
             '{"status":"answered","answer":"住宿费标准为每人每天 500 元[1]。",'
-            '"citations":[1],"claims":[{"text":"住宿费标准为每人每天 500 元","citations":[1]}]}'
+            '"citations":[1],"claims":[{"text":"住宿费标准为每人每天 500 元",'
+            '"citations":[1]}]}'
         )
     )
     service = build_qa_service(
-        b3_pg=b3_pg, settings=settings, embedder=embedder, retriever_client=retriever, reranker_client=reranker, llm=llm
+        b3_pg=b3_pg,
+        settings=settings,
+        embedder=embedder,
+        retriever_client=retriever,
+        reranker_client=reranker,
+        llm=llm,
     )
     sent = []
     try:
@@ -381,10 +462,10 @@ def test_clarify_event_shape_when_the_gate_asks_for_it(
     （B3 的 `test_retrieval_logic` 已穷举过那半段）。这里验的是另一半：
     **选项原样透传、带 value 供前端回填**。
     """
+    from api.query import understand
     from api.retrieval.gate import ClarifyOption, GateDecision
     from api.retrieval.pipeline import RetrievalSnapshot
     from api.retrieval.rerank import RerankOutcome
-    from api.query import understand
 
     snapshot = RetrievalSnapshot(
         plan=understand("住宿标准是多少"),
@@ -433,6 +514,11 @@ def test_clarify_event_shape_when_the_gate_asks_for_it(
     service.run("住宿标准是多少", FIN, emit=sent.append)
     names = _events(sent)
     assert "clarify" in names and "token" not in names
-    options = next(event.payload["options"] for event in sent if event.name == "clarify")
-    assert [opt["value"] for opt in options] == ["policy/travel", "policy/expense"]
+    options = next(
+        event.payload["options"] for event in sent if event.name == "clarify"
+    )
+    assert [opt["value"] for opt in options] == [
+        "policy/travel",
+        "policy/expense",
+    ]
     assert sent[-1].payload["verdict"] == "clarify"

@@ -50,18 +50,24 @@ def scanned_pdf(tmp_path_factory: pytest.TempPathFactory) -> Path:
 class _FakePage:
     """最小的 page 替身：只需要 `chars` / `images` / `width` / `height`。"""
 
-    def __init__(self, chars: list[str], images: list[tuple[float, float, float, float]]) -> None:
+    def __init__(
+        self, chars: list[str], images: list[tuple[float, float, float, float]]
+    ) -> None:
         self.width = 595.0
         self.height = 842.0
         self.chars = [{"text": ch} for ch in chars]
         self.images = [
-            {"x0": x0, "top": top, "x1": x1, "bottom": bottom} for x0, top, x1, bottom in images
+            {"x0": x0, "top": top, "x1": x1, "bottom": bottom}
+            for x0, top, x1, bottom in images
         ]
 
 
 class _StubEngine:
-    """固定返回若干 `OcrWord`。用它把 OCR 的**后处理**（坐标换算、置信度过滤、
-    行聚类）与引擎本身解耦——真实引擎的识别质量不该影响这些判据的测试。"""
+    """固定返回若干 `OcrWord` 的替身引擎。
+
+    用它把 OCR 的**后处理**（坐标换算、置信度过滤、行聚类）与引擎本身解耦
+    ——真实引擎的识别质量不该影响这些判据的测试。
+    """
 
     name = "stub"
 
@@ -100,7 +106,10 @@ def test_a_small_but_real_scan_is_still_ocrd() -> None:
 
 
 def test_a_blank_page_with_a_tiny_logo_is_not_ocrd() -> None:
-    """装饰性小图（logo/水印 < 2%）不该触发 OCR：它上面没有正文，只会产生噪声。"""
+    """装饰性小图（logo/水印 < 2%）不该触发 OCR。
+
+    它上面没有正文，只会产生噪声。
+    """
     # 40×40pt on 595×842 = 0.3%
     page = _FakePage([], [(72.0, 100.0, 112.0, 140.0)])
     assert not text_layer_missing(page, OcrConfig(enabled=True))
@@ -128,7 +137,9 @@ def test_disabled_engine_reports_the_reason() -> None:
 def test_enabled_engine_is_either_available_or_says_why() -> None:
     """装了 rapidocr 就必须给出引擎，没装就必须给出原因——不许两者都空。"""
     engine, reason = build_ocr_engine(OcrConfig(enabled=True))
-    assert (engine is None) != (reason is None), "engine 与 reason 必须恰好有一个"
+    assert (engine is None) != (
+        reason is None
+    ), "engine 与 reason 必须恰好有一个"
     if engine is None:
         assert "rapidocr" in (reason or "")
 
@@ -136,7 +147,9 @@ def test_enabled_engine_is_either_available_or_says_why() -> None:
 # --- 3. 端到端：扫描页真的进切片，且带来源标记 -----------------------------
 
 
-def test_scanned_page_produces_chunks_with_the_ocr_source_note(scanned_pdf: Path) -> None:
+def test_scanned_page_produces_chunks_with_the_ocr_source_note(
+    scanned_pdf: Path,
+) -> None:
     """**这条是本轮第二、三个 bug 的克星。**
 
     它要求三件事同时成立：
@@ -162,7 +175,9 @@ def test_scanned_page_produces_chunks_with_the_ocr_source_note(scanned_pdf: Path
     assert page2.ocr_skipped_reason is None
 
     page2_chunks = [chunk for chunk in outcome.chunks if chunk.page_num == 2]
-    assert page2_chunks, "OCR ran but produced no chunk (blocked by the figure region?)"
+    assert (
+        page2_chunks
+    ), "OCR ran but produced no chunk (blocked by the figure region?)"
     assert all("source:ocr" in chunk.notes for chunk in page2_chunks)
     assert all(chunk.content_text.strip() for chunk in page2_chunks)
 
@@ -180,7 +195,10 @@ def test_scanned_page_without_an_engine_records_why(scanned_pdf: Path) -> None:
     )
     page2 = next(page for page in doc.pages if page.page_num == 2)
     assert page2.ocr_skipped_reason == "engine_unavailable"
-    assert any("OCR needed but engine unavailable" in warning for warning in doc.warnings)
+    assert any(
+        "OCR needed but engine unavailable" in warning
+        for warning in doc.warnings
+    )
 
 
 def test_ocr_off_by_default(scanned_pdf: Path) -> None:
@@ -207,7 +225,9 @@ def test_ocr_lines_are_not_silently_corrected() -> None:
 
 
 def test_ocr_lines_carry_confidence_and_source() -> None:
-    engine = _StubEngine([OcrWord("Total 1200", _rect(100, 200, 200, 212), 0.77)])
+    engine = _StubEngine(
+        [OcrWord("Total 1200", _rect(100, 200, 200, 212), 0.77)]
+    )
     lines = _run_stub(engine)
     assert lines[0].source == "ocr"
     assert lines[0].confidence == pytest.approx(0.77, abs=0.01)
@@ -227,8 +247,9 @@ def test_low_confidence_words_are_dropped() -> None:
 
 
 def test_ocr_pixel_coordinates_are_converted_to_points() -> None:
-    """**像素坐标必须除以渲染缩放比。** 不除的话 bbox 全部越界（被夹到 1.0），
-    高亮框会缩在页面右下角一小块。
+    """**像素坐标必须除以渲染缩放比。**
+
+    不除的话 bbox 全部越界（被夹到 1.0），高亮框会缩在页面右下角一小块。
 
     渲染 150 DPI = 2.083 px/pt。识别出的 200px → 96pt。
     """
@@ -247,7 +268,12 @@ def _rect(x0: float, top: float, x1: float, bottom: float):
     return Rect(x0, top, x1, bottom)
 
 
-def _run_stub(engine: _StubEngine, *, render_scale: float = 150 / 72, min_confidence: float = 0.55):
+def _run_stub(
+    engine: _StubEngine,
+    *,
+    render_scale: float = 150 / 72,
+    min_confidence: float = 0.55,
+):
     """用固定位图跑 `ocr_lines`（不碰真 PDF，只验后处理）。"""
     from PIL import Image  # noqa: PLC0415
 

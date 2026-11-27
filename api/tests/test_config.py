@@ -58,7 +58,9 @@ def test_missing_required_field_names_the_variable() -> None:
     assert "gate_reject_low" in str(excinfo.value).lower()
 
 
-def test_thresholds_and_models_come_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_thresholds_and_models_come_from_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     for key, value in BASE_ENV.items():
         monkeypatch.setenv(key, str(value))
     monkeypatch.setenv("GATE_REJECT_LOW", "0.55")
@@ -77,24 +79,44 @@ def test_thresholds_and_models_come_from_env(monkeypatch: pytest.MonkeyPatch) ->
 @pytest.mark.parametrize(
     ("overrides", "needle"),
     [
-        ({"GATE_REJECT_NONE": 0.40}, "GATE_REJECT_NONE must be < GATE_REJECT_LOW"),
-        ({"GATE_REJECT_LOW": 0.10}, "GATE_REJECT_NONE must be < GATE_REJECT_LOW"),
+        (
+            {"GATE_REJECT_NONE": 0.40},
+            "GATE_REJECT_NONE must be < GATE_REJECT_LOW",
+        ),
+        (
+            {"GATE_REJECT_LOW": 0.10},
+            "GATE_REJECT_NONE must be < GATE_REJECT_LOW",
+        ),
         ({"GATE_REJECT_LOW": 1.5}, "less than or equal to 1"),
         ({"GATE_REJECT_NONE": 0.0}, "greater than 0"),
-        ({"RERANK_TOP_N_MIN": 9}, "RERANK_TOP_N_MIN must be <= RERANK_TOP_N_MAX"),
-        ({"RERANK_TOP_N_MAX": 31}, "RERANK_TOP_N_MAX must be <= RETRIEVAL_TOP_K"),
+        (
+            {"RERANK_TOP_N_MIN": 9},
+            "RERANK_TOP_N_MIN must be <= RERANK_TOP_N_MAX",
+        ),
+        (
+            {"RERANK_TOP_N_MAX": 31},
+            "RERANK_TOP_N_MAX must be <= RETRIEVAL_TOP_K",
+        ),
         # 精排窗口不能超过候选上限（否则一半候选白召回，预算却按更大窗口在算）
-        ({"RERANK_CANDIDATES_MAX": 7}, "RERANK_TOP_N_MAX must be <= RERANK_CANDIDATES_MAX"),
+        (
+            {"RERANK_CANDIDATES_MAX": 7},
+            "RERANK_TOP_N_MAX must be <= RERANK_CANDIDATES_MAX",
+        ),
         # 澄清带上下界必须递增，否则这个区间为空，辅助条件永远用不上；
         # 它相对门控阈值的位置由 `GateConfig.effective_borderline` 裁剪，
         # 不在启动期硬绑（阈值本身要按 §12.2 波谷法重标定）。
-        ({"GATE_BORDERLINE_LOW": 0.45}, "GATE_BORDERLINE_LOW must be < GATE_BORDERLINE_HIGH"),
+        (
+            {"GATE_BORDERLINE_LOW": 0.45},
+            "GATE_BORDERLINE_LOW must be < GATE_BORDERLINE_HIGH",
+        ),
         ({"MAX_HOPS": 9}, "less than or equal to 5"),
         ({"EMBEDDING_DIM": 0}, "greater than 0"),
         ({"QDRANT_URL": "qdrant:6333"}, "must start with http:// or https://"),
     ],
 )
-def test_cross_field_and_range_rules(overrides: dict[str, object], needle: str) -> None:
+def test_cross_field_and_range_rules(
+    overrides: dict[str, object], needle: str
+) -> None:
     with pytest.raises(ValidationError) as excinfo:
         make_settings(**overrides)
     assert needle in str(excinfo.value)
@@ -117,7 +139,10 @@ def test_public_config_has_no_secrets() -> None:
     loaded = make_settings(EMBEDDING_API_KEY="super-secret-embedding-key")
     dumped = repr(loaded.public_config())
     assert "super-secret-embedding-key" not in dumped
-    assert loaded.public_config()["gates"] == {"reject_none": 0.2, "reject_low": 0.4}
+    assert loaded.public_config()["gates"] == {
+        "reject_none": 0.2,
+        "reject_low": 0.4,
+    }
     assert loaded.public_config()["retrieval"]["top_k"] == 30
 
 
@@ -130,6 +155,8 @@ def test_env_example_covers_every_required_variable() -> None:
         if line.strip() and not line.strip().startswith("#") and "=" in line
     }
     missing = [
-        name.upper() for name in MUST_BE_REQUIRED if name.upper() not in example_keys
+        name.upper()
+        for name in MUST_BE_REQUIRED
+        if name.upper() not in example_keys
     ]
     assert not missing, f".env.example 缺少配置项: {missing}"

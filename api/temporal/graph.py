@@ -1,4 +1,4 @@
-"""时序知识图谱：实体—指标—期间—来源。
+"""时序知识图谱：实体—指标—期间—来源。.
 
 这一层不负责从自然语言猜时间，也不负责生成答案。它只回答：
 某个主体在哪些期间披露了哪些指标、相邻/同比期间是什么、能否比较。
@@ -6,15 +6,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Iterable
 
 from api.temporal.facts import TemporalFact
 
 
 @dataclass(frozen=True, slots=True)
 class TemporalComparison:
+    """TemporalComparison."""
+
     subject: str
     metric: str
     current: TemporalFact
@@ -23,20 +25,24 @@ class TemporalComparison:
     pct_change: Decimal | None
 
     def as_dict(self) -> dict[str, object]:
+        """Run as_dict."""
         return {
             "subject": self.subject,
             "metric": self.metric,
             "current": self.current.as_dict(),
             "prior": self.prior.as_dict(),
             "delta": str(self.delta),
-            "pct_change": None if self.pct_change is None else str(self.pct_change),
+            "pct_change": None
+            if self.pct_change is None
+            else str(self.pct_change),
         }
 
 
 class TemporalKnowledgeGraph:
-    """内存图；持久化由 repository 负责，查询逻辑只依赖已加载事实。"""
+    """内存图；持久化由 repository 负责，查询逻辑只依赖已加载事实。."""
 
     def __init__(self, facts: Iterable[TemporalFact] = ()) -> None:
+        """Initialize the instance."""
         seen: dict[str, TemporalFact] = {}
         for fact in facts:
             seen[fact.fact_id] = fact
@@ -44,12 +50,15 @@ class TemporalKnowledgeGraph:
 
     @property
     def facts(self) -> tuple[TemporalFact, ...]:
+        """Run facts."""
         return self._facts
 
     def for_subject(self, subject: str) -> tuple[TemporalFact, ...]:
+        """Run for_subject."""
         return tuple(fact for fact in self._facts if fact.subject == subject)
 
     def series(self, subject: str, metric: str) -> tuple[TemporalFact, ...]:
+        """Run series."""
         return tuple(
             sorted(
                 (
@@ -57,21 +66,30 @@ class TemporalKnowledgeGraph:
                     for fact in self._facts
                     if fact.subject == subject and fact.metric == metric
                 ),
-                key=lambda fact: (fact.period_start, fact.period_end, fact.fact_id),
+                key=lambda fact: (
+                    fact.period_start,
+                    fact.period_end,
+                    fact.fact_id,
+                ),
             )
         )
 
     def at(
         self, subject: str, metric: str, period_start: str, period_end: str
     ) -> TemporalFact | None:
+        """Run at."""
         for fact in self.series(subject, metric):
-            if fact.period_start == period_start and fact.period_end == period_end:
+            if (
+                fact.period_start == period_start
+                and fact.period_end == period_end
+            ):
                 return fact
         return None
 
     def compare(
         self, subject: str, metric: str, period_start: str, period_end: str
     ) -> TemporalComparison | None:
+        """Run compare."""
         current = self.at(subject, metric, period_start, period_end)
         if current is None:
             return None
@@ -85,6 +103,7 @@ class TemporalKnowledgeGraph:
         return TemporalComparison(subject, metric, current, prior, delta, pct)
 
     def periods(self, subject: str) -> tuple[tuple[str, str], ...]:
+        """Run periods."""
         return tuple(
             sorted(
                 {

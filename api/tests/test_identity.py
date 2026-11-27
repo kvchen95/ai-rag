@@ -31,7 +31,10 @@ SECRET = "unit-test-secret"
 
 
 def _settings(**overrides: object) -> Settings:
-    values: dict[str, object] = {"AUTH_JWT_SECRET": SECRET, "AUTH_MODE": "fixed_jwt"}
+    values: dict[str, object] = {
+        "AUTH_JWT_SECRET": SECRET,
+        "AUTH_MODE": "fixed_jwt",
+    }
     values.update(overrides)
     return make_settings(**values)
 
@@ -56,9 +59,8 @@ def _token(settings: Settings, **claims: object) -> str:
 def test_no_depts_means_public_only() -> None:
     settings = _settings()
     resolver = IdentityResolver(settings)
-    snap = resolver.resolve(
-        authorization=f"Bearer {_token(settings, sub='u_new', user_depts=[], user_roles=[])}"
-    )
+    token = _token(settings, sub="u_new", user_depts=[], user_roles=[])
+    snap = resolver.resolve(authorization=f"Bearer {token}")
     assert snap.depts == () and snap.roles == ()
     assert snap.is_public_only is True
     # 关键行为：不是"拒绝访问"，而是仍能看公开文档——新员工天天碰到这种情况。
@@ -68,10 +70,15 @@ def test_no_depts_means_public_only() -> None:
 def test_multiple_depts_and_roles_are_kept_as_sets() -> None:
     settings = _settings()
     resolver = IdentityResolver(settings)
-    snap = resolver.resolve(
-        authorization=f"Bearer {_token(settings, sub='u_multi', user_depts=['fin', 'corp', 'fin'], user_roles=['staff', 'approver'])}"
+    token = _token(
+        settings,
+        sub="u_multi",
+        user_depts=["fin", "corp", "fin"],
+        user_roles=["staff", "approver"],
     )
-    # 去重 + 排序：顺序不定会让同一个人的过滤表达式每次都不同，日志与缓存都对不上。
+    snap = resolver.resolve(authorization=f"Bearer {token}")
+    # 去重 +
+    # 排序：顺序不定会让同一个人的过滤表达式每次都不同，日志与缓存都对不上。
     assert snap.depts == ("corp", "fin")
     assert snap.roles == ("approver", "staff")
     assert snap.is_public_only is False
@@ -81,36 +88,39 @@ def test_depts_as_comma_string_is_accepted() -> None:
     """上游塞逗号串比塞数组常见得多；两种都收，但都要归一成同一形状。"""
     settings = _settings()
     resolver = IdentityResolver(settings)
-    snap = resolver.resolve(
-        authorization=f"Bearer {_token(settings, sub='u_str', user_depts='fin, corp')}"
-    )
+    token = _token(settings, sub="u_str", user_depts="fin, corp")
+    snap = resolver.resolve(authorization=f"Bearer {token}")
     assert snap.depts == ("corp", "fin")
 
 
 def test_admin_is_marked_for_audit() -> None:
     settings = _settings()
     resolver = IdentityResolver(settings)
-    snap = resolver.resolve(
-        authorization=f"Bearer {_token(settings, sub='u_admin', user_depts=[], admin=True)}"
-    )
+    token = _token(settings, sub="u_admin", user_depts=[], admin=True)
+    snap = resolver.resolve(authorization=f"Bearer {token}")
     assert snap.admin is True
-    # §5.1：管理员跨部门访问必须在审计里可辨——标记由快照自己给出，不靠调用方记得加。
+    # §5.1：管理员跨部门访问必须在审计里可辨——标记由快照自己给出，不靠调用方记得
+    # 加。
     assert snap.audit_flags() == (ADMIN_AUDIT_FLAG,)
     assert snap.to_audit()["is_admin"] is True
 
 
 def test_non_admin_has_no_audit_flag() -> None:
     settings = _settings()
+    token = _token(settings, sub="u_norm", user_depts=["fin"])
     snap = IdentityResolver(settings).resolve(
-        authorization=f"Bearer {_token(settings, sub='u_norm', user_depts=['fin'])}"
+        authorization=f"Bearer {token}"
     )
     assert snap.audit_flags() == ()
 
 
 @pytest.mark.parametrize("value", ["false", "0", "no", "", None, 0])
 def test_admin_flag_is_not_truthy_coerced(value: object) -> None:
-    """`bool("false")` 是 True。上游把 admin 写成字符串 "false" 时，
-    用真值转换会把所有人变成管理员，所以只认布尔与明确的写法。"""
+    """`bool("false")` 是 True。
+
+    上游把 admin 写成字符串 "false" 时，用真值转换会把所有人变成管理员，
+    所以只认布尔与明确的写法。
+    """
     settings = _settings()
     snap = IdentityResolver(settings).resolve(
         authorization=f"Bearer {_token(settings, sub='u_x', admin=value)}"
@@ -148,7 +158,9 @@ def test_missing_authorization_is_401() -> None:
         ("Bearer   ", "没有 token"),
     ],
 )
-def test_malformed_authorization_scheme_is_401(authorization: str, needle: str) -> None:
+def test_malformed_authorization_scheme_is_401(
+    authorization: str, needle: str
+) -> None:
     resolver = IdentityResolver(_settings())
     with pytest.raises(AppError) as excinfo:
         resolver.resolve(authorization=authorization)
@@ -169,7 +181,9 @@ def test_token_without_exp_is_401() -> None:
     """没有 exp 的 token 永不过期 = 一张长期通行证。必须拒。"""
     settings = _settings()
     token = jwt.encode(
-        {"sub": "u_x"}, settings.auth_jwt_secret.get_secret_value(), algorithm="HS256"
+        {"sub": "u_x"},
+        settings.auth_jwt_secret.get_secret_value(),
+        algorithm="HS256",
     )
     with pytest.raises(AppError) as excinfo:
         IdentityResolver(settings).resolve(authorization=f"Bearer {token}")
@@ -189,7 +203,7 @@ def test_wrong_signature_is_401() -> None:
 
 
 def test_algorithm_mismatch_is_401() -> None:
-    """alg 只认配置里那一个：按 token 头部自选 alg 是算法混淆漏洞。"""
+    """Alg 只认配置里那一个：按 token 头部自选 alg 是算法混淆漏洞。"""
     settings = _settings()
     signed = jwt.encode(
         {"sub": "u_x", "exp": int(time.time()) + 600}, SECRET, algorithm="HS512"
@@ -220,19 +234,25 @@ def test_missing_user_id_claim_is_401() -> None:
 
 @pytest.mark.parametrize("claim_value", [[1, 2], {"fin": True}, 42])
 def test_non_string_claim_elements_are_401(claim_value: object) -> None:
-    """静默把 dict/数字当成"没有部门"最危险：用户以为只是权限小，其实凭证坏了。"""
+    """静默把 dict/数字当成“没有部门”最危险。
+
+    用户以为只是权限小，其实凭证坏了。
+    """
     settings = _settings()
+    token = _token(settings, sub="u_x", user_depts=claim_value)
     with pytest.raises(AppError) as excinfo:
         IdentityResolver(settings).resolve(
-            authorization=f"Bearer {_token(settings, sub='u_x', user_depts=claim_value)}"
+            authorization=f"Bearer {token}"
         )
     assert excinfo.value.code is ErrorCode.AUTH_INVALID
 
 
 def test_numeric_sub_is_rejected_by_rfc_string_rule() -> None:
-    """`sub` 按 RFC 7519 必须是字符串：PyJWT 在解码阶段就拒，比我们更早。
-    这条不是缺陷而是标准行为——数字主键的 IdP 要配 `AUTH_JWT_USER_ID_CLAIM=uid` 之类的
-    自定义 claim（见下一条），而不是指望我们把 sub 猜成字符串。
+    """`sub` 按 RFC 7519 必须是字符串。
+
+    PyJWT 在解码阶段就拒，比我们更早。这条不是缺陷而是标准行为——数字
+    主键的 IdP 要配 `AUTH_JWT_USER_ID_CLAIM=uid` 之类的自定义 claim
+    （见下一条），而不是指望我们把 sub 猜成字符串。
     """
     settings = _settings()
     with pytest.raises(AppError) as excinfo:
@@ -340,14 +360,17 @@ def test_mint_dev_token_refuses_in_mock_mode() -> None:
 
 
 def test_claims_are_configurable() -> None:
-    """claim 名走配置：换 IdP 不该改代码。"""
+    """Claim 名走配置：换 IdP 不该改代码。"""
     settings = _settings(
         AUTH_JWT_USER_ID_CLAIM="uid",
         AUTH_JWT_DEPTS_CLAIM="dept_codes",
         AUTH_JWT_ADMIN_CLAIM="is_admin",
     )
+    token = _token(
+        settings, uid="u_cfg", dept_codes=["hr"], is_admin=True
+    )
     snap = IdentityResolver(settings).resolve(
-        authorization=f"Bearer {_token(settings, uid='u_cfg', dept_codes=['hr'], is_admin=True)}"
+        authorization=f"Bearer {token}"
     )
     assert snap.user_id == "u_cfg"
     assert snap.depts == ("hr",)

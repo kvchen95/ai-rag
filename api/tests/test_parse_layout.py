@@ -61,8 +61,20 @@ def _lines_of(path: Path, page_index: int = 0) -> tuple[PageSpace, list[Line]]:
         return space, extract_lines(reading_chars(page, space), page_index + 1)
 
 
-def _line(text: str, *, top: float, x0: float = 72.0, x1: float = 300.0, size: float = 10.0) -> Line:
-    return Line(text=text, rect=Rect(x0, top, x1, top + size), page_num=1, font_size=size)
+def _line(
+    text: str,
+    *,
+    top: float,
+    x0: float = 72.0,
+    x1: float = 300.0,
+    size: float = 10.0,
+) -> Line:
+    return Line(
+        text=text,
+        rect=Rect(x0, top, x1, top + size),
+        page_num=1,
+        font_size=size,
+    )
 
 
 # --- 1. 行聚类：行内空格 ------------------------------------------------
@@ -93,7 +105,13 @@ def test_cjk_chars_are_not_separated_by_spaces() -> None:
 
     chars = [
         {"text": "住", "x0": 0.0, "x1": 10.0, "top": 0.0, "bottom": 10.0},
-        {"text": "宿", "x0": 10.0 + CJK_GAP_PT * 0.5, "x1": 20.0, "top": 0.0, "bottom": 10.0},
+        {
+            "text": "宿",
+            "x0": 10.0 + CJK_GAP_PT * 0.5,
+            "x1": 20.0,
+            "top": 0.0,
+            "bottom": 10.0,
+        },
     ]
     assert _join_segment(chars) == "住宿"
 
@@ -104,7 +122,13 @@ def test_cjk_gap_beyond_threshold_does_insert_a_space() -> None:
 
     chars = [
         {"text": "住", "x0": 0.0, "x1": 10.0, "top": 0.0, "bottom": 10.0},
-        {"text": "宿", "x0": 10.0 + CJK_GAP_PT * 2, "x1": 40.0, "top": 0.0, "bottom": 10.0},
+        {
+            "text": "宿",
+            "x0": 10.0 + CJK_GAP_PT * 2,
+            "x1": 40.0,
+            "top": 0.0,
+            "bottom": 10.0,
+        },
     ]
     assert _join_segment(chars) == "住 宿"
 
@@ -116,7 +140,8 @@ def test_two_column_page_is_read_column_by_column(fixtures: Path) -> None:
     """§3.2 边界表：不按栏切，一句话会被拆成左右两栏拼起来。
 
     夹具里左右两栏各自三句，按行读会得到
-    `Left column line one explains scope. Right column line one lists approvals.`。
+    `Left column line one explains scope.`
+    `Right column line one lists approvals.`
     """
     _, lines = _lines_of(fixtures / "layout/two-column-demo.pdf")
     texts = [line.text for line in lines]
@@ -147,21 +172,30 @@ def test_column_order_puts_left_column_first(fixtures: Path) -> None:
     """
     _, lines = _lines_of(fixtures / "layout/two-column-demo.pdf")
     texts = [line.text for line in lines if "column line" in line.text]
-    split = max(index for index, text in enumerate(texts) if text.startswith("Left"))
-    first_right = min(index for index, text in enumerate(texts) if text.startswith("Right"))
+    split = max(
+        index for index, text in enumerate(texts) if text.startswith("Left")
+    )
+    first_right = min(
+        index for index, text in enumerate(texts) if text.startswith("Right")
+    )
     assert split < first_right
 
 
 def test_detect_columns_needs_enough_lines() -> None:
     """两行的"页"不该被判成双栏：一行在左、一行在右完全可能是普通正文。"""
-    lines = [_line("a", top=10, x0=72, x1=200), _line("b", top=30, x0=400, x1=550)]
+    lines = [
+        _line("a", top=10, x0=72, x1=200),
+        _line("b", top=30, x0=400, x1=550),
+    ]
     assert detect_columns(lines) is None
 
 
 # --- 3. 旋转页 -------------------------------------------------------------
 
 
-def test_rotated_page_lines_are_horizontal_after_conversion(fixtures: Path) -> None:
+def test_rotated_page_lines_are_horizontal_after_conversion(
+    fixtures: Path,
+) -> None:
     """`/Rotate 90` 的页在显示空间里文字是竖排的，会被切成几十个单字符行。
 
     转换到阅读空间后必须恢复成正常的横排行（第一版没有转换，实测一行被切成
@@ -169,14 +203,19 @@ def test_rotated_page_lines_are_horizontal_after_conversion(fixtures: Path) -> N
     """
     _, lines = _lines_of(fixtures / "layout/rotated-demo.pdf", page_index=1)
     assert len(lines) <= 4
-    assert any("This sentence is on a rotated page" in line.text for line in lines)
+    assert any(
+        "This sentence is on a rotated page" in line.text for line in lines
+    )
 
 
 def test_rotated_page_bbox_maps_back_to_the_same_region(fixtures: Path) -> None:
     """同一段文字在第 1 页（未旋转）与第 2 页（旋转 90）应落在页面同一位置。"""
     with pdfplumber.open(str(fixtures / "layout/rotated-demo.pdf")) as pdf:
         page1, page2 = pdf.pages[0], pdf.pages[1]
-        space1, space2 = PageSpace.from_display(page1), PageSpace.from_display(page2)
+        space1, space2 = (
+            PageSpace.from_display(page1),
+            PageSpace.from_display(page2),
+        )
         lines1 = extract_lines(reading_chars(page1, space1), 1)
         lines2 = extract_lines(reading_chars(page2, space2), 2)
 
@@ -185,15 +224,20 @@ def test_rotated_page_bbox_maps_back_to_the_same_region(fixtures: Path) -> None:
     line2 = next(line for line in lines2 if target in line.text)
     bbox1 = space1.reading_to_display(line1.rect)
     bbox2 = space2.reading_to_display(line2.rect)
-    # 显示空间里两者的宽度/高度互换（页面被转了 90 度），但**阅读空间**必须一致。
-    assert line1.rect.as_tuple() == pytest.approx(line2.rect.as_tuple(), abs=1.0)
+    # 显示空间里两者的宽度/高度互换（页面被转了 90 度），但**阅读空间**必须
+    # 一致。
+    assert line1.rect.as_tuple() == pytest.approx(
+        line2.rect.as_tuple(), abs=1.0
+    )
     assert bbox1.as_tuple() != bbox2.as_tuple()
 
 
 # --- 4. 页眉页脚 -----------------------------------------------------------
 
 
-def test_header_footer_removed_only_from_the_margin_band(fixtures: Path) -> None:
+def test_header_footer_removed_only_from_the_margin_band(
+    fixtures: Path,
+) -> None:
     """页眉与页脚删掉；页中重复出现的 `Clause 4.2` 必须保留。
 
     §3.2 的"重复即页眉页脚"会误删每页都出现的条款编号——这里用页边带把误删
@@ -206,7 +250,10 @@ def test_header_footer_removed_only_from_the_margin_band(fixtures: Path) -> None
             width, height = space.reading_size
             lines = extract_lines(reading_chars(page, space), index + 1)
             page_lines.append(
-                [(line.text, in_margin_band(line, width, height)) for line in lines]
+                [
+                    (line.text, in_margin_band(line, width, height))
+                    for line in lines
+                ]
             )
     verdicts = classify_header_footer(page_lines)
     assert verdicts["ACME Internal - Travel Policy Handbook"].is_header_footer
@@ -302,7 +349,9 @@ def test_numeric_unit_line_survives_the_repeat_rule() -> None:
 
 
 def test_long_repeated_line_is_protected() -> None:
-    long_line = "本文件由合规部发布，适用于全体正式员工与实习生，未经批准不得外传。" * 2
+    long_line = (
+        "本文件由合规部发布，适用于全体正式员工与实习生，未经批准不得外传。" * 2
+    )
     lines = [[(long_line, True)]] * 2
     verdicts = classify_header_footer(lines)
     assert verdicts[long_line].reason == "too_long"
@@ -370,7 +419,14 @@ def test_two_column_prose_is_not_reported_as_a_table(fixtures: Path) -> None:
         space = PageSpace.from_display(page)
         lines = extract_lines(reading_chars(page, space), 1)
         columns = detect_columns(lines)
-        gutters = [(left[1], right[0]) for left, right in zip(columns, columns[1:])] if columns else []
+        gutters = (
+            [
+                (left[1], right[0])
+                for left, right in zip(columns, columns[1:], strict=False)
+            ]
+            if columns
+            else []
+        )
         tables = find_tables(page, space, column_gutters=gutters, lines=lines)
     assert tables == []
 
@@ -383,14 +439,21 @@ def test_rotated_page_without_wires_produces_no_table(fixtures: Path) -> None:
     with pdfplumber.open(str(fixtures / "layout/rotated-demo.pdf")) as pdf:
         page = pdf.pages[1]
         space = PageSpace.from_display(page)
-        tables = find_tables(page, space, strategies=[{"vertical_strategy": "lines", "horizontal_strategy": "lines"}])
+        tables = find_tables(
+            page,
+            space,
+            strategies=[
+                {"vertical_strategy": "lines", "horizontal_strategy": "lines"}
+            ],
+        )
     assert tables == []
 
 
 def test_fragmented_cells_are_rejected_as_prose() -> None:
     """同一行文字被切成两半的"表格"不是表格。
 
-    实测形态：单栏正文在 `text` 策略下被切成 `['Clause 4.2 app', 'lies to all']`。
+    实测形态：单栏正文在 `text` 策略下被切成
+    `['Clause 4.2 app', 'lies to all']`。
     真表格的单元格是完整字段值，不会出现"某行文字的一半"。
     """
     from api.parse.layout import _cells_are_fragments  # noqa: PLC0415
@@ -409,7 +472,9 @@ def test_fragmented_cells_are_rejected_as_prose() -> None:
     )
     lines = [
         _line("Clause 4.2 applies to all staff.", top=10, x0=72, x1=300),
-        _line("Paragraph 1: this text differs per page.", top=30, x0=72, x1=300),
+        _line(
+            "Paragraph 1: this text differs per page.", top=30, x0=72, x1=300
+        ),
     ]
     rect = Rect(70.0, 5.0, 310.0, 45.0)
     assert _cells_are_fragments(table, rect, lines)
@@ -442,7 +507,11 @@ def test_figure_region_absorbs_axis_labels(fixtures: Path) -> None:
     figure = figures[0]
     assert figure.rect.top < figure.core_rect.top  # 向上外扩（含 100 那个刻度）
     assert figure.rect.bottom > figure.core_rect.bottom  # 向下外扩（含类别名）
-    absorbed = [line.text for line in lines if figure.rect.intersection(line.rect) is not None]
+    absorbed = [
+        line.text
+        for line in lines
+        if figure.rect.intersection(line.rect) is not None
+    ]
     assert "Transport" in absorbed
     assert "100" in absorbed or "0" in absorbed
 
@@ -486,11 +555,17 @@ def test_prose_guard_flags_long_cells() -> None:
     必须用**真的超过阈值**的文本：第一版用了 36 个字的句子，它其实是靠
     "以句号结尾"那条判据被判成散文的，长度这条分支根本没走到——测试名与实现不符。
     """
-    from api.parse.layout import TABLE_CELL_MAX_CHARS, _looks_like_prose  # noqa: PLC0415
+    from api.parse.layout import (  # noqa: PLC0415
+        TABLE_CELL_MAX_CHARS,
+        _looks_like_prose,
+    )
     from api.parse.model import TableCell  # noqa: PLC0415
     from api.parse.tables import build_table  # noqa: PLC0415
 
-    long_text = "本表适用于全体正式员工与实习生，自二零二五年三月一日起执行，有效期三年" * 3
+    long_text = (
+        "本表适用于全体正式员工与实习生，自二零二五年三月一日起执行，有效期三年"
+        * 3
+    )
     assert len(long_text) > TABLE_CELL_MAX_CHARS
     table = build_table(
         [TableCell(0, 0, long_text), TableCell(0, 1, "x")],
@@ -506,11 +581,19 @@ def test_prose_guard_flags_cells_ending_with_sentence_punctuation() -> None:
     这条与上一条是两个独立分支：短句靠标点判、长句靠长度判。
     两条都要有各自的用例，否则其中一个被删掉不会有人发现。
     """
-    from api.parse.layout import TABLE_CELL_MAX_CHARS, _looks_like_prose  # noqa: PLC0415
+    from api.parse.layout import (  # noqa: PLC0415
+        TABLE_CELL_MAX_CHARS,
+        _looks_like_prose,
+    )
     from api.parse.model import TableCell  # noqa: PLC0415
     from api.parse.tables import build_table  # noqa: PLC0415
 
-    short_sentences = ["说明如下。", "自三月起。", "适用于全部。", "有效期三年。"]
+    short_sentences = [
+        "说明如下。",
+        "自三月起。",
+        "适用于全部。",
+        "有效期三年。",
+    ]
     assert all(len(text) < TABLE_CELL_MAX_CHARS for text in short_sentences)
     table = build_table(
         [TableCell(row, 0, text) for row, text in enumerate(short_sentences)],

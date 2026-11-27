@@ -1,21 +1,22 @@
-"""混合检索：两路 prefetch + RRF 融合（详细设计.md §7.1 / §7.2 / §7.6）。
+"""混合检索：两路 prefetch + RRF 融合（详细设计.md §7.1 / §7.2 / §7.6）。.
 
 为什么走 REST 而不是 qdrant-client
 ----------------------------------
-实测（1.15.1）：`client.query_batch_points(... query=models.Document(text=..., model="qdrant/bm25"))`
-会走进 fastembed 分支并抛 `ImportError: fastembed is not installed`。为了发一句查询
-去装一个 ~100MB 的推理依赖不划算，而 REST 的
-`{"text": <预分词串>, "model": "qdrant/bm25"}` 服务端自己推理、一次 HTTP 拿回两路
-（实测通过，`/points/query/batch` 的 `searches` 数组）。这也与 A3 的
-`QdrantVectorStore`（同样是 REST）保持一致：两条链路对同一个 Qdrant 用同一种客户端，
-排障时不用先分辨"这个方法走 SDK 还是走 REST"。
+实测（1.15.1）：`client.query_batch_points()` 传
+`query=models.Document(text=..., model="qdrant/bm25")` 会走进 fastembed 分支
+并抛 `ImportError: fastembed is not installed`。为了发一句查询去装一个 ~100MB
+的推理依赖不划算，而 REST 的 `{"text": <预分词串>, "model": "qdrant/bm25"}`
+服务端自己推理、一次 HTTP 拿回两路（实测通过，`/points/query/batch` 的
+`searches` 数组）。这也与 A3 的 `QdrantVectorStore`（同样是 REST）保持一致：
+两条链路对同一个 Qdrant 用同一种客户端，排障时不用先分辨"这个方法走 SDK 还是
+走 REST"。
 
 为什么用 batch 而不是原生 `fusion=rrf`
 --------------------------------------
 §7.2 说"两种方式结果等价时优先用 Qdrant 原生，少一跳网络"。这条在这里不成立：
 
-1. `/points/query/batch` 与 `/points/query`（带 prefetch+fusion）**都是一次 HTTP**，
-   "少一跳"没有收益；
+1. `/points/query/batch` 与 `/points/query`（带 prefetch+fusion）**都是一次
+   HTTP**，"少一跳"没有收益；
 2. §7.6 要求每条候选带 `dense_rank` / `sparse_rank`，原生融合只返回合成分数，
    拿不到两路各自的名次——审计要回答"它为什么没排上来"就缺了依据；
 3. §7.2 的并列规则（名次和相同看语义名次）必须是**我们能控制**的，原生实现里的
@@ -30,8 +31,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Sequence
+from typing import Any
 
 import httpx
 
@@ -66,12 +68,12 @@ CANDIDATE_PAYLOAD_FIELDS = (
 
 
 class HybridRetrievalError(RuntimeError):
-    """向量库不可用或返回了无法解释的形状。调用方据此决定重试还是拒绝。"""
+    """向量库不可用或返回了无法解释的形状。调用方据此决定重试还是拒绝。."""
 
 
 @dataclass(frozen=True, slots=True)
 class Candidate:
-    """一条候选：三路分数与出处（§7.6「这一章交给下一步什么」）。"""
+    """一条候选：三路分数与出处（§7.6「这一章交给下一步什么」）。."""
 
     chunk_id: str
     doc_key: str
@@ -92,6 +94,7 @@ class Candidate:
     rerank_score: float | None = None
 
     def as_dict(self) -> dict[str, Any]:
+        """Run as_dict."""
         return {
             "chunk_id": self.chunk_id,
             "doc_key": self.doc_key,
@@ -103,10 +106,13 @@ class Candidate:
             "sparse_rank": self.sparse_rank,
             "fused_rank": self.fused_rank,
             "fused_score": round(self.fused_score, 6),
-            "rerank_score": None if self.rerank_score is None else round(self.rerank_score, 6),
+            "rerank_score": None
+            if self.rerank_score is None
+            else round(self.rerank_score, 6),
         }
 
-    def with_rerank(self, score: float | None) -> "Candidate":
+    def with_rerank(self, score: float | None) -> Candidate:
+        """Run with_rerank."""
         return Candidate(
             chunk_id=self.chunk_id,
             doc_key=self.doc_key,
@@ -128,16 +134,19 @@ class Candidate:
 
 @dataclass(frozen=True, slots=True)
 class HybridResult:
+    """HybridResult."""
+
     candidates: list[Candidate]
     # 两路各自返回的条数（排障用：一路恒为 0 通常意味着 sparse 侧没写进去）。
     dense_count: int
     sparse_count: int
-    # 实际发给 Qdrant 的 filter JSON。审计里存一份，事后能复现"这次按什么条件搜的"。
+    # 实际发给 Qdrant 的 filter JSON。审计里存一份，事后能复现
+    # "这次按什么条件搜的"。
     filter_json: dict[str, Any] = field(default_factory=dict)
 
 
 def qdrant_filter_json(flt: RetrievalFilter) -> dict[str, Any]:
-    """把过滤条件渲染成**一份** JSON，两路共用同一份。
+    """把过滤条件渲染成**一份** JSON，两路共用同一份。.
 
     §7.1 原话："两路必须带完全相同的 filter"。这里的做法比"各自 to_qdrant()"
     更硬：只 dump 一次，两路拿到的是同一个 dict 对象。测试里对它做逐字节比较
@@ -158,7 +167,7 @@ def rrf_fuse(
     top_k: int,
     rrf_k: int = RRF_K,
 ) -> list[Candidate]:
-    """把两路 `[(chunk_id, score)]` 按名次融合（§7.2）。
+    """把两路 `[(chunk_id, score)]` 按名次融合（§7.2）。.
 
     分数不可比，名次可比：稠密是余弦（0..1），BM25 是无上界的词频加权
     （实测同一句查询能到 13.29）。所以这里**完全不看分数值**，只用位置。
@@ -169,10 +178,15 @@ def rrf_fuse(
     - 同一父片的第 3 条及以后 → 丢（由 `dedupe_parent_children` 做，见调用方）。
 
     并列的第二级退回 `chunk_id` 字典序：没有第二级的话，同分候选的顺序取决于
-    dict 插入顺序，同一份数据两次查询可能给出不同证据包——排查时会以为是检索漂移。
+    dict 插入顺序，同一份数据两次查询可能给出不同证据包——排查时会以为是
+    检索漂移。
     """
-    dense_rank = {chunk_id: index + 1 for index, (chunk_id, _) in enumerate(dense)}
-    sparse_rank = {chunk_id: index + 1 for index, (chunk_id, _) in enumerate(sparse)}
+    dense_rank = {
+        chunk_id: index + 1 for index, (chunk_id, _) in enumerate(dense)
+    }
+    sparse_rank = {
+        chunk_id: index + 1 for index, (chunk_id, _) in enumerate(sparse)
+    }
     dense_score = dict(dense)
     sparse_score = dict(sparse)
     missing = top_k + MISSING_RANK_OFFSET
@@ -209,7 +223,7 @@ def rrf_fuse(
 def dedupe_parent_children(
     candidates: Sequence[Candidate], *, keep: int = 2
 ) -> tuple[list[Candidate], list[Candidate]]:
-    """同一父片最多留 `keep` 条子片（§7.2 边界表）。
+    """同一父片最多留 `keep` 条子片（§7.2 边界表）。.
 
     父子切片内容高度重叠，全留下会把精排预算花在重复信息上（精排是逐对打分，
     每多一条都是实打实的毫秒）。返回 (保留, 丢弃)，丢弃的进审计。
@@ -225,8 +239,8 @@ def dedupe_parent_children(
     for candidate in candidates:
         parent = candidate.parent_id
         if not parent:
-            # 父片本身（parent_id 为空）不参与这个规则：规则说的是"同父片的第 3 条
-            # 子片及以后"，父片没有父片。
+            # 父片本身（parent_id 为空）不参与这个规则：规则说的是"同父片的
+            # 第 3 条子片及以后"，父片没有父片。
             kept.append(candidate)
             continue
         count = seen.get(parent, 0)
@@ -245,17 +259,20 @@ def build_batch_body(
     *,
     top_k: int,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """构造两路请求体，返回 (请求体, 这次用的 filter JSON)。
+    """构造两路请求体，返回 (请求体, 这次用的 filter JSON)。.
 
-    抽成纯函数不是为了好看：**"两路同 filter"这条判据必须能在没有 Qdrant 的情况下
-    被断言**。放在 `retrieve()` 里面的话，它只能靠集成测试验，而集成测试又贵又
-    容易被 skip——一条只在"恰好装了 Qdrant"时才跑的判据，等于没有判据。
+    抽成纯函数不是为了好看：**"两路同 filter"这条判据必须能在没有 Qdrant 的
+    情况下被断言**。放在 `retrieve()` 里面的话，它只能靠集成测试验，而集成
+    测试又贵又容易被 skip——一条只在"恰好装了 Qdrant"时才跑的判据，等于没有
+    判据。
 
     filter 只 dump 一次，两路拿到的是**同一个 dict 对象**（不是两份内容相同的
     dict）：内容相同的两份仍然可能在未来某次改动里漂移，同一个对象不会。
     """
     if not query_text.strip():
-        raise ValueError("query_text 不能为空：空的 BM25 查询会退化成'全库等权'")
+        raise ValueError(
+            "query_text 不能为空：空的 BM25 查询会退化成'全库等权'"
+        )
     if not dense_query:
         raise ValueError("dense_query 不能为空")
 
@@ -286,7 +303,7 @@ def build_batch_body(
 
 
 class HybridRetriever:
-    """一次混合召回的完整动作：两路取数 → RRF → 父片去重。
+    """一次混合召回的完整动作：两路取数 → RRF → 父片去重。.
 
     只做召回，不做版本兜底与精排（那两个在 pipeline 里，顺序不能换：§7.4 的版本
     校验必须在精排前，理由见 `api/version_guard.py`）。
@@ -300,22 +317,29 @@ class HybridRetriever:
         api_key: str = "",
         timeout_s: float = 5.0,
     ) -> None:
+        """Initialize the instance."""
         self.base_url = base_url.rstrip("/")
         self.collection = collection
         headers = {"api-key": api_key} if api_key else {}
-        # trust_env=False：容器内访问 http://qdrant:6333 绝不能走宿主 HTTP(S)_PROXY
-        # （B2/A3 都踩过，宿主 ALL_PROXY 指向一个已死的端口）。
+        # trust_env=False：容器内访问 http://qdrant:6333 绝不能走宿主
+        # HTTP(S)_PROXY（B2/A3 都踩过，宿主 ALL_PROXY 指向一个已死的端口）。
         self._client = httpx.Client(
-            base_url=self.base_url, timeout=timeout_s, headers=headers, trust_env=False
+            base_url=self.base_url,
+            timeout=timeout_s,
+            headers=headers,
+            trust_env=False,
         )
 
     def close(self) -> None:
+        """Run close."""
         self._client.close()
 
-    def __enter__(self) -> "HybridRetriever":
+    def __enter__(self) -> HybridRetriever:
+        """Enter the context manager."""
         return self
 
     def __exit__(self, *_exc: object) -> None:
+        """Exit the context manager."""
         self.close()
 
     def retrieve(
@@ -327,14 +351,16 @@ class HybridRetriever:
         top_k: int,
         parent_child_keep: int = 2,
     ) -> HybridResult:
-        """两路各取 `top_k` 条，同 filter，RRF 融合后按父片去重。
+        """两路各取 `top_k` 条，同 filter，RRF 融合后按父片去重。.
 
         `query_text` 与 `dense_query` 必须是同一次改写、同一句话的两种编码：
         稠密向量由调用方事先算好（编码服务是独立组件，召回层不该带一个编码器），
         稀疏侧在这里现场生成——`bm25_vector()` 是纯字符串操作，没有 IO。
         """
         if not query_text.strip():
-            raise ValueError("query_text 不能为空：空的 BM25 查询会退化成'全库等权'")
+            raise ValueError(
+                "query_text 不能为空：空的 BM25 查询会退化成'全库等权'"
+            )
         if not dense_query:
             raise ValueError("dense_query 不能为空")
 
@@ -349,7 +375,8 @@ class HybridRetriever:
             )
             if response.status_code >= 400:
                 raise HybridRetrievalError(
-                    f"Qdrant batch query -> HTTP {response.status_code}: {response.text[:400]}"
+                    f"Qdrant batch query -> HTTP {response.status_code}: "
+                    f"{response.text[:400]}"
                 )
             result = (response.json() or {}).get("result") or []
         except httpx.HTTPError as exc:
@@ -443,13 +470,15 @@ class HybridRetriever:
 
 
 def _with_payload(candidate: Candidate, payload: dict[str, Any]) -> Candidate:
-    """把 payload 里的字段补到候选上。payload 缺失时保留空值而不是抛：
+    """把 payload 里的字段补到候选上。payload 缺失时保留空值而不是抛：.
 
     点存在但 payload 不全，说明有人绕过 `build_payload()` 直接写过向量库——
     这是数据事故，但它的表现应该是"这条候选内容为空、进不了证据包"，
     而不是整个请求 500（一次坏数据不该打挂在线链路）。
     """
+
     def _pick(key: str, default: Any) -> Any:
+        """Run _pick."""
         value = payload.get(key)
         return default if value is None else value
 

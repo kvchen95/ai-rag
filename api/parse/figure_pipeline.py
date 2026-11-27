@@ -1,4 +1,4 @@
-"""把「检测到的图区域」变成「已转译、已对账的 FigureData」的默认实现。
+"""把「检测到的图区域」变成「已转译、已对账的 FigureData」的默认实现。.
 
 这是 `reader.FigureBuilder` 的生产实现，四步顺序固定：
 
@@ -8,7 +8,7 @@
 
 | 失败点 | 原因码 | 为什么不入库 |
 |---|---|---|
-| 渲染/裁片 | `render: …` | 没有图就没有引用对象；`image_path` 指向不存在的文件比缺一条更糟 |
+| 渲染/裁片 | `render: …` | 没有图就没有引用对象；路径悬空更糟 |
 | 没配 VLM | `vlm_unavailable` | 空转译让检索命中一条没有内容的证据 |
 | 转译无结构化输出 | `transcript: …` | 没有数值可对账 = 无法证明模型没读错 |
 | 对账不过 | `reconcile: <检查名>` | §3.4 的硬要求：对不上就判失败 |
@@ -22,8 +22,8 @@
 
 ### 图里的"证据"从哪来
 
-对账要拿**原始 PDF** 里的刻度/标签/柱高与模型的说法对撞，不能拿模型自己的话说事。
-`collect_evidence` 做这件事：
+对账要拿**原始 PDF** 里的刻度/标签/柱高与模型的说法对撞，不能拿模型自己的
+话说事。`collect_evidence` 做这件事：
 
 * 图区域内的文字行 → `texts` 与 `numbers`（刻度、类别名、图注）；
 * 矢量柱（`page.rects` 里落在图区域内的实心矩形）→ `bar_ratios`（高度 / 轴高）。
@@ -63,10 +63,10 @@ BAR_MIN_HEIGHT = 8.0
 
 @dataclass(frozen=True, slots=True)
 class FigurePipelineConfig:
-    """裁图与转译参数。"""
+    """裁图与转译参数。."""
 
-    # 目标 DPI。`figures.MIN_FIGURE_DPI` 是硬下限（200），这里给 220 留余量——
-    # 渲染出来的实际 DPI 会因为取整与最小像素宽而略有偏差，贴着 200 容易掉到线下。
+    # 目标 DPI。`figures.MIN_FIGURE_DPI` 是硬下限（200），这里给 220 留余量
+    # ——渲染出来的实际 DPI 会因取整与最小像素宽略有偏差，贴着 200 易掉线。
     dpi: float = 220.0
     # 裁片额外留白（pt）：让刻度与标签完整落进图里，不被切掉半个字。
     pad_pt: float = 6.0
@@ -79,9 +79,10 @@ def build_figure(
     config: FigurePipelineConfig,
     source_path: Path | None = None,
 ) -> FigureBuildResult:
-    """`FigureBuilder` 的生产实现。
+    """`FigureBuilder` 的生产实现。.
 
-    `source_path` 是 PDF 文件路径（pdfplumber 的 Page 上拿不可靠：它可能是内存流）。
+    `source_path` 是 PDF 文件路径（pdfplumber 的 Page 上拿不可靠：
+    它可能是内存流）。
     """
     if vlm is None:
         return FigureBuildResult(error="vlm_unavailable: no VLM configured")
@@ -95,14 +96,18 @@ def build_figure(
         return FigureBuildResult(error=f"render: {exc}")
 
     buffer = io.BytesIO()
-    rendered.image.save(buffer, format="WEBP", lossless=True, method=fig.WEBP_EFFORT)
+    rendered.image.save(
+        buffer, format="WEBP", lossless=True, method=fig.WEBP_EFFORT
+    )
     image_bytes = buffer.getvalue()
 
     prompt = prompt_for(request.detected.kind)
     try:
         raw = vlm.transcribe(image_bytes, prompt)
     except Exception as exc:  # noqa: BLE001 - 模型侧的异常类型不固定
-        return FigureBuildResult(error=f"vlm_error: {type(exc).__name__}: {exc}")
+        return FigureBuildResult(
+            error=f"vlm_error: {type(exc).__name__}: {exc}"
+        )
 
     try:
         transcript = parse_transcript(raw)
@@ -132,7 +137,7 @@ def build_figure(
 def _render(
     request: FigureBuildRequest, config: FigurePipelineConfig, source_path: Path
 ) -> fig.RenderedFigure:
-    """渲染整页并裁出这块图。
+    """渲染整页并裁出这块图。.
 
     **裁的就是 `detected.rect`**（已外扩、已吸收刻度与图注的那个矩形），不是
     `core_rect` 再加一点 pad。理由：`Region.rect` 用的是 `detected.rect`，
@@ -145,7 +150,8 @@ def _render(
 
     display_width, display_height = request.space.display_size
     display_rect = request.space.reading_to_display(request.detected.rect)
-    # 裁片不能超出页面：越界部分会被 PIL 用黑边填充，VLM 会把黑边当"图的一部分"。
+    # 裁片不能超出页面：越界部分会被 PIL 用黑边填充，
+    # VLM 会把黑边当"图的一部分"。
     display_rect = Rect(
         max(0.0, display_rect.x0),
         max(0.0, display_rect.top),
@@ -156,7 +162,9 @@ def _render(
     document = PdfDocument(str(source_path))
     try:
         pdfium_page = document[request.page_num - 1]
-        image = fig.render_page(pdfium_page, scale=fig.scale_for_dpi(config.dpi))
+        image = fig.render_page(
+            pdfium_page, scale=fig.scale_for_dpi(config.dpi)
+        )
     finally:
         document.close()
     return fig.crop_display(
@@ -168,7 +176,7 @@ def _render(
 
 
 def collect_evidence(request: FigureBuildRequest) -> FigureEvidence:
-    """从原始 PDF 收集对账依据（文字、数值、柱高比例）。"""
+    """从原始 PDF 收集对账依据（文字、数值、柱高比例）。."""
     region = request.detected.rect
     texts = tuple(
         line.text.strip()
@@ -186,16 +194,18 @@ def collect_evidence(request: FigureBuildRequest) -> FigureEvidence:
     )
 
 
-def _bar_ratios(page: Any, detected: DetectedFigure) -> tuple[tuple[float, float], ...]:
-    """矢量柱的（高度 / 轴高, x 中心）。
+def _bar_ratios(
+    page: Any, detected: DetectedFigure
+) -> tuple[tuple[float, float], ...]:
+    """矢量柱的（高度 / 轴高, x 中心）。.
 
     柱子识别：落在图区域内、宽 ≥ `BAR_MIN_WIDTH`、高 ≥ `BAR_MIN_HEIGHT` 的矩形
     （`page.rects`）。比例算的是"这根柱的高度占轴高的多少"，于是模型说的 `32%`
     能对上"柱高 ≈ 轴高 × 0.32"。
 
-    轴高取最高柱 × `AXIS_HEIGHT_SLACK`：柱顶通常比轴顶低一点（留白），直接拿最高柱
-    当轴高会把所有比例系统性放大——而"系统性放大"会让对账一致地通过，这正是对账
-    要防的那类错（一致地错比随机错更危险）。
+    轴高取最高柱 × `AXIS_HEIGHT_SLACK`：柱顶通常比轴顶低一点（留白），
+    直接拿最高柱当轴高会把所有比例系统性放大——而"系统性放大"会让对账
+    一致地通过，这正是对账要防的那类错（一致地错比随机错更危险）。
     """
     core = detected.core_rect
     bars: list[Rect] = []
@@ -217,11 +227,13 @@ def _bar_ratios(page: Any, detected: DetectedFigure) -> tuple[tuple[float, float
     if tallest <= 0:
         return ()
     axis_height = tallest * AXIS_HEIGHT_SLACK
-    return tuple((bar.height / axis_height, (bar.x0 + bar.x1) / 2.0) for bar in bars)
+    return tuple(
+        (bar.height / axis_height, (bar.x0 + bar.x1) / 2.0) for bar in bars
+    )
 
 
 def write_webp(image_bytes: bytes, figures_dir: Path, chunk_id: str) -> str:
-    """把裁片写进 `figures/{chunk_id}.webp`，返回**相对路径**（进库的那一个）。
+    """把裁片写进 `figures/{chunk_id}.webp`，返回**相对路径**（进库的那一个）。.
 
     相对路径而不是绝对路径：绝对路径会让 `chunks.image_path` 跟着机器走，
     换部署位置库里的值就全废了。
@@ -237,10 +249,13 @@ def make_builder(
     *,
     source_path: Path | None = None,
 ) -> Any:
-    """返回一个可直接传给 `read_pdf(figure_builder=...)` 的可调用对象。"""
+    """返回一个可直接传给 `read_pdf(figure_builder=...)` 的可调用对象。."""
 
     def _builder(request: FigureBuildRequest) -> FigureBuildResult:
-        return build_figure(request, vlm=vlm, config=config, source_path=source_path)
+        """Run _builder."""
+        return build_figure(
+            request, vlm=vlm, config=config, source_path=source_path
+        )
 
     return _builder
 

@@ -5,9 +5,11 @@
 1. **结构**：改写照做了什么、没做什么，逐条可读；
 2. **不变式**：改写前后的数字集合相同、否定不反转、幂等（再跑一遍不变）；
 3. **变异守卫**：把关键约束改坏，对应的用例必须红（`test_mutation_*` 用参数化的
-   方式在进程内模拟"改坏"，而不是改文件——改文件那套在 `scripts/b3_mutation_check.py`）。
+   方式在进程内模拟"改坏"，而不是改文件——改文件那套在
+   `scripts/b3_mutation_check.py`）。
 
-第 2 类是本文件的核心。改写看起来"对的"太容易了：`住宿费 → 住宿费限额` 是正确的，
+第 2 类是本文件的核心。改写看起来"对的"太容易了：
+`住宿费 → 住宿费限额` 是正确的，
 `住宿费限额 → 住宿费限额限额` 是同一个规则跑在了自己的产物上——两次都不报错。
 所以幂等性必须是被断言的，不是被相信的。
 """
@@ -28,7 +30,7 @@ from api.query import (
     rewrite,
     understand,
 )
-from api.query import lexicon
+from api.resources import lexicon
 
 NOW = date(2026, 3, 15)
 
@@ -85,7 +87,10 @@ def test_colloquial_turns_into_written_form() -> None:
 def test_rewrite_trace_names_every_change() -> None:
     """§6.4 的 `rewrite_trace` 审计用：每次替换都要能说出"从什么到什么"。"""
     _, steps = rewrite("差标的住宿费")
-    assert [step.as_text() for step in steps] == ["差标→差旅标准", "住宿费→住宿费限额"]
+    assert [step.as_text() for step in steps] == [
+        "差标→差旅标准",
+        "住宿费→住宿费限额",
+    ]
     assert {step.kind for step in steps} == {"acronym", "synonym"}
 
 
@@ -108,8 +113,9 @@ def test_rewrite_trace_names_every_change() -> None:
 def test_rewrite_is_idempotent(text: str) -> None:
     """再跑一遍必须不变。
 
-    实测撞过：`住宿费限额是多少`（输入已是正式说法）会被短左值 `住宿费` 二次替换成
-    `住宿费限额限额是多少`。这类错误不报错，只会让 BM25 的 bigram 频率被自己翻倍。
+    实测撞过：`住宿费限额是多少`（输入已是正式说法）会被短左值 `住宿费`
+    二次替换成 `住宿费限额限额是多少`。这类错误不报错，只会让 BM25 的
+    bigram 频率被自己翻倍。
     """
     once, _ = rewrite(text)
     twice, _ = rewrite(once)
@@ -227,7 +233,12 @@ def test_unparsed_time_word_survives_rewriting() -> None:
 
 @pytest.mark.parametrize(
     "text",
-    ["各部门的差标分别是多少", "住宿费和交通费的差异", "报销需要哪些前置审批", "这个流程对应哪一步"],
+    [
+        "各部门的差标分别是多少",
+        "住宿费和交通费的差异",
+        "报销需要哪些前置审批",
+        "这个流程对应哪一步",
+    ],
 )
 def test_multi_hop_markers_are_detected(text: str) -> None:
     mode, hits = detect_mode(text)
@@ -312,8 +323,11 @@ def test_entities_are_extracted_and_deduplicated() -> None:
 
 
 def test_longer_term_wins_over_its_own_prefix() -> None:
-    """`出差补助` 与 `补助` 同时命中时只留长的：短的会让覆盖检查以为有两个实体，
-    其中一个必然在证据里找不到，于是永远判"未覆盖"。"""
+    """`出差补助` 与 `补助` 同时命中时只留长的。
+
+    短的会让覆盖检查以为有两个实体，其中一个必然在证据里找不到，于是永远
+    判“未覆盖”。
+    """
     entities = extract_entities("出差补助标准")
     assert "出差补助" not in entities  # 词表里没有它，但"补助"应被留下
     assert entities == ("补助",) or entities == ("出差", "补助")
@@ -327,7 +341,9 @@ def test_entities_empty_when_no_domain_term() -> None:
 
 
 def test_plan_carries_every_field_the_next_stage_needs() -> None:
-    plan = understand("2025年3月15日差标的住宿费", previous_entities=None, now=NOW)
+    plan = understand(
+        "2025年3月15日差标的住宿费", previous_entities=None, now=NOW
+    )
     assert isinstance(plan, QueryPlan)
     assert plan.retrieval_text and plan.original  # 改写产物与原文都在
     assert plan.entities

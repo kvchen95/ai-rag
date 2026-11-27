@@ -36,12 +36,14 @@ from api.retrieval.gate import GateConfig, decide
 from api.retrieval.hybrid import HybridRetriever, qdrant_filter_json
 from api.retrieval.rerank import Reranker, rerank_candidates
 from api.retrieval.texts import fetch_texts
-from api.version_guard import drop_stale
 
-# 只 import **辅助函数**，不 import fixture 名。pytest 允许测试模块内定义 fixture，
-# 所以从 conftest import 一个同名函数会把它变成"本模块的 fixture"，把 conftest 里
+# 只 import **辅助函数**，不 import fixture 名。pytest 允许测试模块内定义
+# fixture，
+# 所以从 conftest import 一个同名函数会把它变成"本模块的 fixture"，把 conftest
+# 里
 # 那份真 fixture 遮蔽掉——实测的表现是 `TypeError: Invalid type for url. Expected
-# str or httpx.URL, got <class 'function'>`：拿到的不是 URL 字符串，而是 fixture 函数。
+# str or httpx.URL, got <class 'function'>`：拿到的不是 URL 字符串，而是 fixture
+#  函数。
 from api.tests.b3.conftest import (
     doc_key,
     make_chunk,
@@ -49,6 +51,7 @@ from api.tests.b3.conftest import (
     unique,
     version_of,
 )
+from api.version_guard import drop_stale
 
 pytestmark = pytest.mark.integration
 
@@ -96,7 +99,10 @@ def test_hybrid_retrieval_honours_the_filter_on_both_routes(
     """
     name = unique("filter")
     chunks = [
-        make_chunk(chunk_id=f"ch_{name}_pub", text="住宿费标准：每人每天 500 元，公开制度。"),
+        make_chunk(
+            chunk_id=f"ch_{name}_pub",
+            text="住宿费标准：每人每天 500 元，公开制度。",
+        ),
         make_chunk(
             chunk_id=f"ch_{name}_fin",
             text="住宿费标准：财务部专用差旅额度说明。",
@@ -114,14 +120,19 @@ def test_hybrid_retrieval_honours_the_filter_on_both_routes(
 
     flt = build_filter(FIN)
     vector = query_embedder.embed("住宿费标准是多少")
-    result = retriever.retrieve("住宿费标准是多少", flt, dense_query=vector, top_k=30)
+    result = retriever.retrieve(
+        "住宿费标准是多少", flt, dense_query=vector, top_k=30
+    )
 
     ids = {c.chunk_id for c in result.candidates}
     assert f"ch_{name}_hr" not in ids, "无权限切片从某一路漏进候选池"
     assert f"ch_{name}_pub" in ids
     # 两路都该有东西（一个是稠密一个 BM25，都跑过）
-    assert result.dense_count > 0 and result.sparse_count > 0, (
-        f"某一路没返回任何结果：dense={result.dense_count} sparse={result.sparse_count}"
+    assert (
+        result.dense_count > 0 and result.sparse_count > 0
+    ), (
+        f"某一路没返回任何结果：dense={result.dense_count} "
+        f"sparse={result.sparse_count}"
     )
 
 
@@ -136,7 +147,9 @@ def test_unprivileged_document_never_leaks_through_either_route(
     """
     name = unique("leak")
     chunks = [
-        make_chunk(chunk_id=f"ch_{name}_pub", text="住宿费标准：每人每天 500 元。"),
+        make_chunk(
+            chunk_id=f"ch_{name}_pub", text="住宿费标准：每人每天 500 元。"
+        ),
         make_chunk(
             chunk_id=f"ch_{name}_secret",
             text="住宿费标准：财务部内部每人每天 2000 元，仅限财务部。",
@@ -149,7 +162,9 @@ def test_unprivileged_document_never_leaks_through_either_route(
     nobody = IdentitySnapshot(user_id="u_none")
     flt = build_filter(nobody)
     vector = query_embedder.embed("住宿费标准 2000 元")
-    result = retriever.retrieve("住宿费标准 2000 元", flt, dense_query=vector, top_k=30)
+    result = retriever.retrieve(
+        "住宿费标准 2000 元", flt, dense_query=vector, top_k=30
+    )
     ids = {c.chunk_id for c in result.candidates}
     assert f"ch_{name}_secret" not in ids
 
@@ -185,12 +200,18 @@ def test_stale_version_chunks_are_dropped_before_rerank(
     """
     name = unique("stale")
     old_chunks = [
-        make_chunk(chunk_id=f"ch_{name}_old", text="住宿费标准：每人每天 800 元（旧版）。")
+        make_chunk(
+            chunk_id=f"ch_{name}_old",
+            text="住宿费标准：每人每天 800 元（旧版）。",
+        )
     ]
     publish(conn, store, embedder, name=name, tag="old", chunks=old_chunks)
 
     new_chunks = [
-        make_chunk(chunk_id=f"ch_{name}_new", text="住宿费标准：每人每天 500 元（现行）。")
+        make_chunk(
+            chunk_id=f"ch_{name}_new",
+            text="住宿费标准：每人每天 500 元（现行）。",
+        )
     ]
     publish(conn, store, embedder, name=name, tag="new", chunks=new_chunks)
 
@@ -200,14 +221,22 @@ def test_stale_version_chunks_are_dropped_before_rerank(
 
     flt = build_filter(FIN)
     vector = query_embedder.embed("住宿费标准 每人每天 多少元")
-    result = retriever.retrieve("住宿费标准 每人每天 多少元", flt, dense_query=vector, top_k=30)
-
-    before = {c.chunk_id for c in result.candidates}
-    assert f"ch_{name}_old" in before, (
-        "前置过滤本应放它进来（否则这条用例测不到 drop_stale 的作用）"
+    result = retriever.retrieve(
+        "住宿费标准 每人每天 多少元", flt, dense_query=vector, top_k=30
     )
 
-    kept, dropped = drop_stale(b3_pg, [c.as_dict() | {"doc_key": c.doc_key, "version_id": c.version_id} for c in result.candidates])
+    before = {c.chunk_id for c in result.candidates}
+    assert (
+        f"ch_{name}_old" in before
+    ), "前置过滤本应放它进来（否则这条用例测不到 drop_stale 的作用）"
+
+    kept, dropped = drop_stale(
+        b3_pg,
+        [
+            c.as_dict() | {"doc_key": c.doc_key, "version_id": c.version_id}
+            for c in result.candidates
+        ],
+    )
     kept_ids = {row["chunk_id"] for row in kept}
     dropped_ids = {row["chunk_id"] for row in dropped}
     assert f"ch_{name}_old" in dropped_ids, "旧版本切片必须在精排前被剔除"
@@ -223,8 +252,14 @@ def test_drop_stale_is_fail_closed_for_unknown_documents(
     所以查不到也必须丢。
     """
     name = unique("ghost")
-    chunks = [make_chunk(chunk_id=f"ch_{name}_a", text="住宿费标准：每人每天 500 元。")]
-    version_id = publish(conn, store, embedder, name=name, tag="v1", chunks=chunks)
+    chunks = [
+        make_chunk(
+            chunk_id=f"ch_{name}_a", text="住宿费标准：每人每天 500 元。"
+        )
+    ]
+    version_id = publish(
+        conn, store, embedder, name=name, tag="v1", chunks=chunks
+    )
 
     flt = build_filter(FIN)
     vector = query_embedder.embed("住宿费标准")
@@ -233,15 +268,18 @@ def test_drop_stale_is_fail_closed_for_unknown_documents(
     # 把版本改成 deprecated 但**不动**向量库：模拟"PG 已下线、向量库还不知道"
     with conn.cursor() as cur:
         cur.execute(
-            "UPDATE doc_versions SET status = 'deprecated', deprecated_at = now() "
-            "WHERE version_id = %s",
+            "UPDATE doc_versions SET status = 'deprecated', "
+            "deprecated_at = now() WHERE version_id = %s",
             (version_id,),
         )
     conn.commit()
 
     kept, dropped = drop_stale(
         b3_pg,
-        [c.as_dict() | {"doc_key": c.doc_key, "version_id": c.version_id} for c in result.candidates],
+        [
+            c.as_dict() | {"doc_key": c.doc_key, "version_id": c.version_id}
+            for c in result.candidates
+        ],
     )
     assert not kept, "没有生效版本的文档，其候选必须全丢"
     assert dropped
@@ -251,7 +289,13 @@ def test_drop_stale_is_fail_closed_for_unknown_documents(
 
 
 def test_rerank_timeout_degrades_with_audit(
-    conn, store, embedder, retriever: HybridRetriever, reranker: Reranker, query_embedder, b3_pg
+    conn,
+    store,
+    embedder,
+    retriever: HybridRetriever,
+    reranker: Reranker,
+    query_embedder,
+    b3_pg,
 ) -> None:
     """验收原句："精排超时降级有审计"。
 
@@ -260,7 +304,10 @@ def test_rerank_timeout_degrades_with_audit(
     """
     name = unique("timeout")
     chunks = [
-        make_chunk(chunk_id=f"ch_{name}_{i}", text=f"住宿费标准：每人每天 {500 + i} 元。")
+        make_chunk(
+            chunk_id=f"ch_{name}_{i}",
+            text=f"住宿费标准：每人每天 {500 + i} 元。",
+        )
         for i in range(6)
     ]
     publish(conn, store, embedder, name=name, tag="v1", chunks=chunks)
@@ -284,15 +331,21 @@ def test_rerank_timeout_degrades_with_audit(
     assert outcome.reason == "rerank_timeout"
     assert outcome.scored == 0
     assert outcome.fallback == "fused_rank"
-    assert all(item.rerank_score is None for item in outcome.ordered), (
-        "降级时不能编造分数——填 0 会让门控判成'无相关'"
-    )
+    assert all(
+        item.rerank_score is None for item in outcome.ordered
+    ), "降级时不能编造分数——填 0 会让门控判成'无相关'"
     audit = outcome.as_audit()
     assert audit["degrade"] == "rerank_timeout" and audit["degraded"] is True
 
 
 def test_rerank_actually_scores_relevant_text_higher(
-    conn, store, embedder, retriever: HybridRetriever, reranker: Reranker, query_embedder, b3_pg
+    conn,
+    store,
+    embedder,
+    retriever: HybridRetriever,
+    reranker: Reranker,
+    query_embedder,
+    b3_pg,
 ) -> None:
     """真服务上的精排必须把相关的那条排到最前——否则"降级/不降级"没有意义。
 
@@ -300,10 +353,22 @@ def test_rerank_actually_scores_relevant_text_higher(
     """
     name = unique("rerank")
     chunks = [
-        make_chunk(chunk_id=f"ch_{name}_hot", text="住宿费标准：每人每天 500 元，按职级限额报销。"),
-        make_chunk(chunk_id=f"ch_{name}_cold1", text="员工入职需提交体检报告，费用由公司承担。"),
-        make_chunk(chunk_id=f"ch_{name}_cold2", text="市内交通凭票报销，单次不超过 100 元。"),
-        make_chunk(chunk_id=f"ch_{name}_cold3", text="加班需提前申请，由部门负责人审批。"),
+        make_chunk(
+            chunk_id=f"ch_{name}_hot",
+            text="住宿费标准：每人每天 500 元，按职级限额报销。",
+        ),
+        make_chunk(
+            chunk_id=f"ch_{name}_cold1",
+            text="员工入职需提交体检报告，费用由公司承担。",
+        ),
+        make_chunk(
+            chunk_id=f"ch_{name}_cold2",
+            text="市内交通凭票报销，单次不超过 100 元。",
+        ),
+        make_chunk(
+            chunk_id=f"ch_{name}_cold3",
+            text="加班需提前申请，由部门负责人审批。",
+        ),
     ]
     publish(conn, store, embedder, name=name, tag="v1", chunks=chunks)
 
@@ -327,13 +392,19 @@ def test_rerank_actually_scores_relevant_text_higher(
     assert outcome.scored >= 3
     assert outcome.ordered[0].chunk_id == f"ch_{name}_hot"
     assert outcome.ordered[0].rerank_score is not None
-    assert outcome.ordered[0].rerank_score > 0.4, (
-        f"相关切片的分应显著高于阈值，实际 {outcome.ordered[0].rerank_score}"
-    )
+    assert (
+        outcome.ordered[0].rerank_score > 0.4
+    ), f"相关切片的分应显著高于阈值，实际 {outcome.ordered[0].rerank_score}"
 
 
 def test_gate_rejects_irrelevant_question_on_real_data(
-    conn, store, embedder, retriever: HybridRetriever, reranker: Reranker, query_embedder, b3_pg
+    conn,
+    store,
+    embedder,
+    retriever: HybridRetriever,
+    reranker: Reranker,
+    query_embedder,
+    b3_pg,
 ) -> None:
     """真数据上的拒答路径：库里只有差旅制度，问"明天天气"。
 
@@ -347,7 +418,11 @@ def test_gate_rejects_irrelevant_question_on_real_data(
         embedder,
         name=name,
         tag="v1",
-        chunks=[make_chunk(chunk_id=f"ch_{name}_a", text="住宿费标准：每人每天 500 元。")],
+        chunks=[
+            make_chunk(
+                chunk_id=f"ch_{name}_a", text="住宿费标准：每人每天 500 元。"
+            )
+        ],
     )
     flt = build_filter(FIN)
     query = "如何申报个人所得税专项附加扣除"
@@ -355,8 +430,14 @@ def test_gate_rejects_irrelevant_question_on_real_data(
     result = retriever.retrieve(query, flt, dense_query=vector, top_k=30)
     texts = fetch_texts(b3_pg, [c.chunk_id for c in result.candidates])
     outcome = rerank_candidates(
-        reranker, query, result.candidates, {cid: item.text for cid, item in texts.items()},
-        budget_ms=5000, top_n_min=2, top_n_max=8, candidates_max=50,
+        reranker,
+        query,
+        result.candidates,
+        {cid: item.text for cid, item in texts.items()},
+        budget_ms=5000,
+        top_n_min=2,
+        top_n_max=8,
+        candidates_max=50,
     )
     decision = decide(
         outcome.ordered,
@@ -365,7 +446,9 @@ def test_gate_rejects_irrelevant_question_on_real_data(
         degraded=outcome.degraded,
         degrade_reason=outcome.reason,
     )
-    assert decision.verdict != "pass", f"不相关问题不该放行（top1={decision.top1}）"
+    assert (
+        decision.verdict != "pass"
+    ), f"不相关问题不该放行（top1={decision.top1}）"
 
 
 # --- 4. 中文 BM25 必须过 bm25_text（A3 报的坑在召回层的复现）------------------
@@ -392,7 +475,10 @@ def test_chinese_bm25_needs_the_shared_tokeniser(
     target_text = "住宿费标准每人每天五百元整按职级限额报销交通费另计"
     chunks = [
         make_chunk(chunk_id=f"ch_{name}_target", text=target_text),
-        make_chunk(chunk_id=f"ch_{name}_noise", text="员工入职需提交体检报告费用由公司承担"),
+        make_chunk(
+            chunk_id=f"ch_{name}_noise",
+            text="员工入职需提交体检报告费用由公司承担",
+        ),
     ]
     publish(conn, store, embedder, name=name, tag="v1", chunks=chunks)
 
@@ -403,11 +489,13 @@ def test_chinese_bm25_needs_the_shared_tokeniser(
         "limit": 30,
         "with_payload": ["chunk_id"],
     }
-    wrong = body_base | {"query": {"text": "住宿费每人每天多少元", "model": "qdrant/bm25"}}
-    right = body_base | {
-        "query": _bm25_vector("住宿费每人每天多少元")
+    wrong = body_base | {
+        "query": {"text": "住宿费每人每天多少元", "model": "qdrant/bm25"}
     }
-    with httpx.Client(base_url=qdrant_reachable, timeout=20, trust_env=False) as client:
+    right = body_base | {"query": _bm25_vector("住宿费每人每天多少元")}
+    with httpx.Client(
+        base_url=qdrant_reachable, timeout=20, trust_env=False
+    ) as client:
         wrong_hits = client.post(
             f"/collections/{collection}/points/query", json=wrong
         ).json()["result"]["points"]
@@ -419,9 +507,9 @@ def test_chinese_bm25_needs_the_shared_tokeniser(
     right_ids = [p["payload"]["chunk_id"] for p in right_hits]
     target = f"ch_{name}_target"
     assert target in right_ids, "过了 bm25_text() 的查询必须能命中目标切片"
-    assert len(right_ids) >= len(wrong_ids), (
-        f"漏过 bm25_text() 不该召回更多：right={right_ids} wrong={wrong_ids}"
-    )
+    assert len(right_ids) >= len(
+        wrong_ids
+    ), f"漏过 bm25_text() 不该召回更多：right={right_ids} wrong={wrong_ids}"
 
 
 def _bm25_vector(text: str):
@@ -449,10 +537,14 @@ def test_local_rrf_matches_qdrant_native_fusion(
     name = unique("rrf")
     chunks = [
         make_chunk(chunk_id=f"ch_{name}_1", text="住宿费标准每人每天500元"),
-        make_chunk(chunk_id=f"ch_{name}_2", text="住宿费限额住宿费标准住宿报销说明"),
+        make_chunk(
+            chunk_id=f"ch_{name}_2", text="住宿费限额住宿费标准住宿报销说明"
+        ),
         make_chunk(chunk_id=f"ch_{name}_3", text="出差住宿费用按职级限额报销"),
         make_chunk(chunk_id=f"ch_{name}_4", text="员工入职需提交体检报告"),
-        make_chunk(chunk_id=f"ch_{name}_5", text="市内交通凭票报销单次不超过100元"),
+        make_chunk(
+            chunk_id=f"ch_{name}_5", text="市内交通凭票报销单次不超过100元"
+        ),
     ]
     publish(conn, store, embedder, name=name, tag="v1", chunks=chunks)
 
@@ -461,13 +553,27 @@ def test_local_rrf_matches_qdrant_native_fusion(
     filter_json = qdrant_filter_json(flt)
     vector = query_embedder.embed(query)
 
-    with httpx.Client(base_url=qdrant_reachable, timeout=20, trust_env=False) as client:
+    with httpx.Client(
+        base_url=qdrant_reachable, timeout=20, trust_env=False
+    ) as client:
         batch = client.post(
             f"/collections/{collection}/points/query/batch",
             json={
                 "searches": [
-                    {"query": vector, "using": DENSE_VECTOR, "filter": filter_json, "limit": 30, "with_payload": ["chunk_id"]},
-                    {"query": bm25_vector(query), "using": SPARSE_VECTOR, "filter": filter_json, "limit": 30, "with_payload": ["chunk_id"]},
+                    {
+                        "query": vector,
+                        "using": DENSE_VECTOR,
+                        "filter": filter_json,
+                        "limit": 30,
+                        "with_payload": ["chunk_id"],
+                    },
+                    {
+                        "query": bm25_vector(query),
+                        "using": SPARSE_VECTOR,
+                        "filter": filter_json,
+                        "limit": 30,
+                        "with_payload": ["chunk_id"],
+                    },
                 ]
             },
         ).json()["result"]
@@ -475,8 +581,18 @@ def test_local_rrf_matches_qdrant_native_fusion(
             f"/collections/{collection}/points/query",
             json={
                 "prefetch": [
-                    {"query": vector, "using": DENSE_VECTOR, "filter": filter_json, "limit": 30},
-                    {"query": bm25_vector(query), "using": SPARSE_VECTOR, "filter": filter_json, "limit": 30},
+                    {
+                        "query": vector,
+                        "using": DENSE_VECTOR,
+                        "filter": filter_json,
+                        "limit": 30,
+                    },
+                    {
+                        "query": bm25_vector(query),
+                        "using": SPARSE_VECTOR,
+                        "filter": filter_json,
+                        "limit": 30,
+                    },
                 ],
                 "query": {"fusion": "rrf"},
                 "limit": 10,
@@ -485,12 +601,14 @@ def test_local_rrf_matches_qdrant_native_fusion(
         ).json()["result"]["points"]
 
     dense = [(p["payload"]["chunk_id"], p["score"]) for p in batch[0]["points"]]
-    sparse = [(p["payload"]["chunk_id"], p["score"]) for p in batch[1]["points"]]
+    sparse = [
+        (p["payload"]["chunk_id"], p["score"]) for p in batch[1]["points"]
+    ]
     local = [c.chunk_id for c in rrf_fuse(dense, sparse, top_k=30)]
     native_ids = [p["payload"]["chunk_id"] for p in native]
-    assert local[: len(native_ids)] == native_ids, (
-        f"本地 RRF 与原生不一致：local={local} native={native_ids}"
-    )
+    assert (
+        local[: len(native_ids)] == native_ids
+    ), f"本地 RRF 与原生不一致：local={local} native={native_ids}"
 
 
 # --- 6. 澄清选项只来自证据 ---------------------------------------------------
@@ -501,17 +619,19 @@ def test_clarify_options_are_built_from_real_document_titles(
 ) -> None:
     """§8.2：选项只能从检索到的事实里取，且每条能回填 `doc_keys`。
 
-    用真 PG 里的真实标题验证 label 的来源：`documents.filename`（澄清选项的展示名
-    必须是用户认得出的文件名，不能是 doc_key 那种内部编号——除非库里没有文件名）。
+    用真 PG 里的真实标题验证 label 的来源：`documents.filename`（澄清选项
+    的展示名必须是用户认得出的文件名，不能是 doc_key 那种内部编号——除非
+    库里没有文件名）。
 
-    为什么这里不跑真检索：触发澄清需要"两份文档的精排分差 < 0.05"，那要求两份制度
-    几乎同文。为一条选项生成规则去造一对同文制度，成本远大于收益，而"分数接近"
-    那一半已经由 `test_retrieval_logic.py::test_two_documents_with_close_scores_trigger_clarify`
-    穷举过了。这里补的是另一半：**标题真的来自库**。
+    为什么这里不跑真检索：触发澄清需要“两份文档的精排分差 < 0.05”，那要求
+    两份制度几乎同文。为一条选项生成规则去造一对同文制度，成本远大于收益，
+    而“分数接近”那一半已由 `test_retrieval_logic.py` 里的
+    `test_two_documents_with_close_scores_trigger_clarify` 穷举过了。这里
+    补的是另一半：**标题真的来自库**。
     """
     from api.retrieval.gate import decorate_clarify_options
-    from api.retrieval.texts import doc_names
     from api.retrieval.hybrid import Candidate
+    from api.retrieval.texts import doc_names
 
     name = unique("clarify")
     publish(
@@ -520,12 +640,17 @@ def test_clarify_options_are_built_from_real_document_titles(
         embedder,
         name=name,
         tag="v1",
-        chunks=[make_chunk(chunk_id=f"ch_{name}_a", text="住宿费标准：每人每天 500 元。")],
+        chunks=[
+            make_chunk(
+                chunk_id=f"ch_{name}_a", text="住宿费标准：每人每天 500 元。"
+            )
+        ],
     )
     # 再造一份只有文档行、没有切片的文档：澄清选项不该需要它有切片
     with conn.cursor() as cur:
         cur.execute(
-            "INSERT INTO documents (doc_key, filename, status) VALUES (%s, %s, 'active')",
+            "INSERT INTO documents (doc_key, filename, status) "
+            "VALUES (%s, %s, 'active')",
             (doc_key(f"{name}_second"), "费用报销管理办法-2025版.pdf"),
         )
     conn.commit()
@@ -551,10 +676,14 @@ def test_clarify_options_are_built_from_real_document_titles(
     names = doc_names(b3_pg, [c.doc_key for c in candidates])
     assert names[doc_key(f"{name}_second")] == "费用报销管理办法-2025版.pdf"
 
-    options = decorate_clarify_options(candidates, doc_names=names, max_options=4)
+    options = decorate_clarify_options(
+        candidates, doc_names=names, max_options=4
+    )
     assert len(options) == 2
     labels = [opt.label for opt in options]
-    assert any("费用报销管理办法-2025版.pdf" in label for label in labels), labels
+    assert any(
+        "费用报销管理办法-2025版.pdf" in label for label in labels
+    ), labels
     assert all(opt.params["doc_keys"] for opt in options)
     # 选项里的 doc_key 必须都在候选里出现过（不能凭空调出来一份）
     assert {opt.doc_key for opt in options} == {c.doc_key for c in candidates}
@@ -589,6 +718,6 @@ def test_candidates_carry_both_route_ranks(
     assert top.dense_rank is not None, "第一名必须有稠密名次"
     assert top.fused_rank == 1
     # 至少有一条被两路同时命中（否则 RRF 融合这件事没有被真正检验）
-    assert any(c.dense_rank and c.sparse_rank for c in result.candidates), (
-        "没有任何一条被两路同时命中，融合逻辑没被真正跑到"
-    )
+    assert any(
+        c.dense_rank and c.sparse_rank for c in result.candidates
+    ), "没有任何一条被两路同时命中，融合逻辑没被真正跑到"

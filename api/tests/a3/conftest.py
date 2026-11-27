@@ -48,7 +48,8 @@ def version_of(name: str, tag: str) -> str:
 def fake_hash(tag: str) -> str:
     """64 位小写十六进制（`ck_doc_versions_hash_sha256` 的形状要求）。
 
-    用 tag 派生而不是随机：同一 tag 在同一用例里重跑会撞上 `uq_doc_versions_doc_hash`，
+    用 tag 派生而不是随机：同一 tag 在同一用例里重跑会撞上
+    `uq_doc_versions_doc_hash`，
     这正是我们要的"同一内容不建第二个版本"。
     """
     import hashlib
@@ -60,25 +61,33 @@ def fake_hash(tag: str) -> str:
 def a3_dsn() -> str:
     """真 PG 的 DSN。
 
-    名字不叫 `pg_dsn`：`api/tests/conftest.py` 已经有一个 module 作用域的同名 fixture，
+    名字不叫 `pg_dsn`：`api/tests/conftest.py` 已经有一个 module 作用域的同名
+    fixture，
     重名会让 pytest 按"更内层优先"解析，于是 session 作用域的 fixture 去要一个
     module 作用域的值 → ScopeMismatch（实测）。
     """
     dsn = os.getenv("AI_RAG_TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
     if not dsn:
-        pytest.skip("integration needs AI_RAG_TEST_DATABASE_URL or DATABASE_URL")
+        pytest.skip(
+            "integration needs AI_RAG_TEST_DATABASE_URL or DATABASE_URL"
+        )
     assert dsn
     return dsn
 
 
 @pytest.fixture(scope="session")
 def migrated(a3_dsn: str) -> str:
-    """schema 走项目唯一的迁移入口（不自己建表）。"""
+    """Schema 走项目唯一的迁移入口（不自己建表）。"""
     import subprocess
     import sys
 
     proc = subprocess.run(  # noqa: S603
-        [sys.executable, str(REPO_ROOT / "scripts" / "db_migrate.py"), "--dsn", a3_dsn],
+        [
+            sys.executable,
+            str(REPO_ROOT / "scripts" / "db_migrate.py"),
+            "--dsn",
+            a3_dsn,
+        ],
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,
@@ -86,7 +95,9 @@ def migrated(a3_dsn: str) -> str:
     )
     assert proc.returncode == 0, f"db_migrate.py failed: {proc.stderr[-800:]}"
     with psycopg.connect(normalize_dsn(a3_dsn)) as conn:
-        assert conn.execute("SELECT to_regclass('public.vector_sync_tasks')").fetchone()[0]
+        assert conn.execute(
+            "SELECT to_regclass('public.vector_sync_tasks')"
+        ).fetchone()[0]
     return a3_dsn
 
 
@@ -106,7 +117,9 @@ def qdrant_reachable() -> str:
     if not QDRANT_URL:
         pytest.skip("QDRANT_URL is not set (integration needs a real Qdrant)")
     try:
-        resp = httpx.get(f"{QDRANT_URL.rstrip('/')}/collections", timeout=5, trust_env=False)
+        resp = httpx.get(
+            f"{QDRANT_URL.rstrip('/')}/collections", timeout=5, trust_env=False
+        )
         resp.raise_for_status()
     except Exception as exc:  # noqa: BLE001
         pytest.skip(f"Qdrant not reachable at {QDRANT_URL}: {exc}")
@@ -116,7 +129,9 @@ def qdrant_reachable() -> str:
 @pytest.fixture(scope="session")
 def embedder() -> Embedder:
     if not EMBEDDING_URL:
-        pytest.skip("EMBEDDING_BASE_URL is not set (integration needs a real TEI)")
+        pytest.skip(
+            "EMBEDDING_BASE_URL is not set (integration needs a real TEI)"
+        )
     emb = Embedder(
         base_url=EMBEDDING_URL,
         model=EMBEDDING_MODEL,
@@ -179,14 +194,26 @@ def _cleanup_rows(pool: ConnectionPool):
 def _purge(pool: ConnectionPool) -> None:
     with pool.connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM vector_drift_log WHERE doc_key LIKE %s", (f"{NS}/%",))
             cur.execute(
-                "DELETE FROM vector_sync_tasks WHERE doc_key LIKE %s", (f"{NS}/%",)
+                "DELETE FROM vector_drift_log WHERE doc_key LIKE %s",
+                (f"{NS}/%",),
             )
-            cur.execute("DELETE FROM chunks WHERE doc_key LIKE %s", (f"{NS}/%",))
-            cur.execute("DELETE FROM doc_versions WHERE doc_key LIKE %s", (f"{NS}/%",))
-            cur.execute("DELETE FROM ingest_jobs WHERE doc_key LIKE %s", (f"{NS}/%",))
-            cur.execute("DELETE FROM documents WHERE doc_key LIKE %s", (f"{NS}/%",))
+            cur.execute(
+                "DELETE FROM vector_sync_tasks WHERE doc_key LIKE %s",
+                (f"{NS}/%",),
+            )
+            cur.execute(
+                "DELETE FROM chunks WHERE doc_key LIKE %s", (f"{NS}/%",)
+            )
+            cur.execute(
+                "DELETE FROM doc_versions WHERE doc_key LIKE %s", (f"{NS}/%",)
+            )
+            cur.execute(
+                "DELETE FROM ingest_jobs WHERE doc_key LIKE %s", (f"{NS}/%",)
+            )
+            cur.execute(
+                "DELETE FROM documents WHERE doc_key LIKE %s", (f"{NS}/%",)
+            )
         conn.commit()
 
 
@@ -219,15 +246,23 @@ def seed_document(
     version_id = version_of(key, version_tag)
     with conn.cursor() as cur:
         cur.execute(
-            "INSERT INTO documents (doc_key, filename, status) VALUES (%s, %s, %s) "
+            "INSERT INTO documents (doc_key, filename, status) "
+            "VALUES (%s, %s, %s) "
             "ON CONFLICT (doc_key) DO UPDATE SET status = EXCLUDED.status",
-            (doc_key(key), f"{key}.pdf", doc_status or ("active" if activate else "queued")),
+            (
+                doc_key(key),
+                f"{key}.pdf",
+                doc_status or ("active" if activate else "queued"),
+            ),
         )
-        # activated_at 与状态在一条语句里定：`ck_doc_versions_active_has_activated_at`
+        # activated_at 与状态在一条语句里定：
+        # `ck_doc_versions_active_has_activated_at`
         # 只允许"active 必须带时间"，所以不为 active 时也不能凭空给个 now()。
         cur.execute(
-            "INSERT INTO doc_versions (version_id, doc_key, file_hash, status, activated_at) "
-            "VALUES (%s, %s, %s, %s, CASE WHEN %s = 'active' THEN now() ELSE NULL END)",
+            "INSERT INTO doc_versions "
+            "(version_id, doc_key, file_hash, status, activated_at) "
+            "VALUES (%s, %s, %s, %s, "
+            "CASE WHEN %s = 'active' THEN now() ELSE NULL END)",
             (
                 version_id,
                 doc_key(key),
@@ -245,7 +280,10 @@ def default_chunks(key: str, tag: str) -> list[dict]:
     return [
         {
             "chunk_id": f"ch_{NS}_{key}_{tag}_1".replace("/", "_"),
-            "content_text": "住宿费标准：每人每天 500 元。出差住宿费用按职级限额报销。",
+            "content_text": (
+                "住宿费标准：每人每天 500 元。"
+                "出差住宿费用按职级限额报销。"
+            ),
             "page_num": 1,
             "effective_date": 20260301,
             "date_confidence": "explicit",
@@ -283,13 +321,18 @@ def _insert_chunk(
     with conn.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO chunks (chunk_id, doc_key, version_id, chunk_type, parent_id,
-                                page_num, bbox, content_text, effective_date, effective_year,
-                                date_confidence, is_public, allowed_depts, allowed_roles, status)
-            VALUES (%(chunk_id)s, %(doc_key)s, %(version_id)s, %(chunk_type)s, %(parent_id)s,
-                    %(page_num)s, '[[0.1,0.1,0.9,0.2]]'::jsonb, %(content_text)s,
-                    %(effective_date)s, %(effective_year)s, %(date_confidence)s,
-                    %(is_public)s, %(depts)s, %(roles)s, %(status)s)
+            INSERT INTO chunks (
+                chunk_id, doc_key, version_id, chunk_type, parent_id, page_num,
+                bbox, content_text, effective_date, effective_year,
+                date_confidence, is_public, allowed_depts, allowed_roles, status
+            )
+            VALUES (
+                %(chunk_id)s, %(doc_key)s, %(version_id)s, %(chunk_type)s,
+                %(parent_id)s, %(page_num)s, '[[0.1,0.1,0.9,0.2]]'::jsonb,
+                %(content_text)s, %(effective_date)s, %(effective_year)s,
+                %(date_confidence)s, %(is_public)s, %(depts)s, %(roles)s,
+                %(status)s
+            )
             """,
             {
                 "chunk_id": chunk_id,
@@ -313,8 +356,8 @@ def _insert_chunk(
 def chunk_rows(conn, version_id: str) -> dict[str, dict]:
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
-            "SELECT chunk_id, status, content_text, embedding_dense FROM chunks "
-            "WHERE version_id = %s ORDER BY chunk_id",
+            "SELECT chunk_id, status, content_text, embedding_dense "
+            "FROM chunks WHERE version_id = %s ORDER BY chunk_id",
             (version_id,),
         )
         return {r["chunk_id"]: r for r in cur.fetchall()}

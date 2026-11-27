@@ -12,7 +12,8 @@
 
 两条硬要求：
 1. **幂等**：跑两次不产生重复点（point id = uuid5(chunk_id)）；
-2. **可全量重建**：集合整个删掉后能从 PG 重建回来，且 payload 与向量质量逐条一致。
+2. **可全量重建**：集合整个删掉后能从 PG 重建回来，且 payload 与向量质量
+   逐条一致。
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ import pytest
 
 from api.ingest.flip import flip
 from api.ingest.vectors import index_version
-from api.tests.a3.conftest import (  # 只有辅助函数需要 import；fixtures 由 conftest 自动发现
+from api.tests.a3.conftest import (  # 只 import 辅助函数；fixtures 自动发现
     DENSE_DIM,
     seed_document,
 )
@@ -42,21 +43,28 @@ REBUILD = REPO_ROOT / "scripts" / "qdrant_rebuild.py"
 def rebuild(qdrant_reachable, embedder, collection):
     """跑一次真重建脚本，返回 (解析后的 JSON 摘要, CompletedProcess)。
 
-    URL/模型/集合**全部显式传入**，不读环境变量：`api/tests/conftest.py` 的
-    autouse `_clean_env` 会清掉 Settings 的字段名，脚本里 `os.getenv` 兜底会静默
-    落到默认值（`http://127.0.0.1:6333` + `kb_chunks`）——那会让测试去碰真实集合。
+    URL/模型/集合**全部显式传入**，不读环境变量：`api/tests/conftest.py`
+    的 autouse `_clean_env` 会清掉 Settings 的字段名，脚本里 `os.getenv`
+    兜底会静默落到默认值（`http://127.0.0.1:6333` + `kb_chunks`）——那会让
+    测试去碰真实集合。
     """
 
     def _run(*extra: str):
         args = [
             sys.executable,
             str(REBUILD),
-            "--dsn", _plain_dsn(),
-            "--qdrant-url", qdrant_reachable,
-            "--collection", collection,
-            "--embedding-url", embedder.base_url,
-            "--embedding-model", embedder.model,
-            "--dim", str(DENSE_DIM),
+            "--dsn",
+            _plain_dsn(),
+            "--qdrant-url",
+            qdrant_reachable,
+            "--collection",
+            collection,
+            "--embedding-url",
+            embedder.base_url,
+            "--embedding-model",
+            embedder.model,
+            "--dim",
+            str(DENSE_DIM),
             "--json",
             *extra,
         ]
@@ -95,7 +103,9 @@ def _scroll_all(store) -> list[dict]:
         body: dict = {"limit": 256, "with_payload": True, "with_vector": False}
         if offset is not None:
             body["offset"] = offset
-        resp = store._call("POST", f"/collections/{store.collection}/points/scroll", body)
+        resp = store._call(
+            "POST", f"/collections/{store.collection}/points/scroll", body
+        )
         result = resp["result"]
         out.extend(result["points"])
         offset = result.get("next_page_offset")
@@ -124,11 +134,12 @@ def _vectors_by_chunk(store) -> dict[str, dict]:
 
 @pytest.fixture
 def active_version(conn, store, embedder, pool) -> str:
-    """一个已上线、已同步完的版本（重建按 `v_active_chunks` 取数，只认双 active）。
+    """一个已上线、已同步完的版本。
 
-    翻牌后要 drain 一次：点的 payload 状态在翻牌那一刻还是 pending（那是切片写进来
-    时的状态），drain 之后才变成 active。不 drain 就重建，会得到"payload 状态跟原来
-    不一样"的假漂移——那验证的是时序而不是重建。
+    重建按 `v_active_chunks` 取数，只认双 active。翻牌后要 drain 一次：点的
+    payload 状态在翻牌那一刻还是 pending（那是切片写进来时的状态），drain
+    之后才变成 active。不 drain 就重建，会得到“payload 状态跟原来不一样”的
+    假漂移——那验证的是时序而不是重建。
     """
     from api.ingest.sync import drain
 
@@ -141,7 +152,9 @@ def active_version(conn, store, embedder, pool) -> str:
     return version_id
 
 
-def test_rebuild_dry_run_reports_the_plan(conn, store, embedder, active_version, rebuild) -> None:
+def test_rebuild_dry_run_reports_the_plan(
+    conn, store, embedder, active_version, rebuild
+) -> None:
     summary, proc = rebuild("--dry-run")
     assert proc.returncode == 0, proc.stderr[-1500:]
     assert summary["dry_run"] is True
@@ -179,7 +192,9 @@ def test_rebuild_restores_everything_after_the_collection_is_wiped(
     after_payloads = _points_by_chunk(store)
     assert set(after_payloads) == set(before_payloads)
     for chunk_id, before in before_payloads.items():
-        assert after_payloads[chunk_id] == before, f"payload drifted for {chunk_id}"
+        assert (
+            after_payloads[chunk_id] == before
+        ), f"payload drifted for {chunk_id}"
 
     after_vectors = _vectors_by_chunk(store)
     for chunk_id, before in before_vectors.items():
@@ -193,7 +208,9 @@ def test_rebuild_restores_everything_after_the_collection_is_wiped(
         assert after["dense"] == pytest.approx(before["dense"], abs=1e-6)
 
 
-def test_rebuild_is_idempotent(conn, store, embedder, active_version, rebuild) -> None:
+def test_rebuild_is_idempotent(
+    conn, store, embedder, active_version, rebuild
+) -> None:
     """跑两次：点数不变（point id 确定性，重放覆盖不重复）。"""
     first, proc1 = rebuild()
     assert proc1.returncode == 0, proc1.stderr[-1500:]
@@ -208,12 +225,18 @@ def test_rebuild_only_sees_the_active_version(
 ) -> None:
     """重建按 `v_active_chunks` 取数：只有双 active 的切片会被重建。
 
-    旧版（deprecated）的切片不在取数范围里——它们的点留在库里（回收窗口内不可检索），
-    但重建不会把它们写回来。这是 §4.2「以库为准」的正确含义：重建恢复的是**可检索
+    旧版（deprecated）的切片不在取数范围里——它们的点留在库里（回收窗口内不可检索）
+    ，
+    但重建不会把它们写回来。这是
+    §4.2「以库为准」的正确含义：重建恢复的是**可检索
     集**，不是历史点。
     """
-    old = seed_document(conn, key="rebuildonly", version_tag="old", version_status="active")
-    conn.execute("UPDATE chunks SET status = 'active' WHERE version_id = %s", (old,))
+    old = seed_document(
+        conn, key="rebuildonly", version_tag="old", version_status="active"
+    )
+    conn.execute(
+        "UPDATE chunks SET status = 'active' WHERE version_id = %s", (old,)
+    )
     conn.commit()
     index_version(conn, store, embedder, old)
     new = seed_document(conn, key="rebuildonly", version_tag="new")
@@ -235,7 +258,9 @@ def test_rebuild_only_sees_the_active_version(
     assert all(p["status"] == "active" for p in payloads.values())
 
 
-def test_rebuild_all_status_includes_pending(conn, store, embedder, rebuild, qdrant_reachable, collection) -> None:
+def test_rebuild_all_status_includes_pending(
+    conn, store, embedder, rebuild, qdrant_reachable, collection
+) -> None:
     """`--all-status` 能重建待转正的点（给"先索引再翻牌"的流程用）。"""
     version_id = seed_document(conn, key="allstatus", version_tag="v1")
     conn.commit()
@@ -252,8 +277,10 @@ def test_rebuild_all_status_includes_pending(conn, store, embedder, rebuild, qdr
 
 def _plain_dsn() -> str:
     """脚本吃纯 psycopg DSN（`postgresql://`），不吃 SQLAlchemy 前缀。"""
-    raw = os.getenv("AI_RAG_TEST_DATABASE_URL") or os.getenv("DATABASE_URL") or ""
+    raw = (
+        os.getenv("AI_RAG_TEST_DATABASE_URL") or os.getenv("DATABASE_URL") or ""
+    )
     for prefix in ("postgresql+psycopg://", "postgresql+psycopg2://"):
         if raw.startswith(prefix):
-            return "postgresql://" + raw[len(prefix):]
+            return "postgresql://" + raw[len(prefix) :]
     return raw

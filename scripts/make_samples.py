@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
-"""生成开发期样本 PDF（纯 stdlib，不引第三方库）。
+"""生成开发期样本 PDF（纯 stdlib，不引第三方库）。.
 
-为什么自己写 PDF 而不是下载真实制度文件：这份仓库要能 `git clone` 就有可跑的样本，
+为什么自己写 PDF 而不是下载真实制度文件：这份仓库要能 `git clone` 就有可跑的
+样本，
 且样本必须**稳定**（每次生成字节完全一致，否则 file_hash 天天变，判重永远测不出
 "重复扫描跳过"）。自己构造结构还顺带保证了两件事：
 
 - 字节确定：内容按固定顺序写，`/CreationDate` 之类的时间戳一律不写；
-- 结构合法：xref 偏移由代码算出来，能用 `qpdf --check` 之类工具校验（本机没有也能被
+- 结构合法：xref 偏移由代码算出来，能用 `qpdf --check` 之类工具校验（本机没有也
+能被
   任何 PDF 阅读器打开）。
 
 样本形状照 §3.1 的扫描判定表设计：
 
     samples/policy/travel-cn.pdf                 差旅管理办法（主体）
     samples/policy/expense-cn.pdf                费用报销办法（主体）
-    samples/hr/leave-2025.pdf                    请假制度，文件名带年份 -> doc_key 剥掉 2025
+    samples/hr/leave-2025.pdf                    请假制度，文件名带年份 ->
+    doc_key 剥掉 2025
 
 用法：
 
@@ -33,7 +36,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# 每份样本：(相对路径, 每页正文)。正文用 ASCII + 中文都能写，但为了不依赖字体嵌入，
+# 每份样本：(相对路径, 每页正文)。正文用 ASCII + 中文都能写，但为了不依赖字体嵌
+# 入，
 # 这里用 ASCII 文本——扫描/解析链路的正确性不取决于样本里有没有中文，
 # 而中文需要嵌入 CJK 字体子集（几百 KB），对一张扫描卡来说不值得。
 SAMPLES: list[tuple[str, list[list[str]]]] = [
@@ -43,7 +47,8 @@ SAMPLES: list[tuple[str, list[list[str]]]] = [
             [
                 "Travel Expense Policy (CN) - 2025 revision",
                 "Section 1. Scope",
-                "This policy applies to all employees on domestic business travel.",
+                "This policy applies to all employees on domestic business"
+                " travel.",
                 "Section 2. Lodging limit",
                 "Lodging: CNY 500 per person per night in tier-1 cities,",
                 "CNY 380 per person per night elsewhere.",
@@ -61,7 +66,8 @@ SAMPLES: list[tuple[str, list[list[str]]]] = [
             [
                 "Expense Reimbursement Rules - 2025",
                 "Section 1. Receipts",
-                "Itemised receipts are required for any single expense above CNY 200.",
+                "Itemised receipts are required for any single expense above"
+                " CNY 200.",
                 "Section 2. Submission window",
                 "Claims must be submitted within 60 days of the expense date.",
             ]
@@ -74,10 +80,12 @@ SAMPLES: list[tuple[str, list[list[str]]]] = [
             [
                 "Leave Policy - 2025",
                 "Section 1. Annual leave",
-                "Employees accrue 5 days in year one, plus one day per full year served,",
+                "Employees accrue 5 days in year one, plus one day per full"
+                " year served,",
                 "capped at 15 days.",
                 "Section 2. Carry-over",
-                "At most 5 unused days may be carried into the next calendar year.",
+                "At most 5 unused days may be carried into the next calendar"
+                " year.",
             ]
         ],
     ),
@@ -85,12 +93,12 @@ SAMPLES: list[tuple[str, list[list[str]]]] = [
 
 
 def escape_text(line: str) -> str:
-    """PDF 字面量字符串里 `(` `)` `\\` 必须转义。"""
+    r"""PDF 字面量字符串里 `(` `)` `\\` 必须转义。."""
     return line.replace("\\", r"\\").replace("(", r"\(").replace(")", r"\)")
 
 
 def build_pdf(pages: list[list[str]]) -> bytes:
-    """拼一个合法的 PDF：catalog -> pages -> 每页 -> 单一 font。
+    """拼一个合法的 PDF：catalog -> pages -> 每页 -> 单一 font。.
 
     结构刻意保持最小：1 个 Catalog、1 个 Pages、N 个 Page、每页 1 个 Contents、
     1 个共享 Font。多写一层都会让 xref 偏移更容易算错，而这里最需要的是"确定"。
@@ -109,12 +117,17 @@ def build_pdf(pages: list[list[str]]) -> bytes:
     pages_id = 2
     objects.insert(0, b"")  # 占位 catalog
     objects.insert(1, b"")  # 占位 pages
-    # **`add()` 返回的是"插入占位符之前"的序号**：上面两次 insert 把字体对象整体后移两格，
-    # 所以 /Font 里的引用必须用移位后的号（3）。用 `font_id` 原值会让 /F1 指向 Catalog：
-    # pdfplumber 读正文不看字体资源，照样能抽出文字；pdf.js 按字体画字，结果是整页空白
+    # **`add()` 返回的是"插入占位符之前"的序号**：上面两次 insert 把字体对象整体
+    # 后移两格，
+    # 所以 /Font 里的引用必须用移位后的号（3）。用 `font_id` 原值会让 /F1 指向
+    # Catalog：
+    # pdfplumber 读正文不看字体资源，照样能抽出文字；pdf.js 按字体画字，结果是整
+    # 页空白
     # ——"能解析"和"能显示"在这里是两件事。下面这句断言把号算错当场变成异常。
     font_id = 3
-    assert objects[font_id - 1].startswith(b"<< /Type /Font"), "font 对象号位移了"
+    assert objects[font_id - 1].startswith(
+        b"<< /Type /Font"
+    ), "font 对象号位移了"
 
     page_ids: list[int] = []
     for lines in pages:
@@ -182,8 +195,12 @@ def build_pdf(pages: list[list[str]]) -> bytes:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="generate deterministic sample PDFs")
-    ap.add_argument("--root", default=str(REPO_ROOT / "samples"), help="samples 根目录")
+    ap = argparse.ArgumentParser(
+        description="generate deterministic sample PDFs"
+    )
+    ap.add_argument(
+        "--root", default=str(REPO_ROOT / "samples"), help="samples 根目录"
+    )
     ap.add_argument("--force", action="store_true", help="覆盖已存在的样本")
     args = ap.parse_args()
 

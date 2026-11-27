@@ -1,4 +1,4 @@
-"""切片仓储：把过滤条件落到 PG 上。
+"""切片仓储：把过滤条件落到 PG 上。.
 
 这里只有读的一条查询，作用是**给 Qdrant 那条路做对照**。系统真正的检索走
 Qdrant（§7.1），但"过滤条件在两边语义一致"这件事必须能被证明，而证明的办法
@@ -35,7 +35,7 @@ def select_ids(
     limit: int | None = None,
     source: PgSource | str = PgSource.ACTIVE_VIEW,
 ) -> list[str]:
-    """按过滤条件取可检索切片编号。只读，不开事务写。
+    """按过滤条件取可检索切片编号。只读，不开事务写。.
 
     默认走 `v_active_chunks`：它是"双 active"的唯一取数口径，检索、重建、对账
     都该按它取数（§4.2）。传 `PgSource.CHUNKS` 时 `pg_where` 会自己补状态条件。
@@ -51,7 +51,7 @@ def select_ids(
 
 
 def explain(pg: PgDatabase, flt: RetrievalFilter) -> list[Any]:
-    """`EXPLAIN (ANALYZE, BUFFERS)` 的原始计划行。
+    """`EXPLAIN (ANALYZE, BUFFERS)` 的原始计划行。.
 
     给排障用：过滤条件写错（比如把 `&&` 写成 `@>`）在功能测试里可能看不出来，
     但在执行计划里会立刻表现为 GIN 索引没被使用、或者扫描行数等于全表。

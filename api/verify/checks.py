@@ -1,4 +1,4 @@
-"""五道校验与降级决策（详细设计.md §10.1 / §10.3）。
+"""五道校验与降级决策（详细设计.md §10.1 / §10.3）。.
 
 按 facts 契约校验：fact.text + fact.evidence_ids（chunk_id）。
 """
@@ -6,14 +6,15 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Literal, Sequence
+from typing import Any, Literal
 
 from api.errors import ErrorCode
 from api.generate.calculator import validate_calculation
 from api.generate.evidence import Evidence, EvidencePack
 from api.generate.judge import JudgeResult, judge
-from api.generate.llm import Draft, LlmClient, Fact
+from api.generate.llm import Draft, Fact, LlmClient
 from api.generate.render import render_draft
 from api.observability import get_logger, log_event
 from api.verify.numbers import (
@@ -66,19 +67,24 @@ CODE_BY_CHECK: dict[str, ErrorCode] = {
 
 @dataclass(frozen=True, slots=True)
 class CheckFailure:
+    """CheckFailure."""
+
     check: str
     detail: str
     offenders: tuple[str, ...] = ()
 
     @property
     def tier(self) -> DegradeTier:
+        """Run tier."""
         return TIER_BY_CHECK[self.check]
 
     @property
     def code(self) -> ErrorCode:
+        """Run code."""
         return CODE_BY_CHECK[self.check]
 
     def as_audit(self) -> dict[str, Any]:
+        """Run as_audit."""
         return {
             "check": self.check,
             "detail": self.detail,
@@ -90,6 +96,8 @@ class CheckFailure:
 
 @dataclass(frozen=True, slots=True)
 class VerificationReport:
+    """VerificationReport."""
+
     passed: bool
     checks_run: tuple[str, ...]
     failure: CheckFailure | None = None
@@ -101,6 +109,7 @@ class VerificationReport:
 
     @property
     def gate2_verdict(self) -> str:
+        """Run gate2_verdict."""
         if self.judge is None:
             return "skipped"
         if self.judge.skipped:
@@ -109,17 +118,30 @@ class VerificationReport:
 
     @property
     def fallback_tier(self) -> DegradeTier | None:
-        return None if self.passed else (self.failure.tier if self.failure else FALLBACK_SYSTEM)
+        """Run fallback_tier."""
+        return (
+            None
+            if self.passed
+            else (self.failure.tier if self.failure else FALLBACK_SYSTEM)
+        )
 
     @property
     def error_code(self) -> ErrorCode | None:
-        return None if self.passed else (self.failure.code if self.failure else ErrorCode.INTERNAL)
+        """Run error_code."""
+        return (
+            None
+            if self.passed
+            else (self.failure.code if self.failure else ErrorCode.INTERNAL)
+        )
 
     def as_audit(self) -> dict[str, Any]:
+        """Run as_audit."""
         return {
             "passed": self.passed,
             "checks_run": list(self.checks_run),
-            "failure": None if self.failure is None else self.failure.as_audit(),
+            "failure": None
+            if self.failure is None
+            else self.failure.as_audit(),
             "judge": None if self.judge is None else self.judge.as_audit(),
             "fallback": self.fallback_tier,
             "gate2": self.gate2_verdict,
@@ -128,14 +150,17 @@ class VerificationReport:
 
 
 def _facts(draft: Draft) -> tuple[Fact, ...]:
+    """Run _facts."""
     return tuple(draft.facts or ())
 
 
 def _evidence_by_chunk(pack: EvidencePack) -> dict[str, Evidence]:
+    """Run _evidence_by_chunk."""
     return {item.chunk_id: item for item in pack.items}
 
 
 def _cited_for_fact(pack: EvidencePack, fact: Fact) -> tuple[Evidence, ...]:
+    """Run _cited_for_fact."""
     by_chunk = _evidence_by_chunk(pack)
     out: list[Evidence] = []
     for cid in dict.fromkeys(fact.evidence_ids):
@@ -146,6 +171,7 @@ def _cited_for_fact(pack: EvidencePack, fact: Fact) -> tuple[Evidence, ...]:
 
 
 def _all_cited(pack: EvidencePack, draft: Draft) -> tuple[Evidence, ...]:
+    """Run _all_cited."""
     seen: set[str] = set()
     out: list[Evidence] = []
     for fact in _facts(draft):
@@ -157,15 +183,20 @@ def _all_cited(pack: EvidencePack, draft: Draft) -> tuple[Evidence, ...]:
 
 
 def _evidence_text(items: Sequence[Evidence]) -> str:
+    """Run _evidence_text."""
     return "\n".join(item.text for item in items)
 
 
 def _clip(text: str, limit: int = 60) -> str:
+    """Run _clip."""
     text = " ".join((text or "").split())
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
-def check_citation_range(draft: Draft, pack: EvidencePack) -> CheckFailure | None:
+def check_citation_range(
+    draft: Draft, pack: EvidencePack
+) -> CheckFailure | None:
+    """Run check_citation_range."""
     known = set(_evidence_by_chunk(pack))
     offenders: list[str] = []
     for fact in _facts(draft):
@@ -181,10 +212,16 @@ def check_citation_range(draft: Draft, pack: EvidencePack) -> CheckFailure | Non
     return None
 
 
-def check_every_claim_cited(draft: Draft, _pack: EvidencePack) -> CheckFailure | None:
+def check_every_claim_cited(
+    draft: Draft, _pack: EvidencePack
+) -> CheckFailure | None:
+    """Run check_every_claim_cited."""
     facts = _facts(draft)
     if not facts:
-        return CheckFailure(check=CHECK_EVERY_CLAIM, detail="草稿没有任何可校验的主张（主张为空）")
+        return CheckFailure(
+            check=CHECK_EVERY_CLAIM,
+            detail="草稿没有任何可校验的主张（主张为空）",
+        )
     naked = [fact.text for fact in facts if not fact.evidence_ids]
     if naked:
         return CheckFailure(
@@ -195,7 +232,10 @@ def check_every_claim_cited(draft: Draft, _pack: EvidencePack) -> CheckFailure |
     return None
 
 
-def check_grounding(draft: Draft, pack: EvidencePack, *, question: str = "") -> CheckFailure | None:
+def check_grounding(
+    draft: Draft, pack: EvidencePack, *, question: str = ""
+) -> CheckFailure | None:
+    """Run check_grounding."""
     offenders: list[str] = []
     for fact in _facts(draft):
         cited = _cited_for_fact(pack, fact)
@@ -204,17 +244,23 @@ def check_grounding(draft: Draft, pack: EvidencePack, *, question: str = "") -> 
         blob = _evidence_text(cited)
         if fact.kind == "calculation":
             if validate_calculation(fact.expression, fact.result, blob) is None:
-                offenders.append(f"「{_clip(fact.text)}」的计算无法由被引证据复算")
+                offenders.append(
+                    f"「{_clip(fact.text)}」的计算无法由被引证据复算"
+                )
             continue
         missing_numbers, _ = locate_quantities(fact.text, blob)
         missing_names, _ = locate_proper_nouns(fact.text, blob)
         parts: list[str] = []
         if missing_numbers:
-            parts.append("数字 " + "、".join(item.raw for item in missing_numbers))
+            parts.append(
+                "数字 " + "、".join(item.raw for item in missing_numbers)
+            )
         if missing_names:
             parts.append("专名 " + "、".join(missing_names))
         if parts:
-            offenders.append(f"「{_clip(fact.text)}」里的{'、'.join(parts)}在被引证据里定位不到")
+            offenders.append(
+                f"「{_clip(fact.text)}」里的{'、'.join(parts)}在被引证据里定位不到"
+            )
     if offenders:
         return CheckFailure(
             check=CHECK_GROUNDING,
@@ -227,6 +273,7 @@ def check_grounding(draft: Draft, pack: EvidencePack, *, question: str = "") -> 
 def check_nli(
     client: LlmClient | None, question: str, draft: Draft, pack: EvidencePack
 ) -> tuple[CheckFailure | None, JudgeResult]:
+    """Run check_nli."""
     facts = _facts(draft)
     if not facts:
         result = judge(client, question, "", "")
@@ -234,12 +281,19 @@ def check_nli(
     # §10.1 第四道：判别器吃“问题 + 被引证据 + 答案”。按整份渲染后的答案判，
     # 而不是逐 fact 判，避免把复合问题拆成多条事实后误报“漏答子问题”。
     cited = _all_cited(pack, draft)
-    result = judge(client, question, _evidence_text(cited), render_draft(draft, pack).answer)
+    result = judge(
+        client,
+        question,
+        _evidence_text(cited),
+        render_draft(draft, pack).answer,
+    )
     if not result.supported:
         return (
             CheckFailure(
                 check=CHECK_NLI,
-                detail="判别器判不支持" if not result.skipped else "判别器未运行（未配置），按不支持处理",
+                detail="判别器判不支持"
+                if not result.skipped
+                else "判别器未运行（未配置），按不支持处理",
                 offenders=(result.reason,) if result.reason else (),
             ),
             result,
@@ -248,6 +302,7 @@ def check_nli(
 
 
 def check_consistency(draft: Draft, _pack: EvidencePack) -> CheckFailure | None:
+    """Run check_consistency."""
     conflicts = find_value_conflicts([fact.text for fact in _facts(draft)])
     if conflicts:
         return CheckFailure(
@@ -268,6 +323,7 @@ def verify_draft(
     question: str,
     judge_client: LlmClient | None = None,
 ) -> VerificationReport:
+    """Run verify_draft."""
     started = time.perf_counter()
 
     if not draft.answered:
@@ -293,11 +349,15 @@ def verify_draft(
         elif check == CHECK_GROUNDING:
             failure = check_grounding(draft, pack, question=question)
         elif check == CHECK_NLI:
-            failure, judge_result = check_nli(judge_client, question, draft, pack)
+            failure, judge_result = check_nli(
+                judge_client, question, draft, pack
+            )
         else:
             failure = check_consistency(draft, pack)
         if failure is not None:
-            return _failed(failure, tuple(ran), started, judge_result, pack, draft)
+            return _failed(
+                failure, tuple(ran), started, judge_result, pack, draft
+            )
 
     if judge_result is None:
         judge_result = judge(judge_client, question, "", "")
@@ -323,6 +383,7 @@ def _failed(
     pack: EvidencePack,
     draft: Draft,
 ) -> VerificationReport:
+    """Run _failed."""
     log_event(
         logger,
         "verification_failed",

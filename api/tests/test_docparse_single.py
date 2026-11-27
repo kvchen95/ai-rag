@@ -25,16 +25,16 @@ def test_cli_exposes_only_single_subcommand():
 
 
 def test_dry_run_never_creates_a_paid_client(monkeypatch, tmp_path):
-    from api.docparse import single as S
+    from api.docparse import single
 
     source = tmp_path / "doc.pdf"
     source.write_bytes(b"%PDF-1.4 dummy")
-    monkeypatch.setattr(S, "local_page_count", lambda path: 7)
+    monkeypatch.setattr(single, "local_page_count", lambda path: 7)
 
     def no_client(*_args, **_kwargs):
         raise AssertionError("dry-run 不允许构造付费客户端")
 
-    monkeypatch.setattr(S, "_default_client", no_client)
+    monkeypatch.setattr(single, "_default_client", no_client)
     summary = run_single(
         source, max_pages=None, out_root=tmp_path / "out", dry_run=True
     )
@@ -47,16 +47,16 @@ def test_dry_run_never_creates_a_paid_client(monkeypatch, tmp_path):
 
 
 def test_missing_max_pages_refuses_before_network(monkeypatch, tmp_path):
-    from api.docparse import single as S
+    from api.docparse import single
 
     source = tmp_path / "doc.pdf"
     source.write_bytes(b"%PDF-1.4 dummy")
-    monkeypatch.setattr(S, "local_page_count", lambda path: 7)
+    monkeypatch.setattr(single, "local_page_count", lambda path: 7)
 
     def no_client(*_args, **_kwargs):
         raise AssertionError("没有 --max-pages 时不允许发请求")
 
-    monkeypatch.setattr(S, "_default_client", no_client)
+    monkeypatch.setattr(single, "_default_client", no_client)
     with pytest.raises(GateError, match="--max-pages"):
         run_single(
             source, max_pages=None, out_root=tmp_path / "out", dry_run=False
@@ -64,15 +64,18 @@ def test_missing_max_pages_refuses_before_network(monkeypatch, tmp_path):
 
 
 def test_single_writes_mineru_stage_and_manifest(monkeypatch, tmp_path):
-    from api.docparse import single as S
+    from api.docparse import single
 
     source = tmp_path / "demo.pdf"
     source.write_bytes(b"%PDF-1.4 dummy")
-    monkeypatch.setattr(S, "local_page_count", lambda path: 2)
+    monkeypatch.setattr(single, "local_page_count", lambda path: 2)
 
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
-        archive.writestr("demo_content_list.json", json.dumps([{"page_idx": 0, "text": "甲"}]))
+        archive.writestr(
+            "demo_content_list.json",
+            json.dumps([{"page_idx": 0, "text": "甲"}]),
+        )
     zip_bytes = buffer.getvalue()
 
     class FakeClient:
@@ -92,17 +95,22 @@ def test_single_writes_mineru_stage_and_manifest(monkeypatch, tmp_path):
     )
 
     target = Path(summary["output_dir"])
-    assert json.loads((target / "01_mineru_raw.json").read_text(encoding="utf-8"))[0][
-        "text"
-    ] == "甲"
-    manifest = json.loads((target / "manifest.json").read_text(encoding="utf-8"))
+    assert (
+        json.loads((target / "01_mineru_raw.json").read_text(encoding="utf-8"))[
+            0
+        ]["text"]
+        == "甲"
+    )
+    manifest = json.loads(
+        (target / "manifest.json").read_text(encoding="utf-8")
+    )
     assert manifest["state"] == "MINERU_DONE"
     assert manifest["stage_states"]["01_mineru"] == "done"
     assert manifest["batch_id"] == "batch-1"
 
 
 def test_download_retry_raises_clean_error(monkeypatch):
-    from api.docparse import single as S
+    from api.docparse import single
 
     calls = 0
 
@@ -112,9 +120,9 @@ def test_download_retry_raises_clean_error(monkeypatch):
             calls += 1
             raise OSError("network down")
 
-    monkeypatch.setattr(S.time, "sleep", lambda seconds: None)
-    with pytest.raises(S.MineruError, match="已重试 3 次"):
-        S._download_with_retry(Flaky(), "https://cdn.example/result.zip")
+    monkeypatch.setattr(single.time, "sleep", lambda seconds: None)
+    with pytest.raises(single.MineruError, match="已重试 3 次"):
+        single._download_with_retry(Flaky(), "https://cdn.example/result.zip")
     assert calls == 3
 
 
@@ -122,7 +130,10 @@ def test_result_origin_url_maps_cdn_to_oss():
     from api.docparse.mineru_client import result_origin_url
 
     url = "https://cdn-mineru.openxlab.org.cn/pdf/2026-11-25/result.zip"
-    assert result_origin_url(url) == "https://mineru.oss-cn-shanghai.aliyuncs.com/pdf/2026-11-25/result.zip"
+    assert (
+        result_origin_url(url)
+        == "https://mineru.oss-cn-shanghai.aliyuncs.com/pdf/2026-11-25/result.zip"
+    )
 
 
 def test_download_falls_back_to_origin(monkeypatch):
@@ -138,7 +149,10 @@ def test_download_falls_back_to_origin(monkeypatch):
         return b"zip-bytes"
 
     monkeypatch.setattr(client, "_get_bytes", fake_get)
-    assert client.download("https://cdn-mineru.openxlab.org.cn/pdf/result.zip") == b"zip-bytes"
+    assert (
+        client.download("https://cdn-mineru.openxlab.org.cn/pdf/result.zip")
+        == b"zip-bytes"
+    )
     assert calls == [
         "https://cdn-mineru.openxlab.org.cn/pdf/result.zip",
         "https://mineru.oss-cn-shanghai.aliyuncs.com/pdf/result.zip",
@@ -146,15 +160,26 @@ def test_download_falls_back_to_origin(monkeypatch):
 
 
 def test_full_single_writes_all_stage_files(tmp_path):
-    from api.docparse import stages as S
-    from api.docparse.single import run_single as run_mineru
+    from api.docparse import stages
 
     source = tmp_path / "doc.pdf"
     source.write_bytes(b"%PDF-1.4 dummy")
 
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
-        archive.writestr("demo_content_list.json", json.dumps([{"type": "text", "page_idx": 0, "text": "第一段。", "text_level": 1}]))
+        archive.writestr(
+            "demo_content_list.json",
+            json.dumps(
+                [
+                    {
+                        "type": "text",
+                        "page_idx": 0,
+                        "text": "第一段。",
+                        "text_level": 1,
+                    }
+                ]
+            ),
+        )
     zip_bytes = buffer.getvalue()
 
     class FakeClient:
@@ -168,21 +193,42 @@ def test_full_single_writes_all_stage_files(tmp_path):
             return zip_bytes
 
     def fake_runner(pdf_path):
-        return [{"page_num": 1, "markdown": "| a | b |\n|---|---|\n| 1 | 2 |", "cells": [["a", "b"], ["1", "2"]]}]
+        return [
+            {
+                "page_num": 1,
+                "markdown": "| a | b |\n|---|---|\n| 1 | 2 |",
+                "cells": [["a", "b"], ["1", "2"]],
+            }
+        ]
 
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr("api.docparse.single.local_page_count", lambda path: 1)
-    summary = S.run_full_single(
-        source, max_pages=10, out_root=tmp_path / "out", client=FakeClient(), docling_runner=fake_runner,
-        chunk_splitter=type("FakeSplitter", (), {"split_text": lambda self, text: [text]})(),
+    summary = stages.run_full_single(
+        source,
+        max_pages=10,
+        out_root=tmp_path / "out",
+        client=FakeClient(),
+        docling_runner=fake_runner,
+        chunk_splitter=type(
+            "FakeSplitter", (), {"split_text": lambda self, text: [text]}
+        )(),
     )
     target = Path(summary["output_dir"])
-    for name in ["02_repaired.json", "03_docling_tables.json", "04_enriched.json", "05_chunks.json"]:
+    for name in [
+        "02_repaired.json",
+        "03_docling_tables.json",
+        "04_enriched.json",
+        "05_chunks.json",
+    ]:
         assert (target / name).exists(), name
-    manifest = json.loads((target / "manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads(
+        (target / "manifest.json").read_text(encoding="utf-8")
+    )
     assert manifest["state"] == "READY_FOR_REVIEW"
     assert summary["chunk_count"] >= 1
-    chunks = json.loads((target / "05_chunks.json").read_text(encoding="utf-8"))["chunks"]
+    chunks = json.loads(
+        (target / "05_chunks.json").read_text(encoding="utf-8")
+    )["chunks"]
     assert all(item["page_num"] == 1 for item in chunks)
     assert all(item["char_count"] <= 600 for item in chunks)
     monkeypatch.undo()
@@ -191,12 +237,18 @@ def test_full_single_writes_all_stage_files(tmp_path):
 def test_resume_download_never_resubmits_paid_task(tmp_path):
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
-        archive.writestr("demo_content_list.json", json.dumps([{"text": "恢复"}]))
+        archive.writestr(
+            "demo_content_list.json", json.dumps([{"text": "恢复"}])
+        )
     target = tmp_path / "resume"
     target.mkdir()
     (target / "mineru_task.json").write_text(
         json.dumps(
-            {"batch_id": "batch-old", "zip_url": "https://cdn.example/old.zip", "state": "ZIP_READY"}
+            {
+                "batch_id": "batch-old",
+                "zip_url": "https://cdn.example/old.zip",
+                "state": "ZIP_READY",
+            }
         ),
         encoding="utf-8",
     )
@@ -223,6 +275,9 @@ def test_resume_download_never_resubmits_paid_task(tmp_path):
     )
     assert summary["spent_tokens"] is False
     assert summary["resumed"] is True
-    assert json.loads((target / "01_mineru_raw.json").read_text(encoding="utf-8"))[0][
-        "text"
-    ] == "恢复"
+    assert (
+        json.loads((target / "01_mineru_raw.json").read_text(encoding="utf-8"))[
+            0
+        ]["text"]
+        == "恢复"
+    )

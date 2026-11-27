@@ -60,15 +60,25 @@ def text_of(
 def test_numbers_start_at_one_and_follow_the_input_order() -> None:
     """编号是本次问答内的局部编号，顺序 = 候选顺序（= 精排分降序）。"""
     pack = build_evidence_pack(
-        [cand("ch_a"), cand("ch_b", rerank_score=0.5), cand("ch_c", rerank_score=0.4)],
-        {"ch_a": text_of("ch_a", "A"), "ch_b": text_of("ch_b", "B"), "ch_c": text_of("ch_c", "C")},
+        [
+            cand("ch_a"),
+            cand("ch_b", rerank_score=0.5),
+            cand("ch_c", rerank_score=0.4),
+        ],
+        {
+            "ch_a": text_of("ch_a", "A"),
+            "ch_b": text_of("ch_b", "B"),
+            "ch_c": text_of("ch_c", "C"),
+        },
         max_chars=6000,
     )
     assert pack.numbers() == (1, 2, 3)
     assert [item.chunk_id for item in pack.items] == ["ch_a", "ch_b", "ch_c"]
 
 
-def test_candidates_without_text_are_skipped_and_do_not_consume_a_number() -> None:
+def test_candidates_without_text_are_skipped_and_do_not_consume_a_number() -> (
+    None
+):
     """取不到正文的候选不能占编号：那会让角标指向空白。"""
     pack = build_evidence_pack(
         [cand("ch_a"), cand("ch_missing"), cand("ch_c")],
@@ -98,9 +108,10 @@ def test_same_parent_chunks_merge_into_one_evidence() -> None:
     assert pack.n_items == 1
     item = pack.items[0]
     assert item.chunk_ids == ("ch_p1", "ch_p2")
-    # 代表性切片是组内分数最高那条：bbox / snippet 都跟着它，否则高亮框会落错位置
+    # 代表性切片是组内分数最高那条：bbox / snippet 都跟着它，否则高亮框会落错位
+    # 置
     assert item.chunk_id == "ch_p1"
-    assert "第一段子片。第二段子片。" == item.text
+    assert item.text == "第一段子片。第二段子片。"
 
 
 def test_merge_removes_the_known_chunk_overlap() -> None:
@@ -120,7 +131,9 @@ def test_merge_removes_the_known_chunk_overlap() -> None:
     assert body.count("每人每天 500 元") == 1
 
 
-def test_merged_group_page_is_the_earliest_page_not_the_best_scoring_one() -> None:
+def test_merged_group_page_is_the_earliest_page_not_the_best_scoring_one() -> (
+    None
+):
     """§9.1 第 2 条原话：页码取子片里最靠前的一页。
 
     代表性切片（分数最高）与页码（最靠前）可能不是同一条：这时页码跟"最靠前"，
@@ -130,7 +143,9 @@ def test_merged_group_page_is_the_earliest_page_not_the_best_scoring_one() -> No
     pack = build_evidence_pack(
         [
             cand("ch_late", parent_id="ch_par", page_num=50, rerank_score=0.7),
-            cand("ch_early", parent_id="ch_par", page_num=47, rerank_score=0.55),
+            cand(
+                "ch_early", parent_id="ch_par", page_num=47, rerank_score=0.55
+            ),
         ],
         {
             "ch_late": text_of("ch_late", "第二页上的话。", page_num=50),
@@ -188,7 +203,9 @@ def test_single_evidence_longer_than_budget_is_kept_not_truncated() -> None:
 
 
 def test_no_truncation_flag_when_everything_fits() -> None:
-    pack = build_evidence_pack([cand("ch_a")], {"ch_a": text_of("ch_a", "短句。")}, max_chars=6000)
+    pack = build_evidence_pack(
+        [cand("ch_a")], {"ch_a": text_of("ch_a", "短句。")}, max_chars=6000
+    )
     assert pack.truncated is False
     assert pack.notice() is None, "没截就不该在答案里加一句免责声明"
 
@@ -205,7 +222,10 @@ def test_notice_names_the_kept_count() -> None:
 
 
 def test_cap_limits_the_number_of_evidence_without_marking_truncation() -> None:
-    """`cap` 是"进证据包 5–8 条"的上限（§7.5），不是超长裁剪，不该置 truncated。"""
+    """`cap` 是“进证据包 5–8 条”的上限（§7.5）。
+
+    它是条数上限而不是超长裁剪，所以不该置 truncated。
+    """
     pack = build_evidence_pack(
         [cand(f"ch_{i}", rerank_score=0.9 - i / 100) for i in range(5)],
         {f"ch_{i}": text_of(f"ch_{i}", f"正文{i}") for i in range(5)},
@@ -230,7 +250,11 @@ def test_table_evidence_uses_the_derived_text_not_html() -> None:
     """§9.1 第 1 条：表格取转成文本的那一版，不取 HTML。"""
     pack = build_evidence_pack(
         [cand("ch_t", chunk_type="table")],
-        {"ch_t": text_of("ch_t", "| 城市 | 标准 |\n| 一线 | 600 元 |", chunk_type="table")},
+        {
+            "ch_t": text_of(
+                "ch_t", "| 城市 | 标准 |\n| 一线 | 600 元 |", chunk_type="table"
+            )
+        },
         max_chars=6000,
     )
     body = pack.items[0].text
@@ -240,7 +264,9 @@ def test_table_evidence_uses_the_derived_text_not_html() -> None:
 
 def test_source_line_carries_title_page_and_chunk_id() -> None:
     """§9.1 第 5 条：每条证据带一行来源标记，供模型引用时抄。"""
-    pack = build_evidence_pack([cand("ch_a")], {"ch_a": text_of("ch_a", "正文。")}, max_chars=6000)
+    pack = build_evidence_pack(
+        [cand("ch_a")], {"ch_a": text_of("ch_a", "正文。")}, max_chars=6000
+    )
     block = pack.items[0].as_prompt_block()
     assert block.startswith("[1] 来源：")
     assert "差旅管理办法-2025版.pdf" in block
@@ -263,12 +289,25 @@ def test_render_joins_blocks_in_number_order() -> None:
 
 
 def test_citation_item_has_every_field_the_contract_names() -> None:
-    """附录 C.2：n / doc_key / doc_name / page_num / bbox / snippet / chunk_id。"""
+    """附录 C.2 的字段一个都不能少。
+
+    n / doc_key / doc_name / page_num / bbox / snippet / chunk_id。
+    """
     pack = build_evidence_pack(
-        [cand("ch_a")], {"ch_a": text_of("ch_a", "住宿费标准：每人每天 500 元。")}, max_chars=6000
+        [cand("ch_a")],
+        {"ch_a": text_of("ch_a", "住宿费标准：每人每天 500 元。")},
+        max_chars=6000,
     )
     item = pack.citation_items()[0]
-    assert set(item) == {"n", "doc_key", "doc_name", "page_num", "bbox", "snippet", "chunk_id"}
+    assert set(item) == {
+        "n",
+        "doc_key",
+        "doc_name",
+        "page_num",
+        "bbox",
+        "snippet",
+        "chunk_id",
+    }
     assert item["n"] == 1
     assert item["page_num"] == 47
     assert item["bbox"] == [[0.1, 0.2, 0.9, 0.3]]
@@ -277,12 +316,16 @@ def test_citation_item_has_every_field_the_contract_names() -> None:
 
 
 def test_citation_bbox_is_a_plain_list_not_a_specialised_type() -> None:
-    """bbox 必须能直接 json 序列化（它要进 SSE 与审计）。"""
+    """Bbox 必须能直接 json 序列化（它要进 SSE 与审计）。"""
     import json
 
     pack = build_evidence_pack(
         [cand("ch_a")],
-        {"ch_a": text_of("ch_a", "x", bbox=[[0.1, 0.2, 0.3, 0.4], [0.5, 0.6, 0.7, 0.8]])},
+        {
+            "ch_a": text_of(
+                "ch_a", "x", bbox=[[0.1, 0.2, 0.3, 0.4], [0.5, 0.6, 0.7, 0.8]]
+            )
+        },
         max_chars=6000,
     )
     payload = json.dumps(pack.citation_items()[0]["bbox"])
@@ -292,7 +335,9 @@ def test_citation_bbox_is_a_plain_list_not_a_specialised_type() -> None:
 def test_missing_bbox_degrades_to_empty_list_not_an_error() -> None:
     """坐标缺失时前端展示页码与片段，不静默失败（附录 C.2 末段）。"""
     pack = build_evidence_pack(
-        [cand("ch_a")], {"ch_a": text_of("ch_a", "无坐标的表格。", bbox=[])}, max_chars=6000
+        [cand("ch_a")],
+        {"ch_a": text_of("ch_a", "无坐标的表格。", bbox=[])},
+        max_chars=6000,
     )
     assert pack.citation_items()[0]["bbox"] == []
 
@@ -303,7 +348,9 @@ def test_missing_bbox_degrades_to_empty_list_not_an_error() -> None:
 def test_audit_pack_has_no_body_text() -> None:
     """§11.2：审计只存切片编号与分数摘要，不存完整原文。"""
     pack = build_evidence_pack(
-        [cand("ch_a")], {"ch_a": text_of("ch_a", "住宿费标准：每人每天 500 元。")}, max_chars=6000
+        [cand("ch_a")],
+        {"ch_a": text_of("ch_a", "住宿费标准：每人每天 500 元。")},
+        max_chars=6000,
     )
     dumped = str(pack.as_audit())
     assert "500" not in dumped

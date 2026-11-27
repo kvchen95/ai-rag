@@ -1,4 +1,4 @@
-"""应用装配。
+"""应用装配。.
 
 `create_app()` 是唯一装配入口，不在模块顶层实例化：
 测试要能在没有环境变量、没有 PG/Qdrant 的情况下 import 它，
@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import inspect
 import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator
+from typing import Any
 
 from fastapi import FastAPI
 
@@ -34,18 +35,23 @@ def create_app(
     pg: HealthProbe | None = None,
     qdrant: AsyncHealthProbe | None = None,
 ) -> FastAPI:
-    """`pg` / `qdrant` 只在测试里注入替身；生产走真实客户端。"""
+    """`pg` / `qdrant` 只在测试里注入替身；生产走真实客户端。."""
     settings = settings or get_settings()
     configure_logging(
-        level=settings.log_level, service=settings.service_name, env=settings.app_env
+        level=settings.log_level,
+        service=settings.service_name,
+        env=settings.app_env,
     )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        """Run lifespan."""
         app.state.settings = settings
         app.state.started_at = time.time()
         app.state.pg = pg if pg is not None else _build_pg(settings)
-        app.state.qdrant = qdrant if qdrant is not None else _build_qdrant(settings)
+        app.state.qdrant = (
+            qdrant if qdrant is not None else _build_qdrant(settings)
+        )
         _open(app.state.pg)
         await _start(app.state.qdrant)
         log_event(
@@ -77,12 +83,14 @@ def create_app(
     app.include_router(health.router)
     app.include_router(ingest.router)
     app.include_router(qa.router)
-    # 引用溯源要的两个只读接口（附录 C.1 的样本直出 + 切片图）：F2 的角标点回依赖它们。
+    # 引用溯源要的两个只读接口（附录 C.1 的样本直出 + 切片图）：
+    # F2 的角标点回依赖它们。
     app.include_router(samples.router)
     return app
 
 
 def _build_pg(settings: Settings) -> PgDatabase:
+    """Run _build_pg."""
     return PgDatabase(
         settings.database_url,
         min_size=settings.db_pool_min,
@@ -93,6 +101,7 @@ def _build_pg(settings: Settings) -> PgDatabase:
 
 
 def _build_qdrant(settings: Settings) -> QdrantGateway:
+    """Run _build_qdrant."""
     return QdrantGateway(
         settings.qdrant_url,
         collection=settings.qdrant_collection,
@@ -102,18 +111,21 @@ def _build_qdrant(settings: Settings) -> QdrantGateway:
 
 
 def _open(dep: Any) -> None:
+    """Run _open."""
     opener = getattr(dep, "open", None)
     if callable(opener):
         opener()
 
 
 def _close(dep: Any) -> None:
+    """Run _close."""
     closer = getattr(dep, "close", None)
     if callable(closer):
         closer()
 
 
 async def _start(dep: Any) -> None:
+    """Run _start."""
     starter = getattr(dep, "start", None)
     if callable(starter):
         result = starter()
@@ -122,6 +134,7 @@ async def _start(dep: Any) -> None:
 
 
 async def _stop(dep: Any) -> None:
+    """Run _stop."""
     stopper = getattr(dep, "stop", None)
     if callable(stopper):
         result = stopper()

@@ -1,4 +1,4 @@
-"""身份快照（详细设计.md §5.1）。
+"""身份快照（详细设计.md §5.1）。.
 
 在线链路的第一个动作不是理解问题，是认人：`能不能看` 决定 `能不能搜`。
 这个模块只做一件事——把登录凭证换成一份四字段快照：
@@ -24,7 +24,8 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Literal, Mapping
+from collections.abc import Mapping
+from typing import Any, Literal
 
 import jwt
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -45,7 +46,7 @@ ADMIN_AUDIT_FLAG = "admin_access"
 
 
 def _normalise_claim_list(value: Any, *, claim: str) -> tuple[str, ...]:
-    """把部门/角色 claim 归一成去重排序的元组。
+    """把部门/角色 claim 归一成去重排序的元组。.
 
     只接受三种形状：数组、逗号分隔的字符串、空/缺省。其余一律按凭证无效处理——
     静默把 dict 或数字当成"没有部门"会让人误以为只是权限小，而不是凭证坏了。
@@ -53,13 +54,16 @@ def _normalise_claim_list(value: Any, *, claim: str) -> tuple[str, ...]:
     if value is None:
         return ()
     if isinstance(value, str):
-        items = [item for item in (part.strip() for part in value.split(",")) if item]
-    elif isinstance(value, (list, tuple, set, frozenset)):
+        items = [
+            item for item in (part.strip() for part in value.split(",")) if item
+        ]
+    elif isinstance(value, list | tuple | set | frozenset):
         items = []
         for item in value:
             if not isinstance(item, str):
                 raise _invalid(
-                    f"{claim} 里的元素必须是字符串，实际是 {type(item).__name__}"
+                    f"{claim} 里的元素必须是字符串，"
+                    f"实际是 {type(item).__name__}"
                 )
             item = item.strip()
             if item:
@@ -72,11 +76,12 @@ def _normalise_claim_list(value: Any, *, claim: str) -> tuple[str, ...]:
 
 
 def _invalid(detail: str) -> AppError:
+    """Run _invalid."""
     return AppError(ErrorCode.AUTH_INVALID, detail=detail)
 
 
 class IdentitySnapshot(BaseModel):
-    """一份身份快照。四个字段之外不再扩展（§5.1：每多一个字段要改三处）。"""
+    """一份身份快照。四个字段之外不再扩展（§5.1：每多一个字段要改三处）。."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -87,11 +92,14 @@ class IdentitySnapshot(BaseModel):
     roles: tuple[str, ...] = Field(
         default_factory=tuple, description="角色列表，去重排序"
     )
-    admin: bool = Field(default=False, description="管理员可跨部门，但审计必须可辨")
+    admin: bool = Field(
+        default=False, description="管理员可跨部门，但审计必须可辨"
+    )
 
     @field_validator("user_id")
     @classmethod
     def _user_id_not_blank(cls, value: str) -> str:
+        """Run _user_id_not_blank."""
         value = value.strip()
         if not value:
             raise ValueError("user_id 不能为空")
@@ -100,6 +108,7 @@ class IdentitySnapshot(BaseModel):
     @field_validator("depts", "roles", mode="before")
     @classmethod
     def _clean_list(cls, value: Any) -> tuple[str, ...]:
+        """Run _clean_list."""
         if value is None:
             return ()
         if isinstance(value, str):
@@ -108,7 +117,7 @@ class IdentitySnapshot(BaseModel):
 
     @property
     def is_public_only(self) -> bool:
-        """没有任何部门与角色的人：只能看公开文档（§5.2 边界表）。
+        """没有任何部门与角色的人：只能看公开文档（§5.2 边界表）。.
 
         单独给一个可命名的判断，是为了让日志与测试都能指着它说话，
         而不是在各处写 `not x.depts and not x.roles`。
@@ -116,11 +125,11 @@ class IdentitySnapshot(BaseModel):
         return not self.depts and not self.roles
 
     def audit_flags(self) -> tuple[str, ...]:
-        """需要额外写进审计的标记（§5.1：管理员跨部门访问必须可辨）。"""
+        """需要额外写进审计的标记（§5.1：管理员跨部门访问必须可辨）。."""
         return (ADMIN_AUDIT_FLAG,) if self.admin else ()
 
     def to_audit(self) -> dict[str, Any]:
-        """qa_log 的四列身份快照。字段名与 db/migrations/001_init.sql 对齐。"""
+        """qa_log 的四列身份快照。字段名与 db/migrations/001_init.sql 对齐。."""
         return {
             "user_id": self.user_id,
             "user_depts": list(self.depts),
@@ -130,18 +139,20 @@ class IdentitySnapshot(BaseModel):
 
 
 class IdentityResolver:
-    """凭证 → 快照。两种模式：`fixed_jwt`（默认）与 `mock_header`（仅开发）。
+    """凭证 → 快照。两种模式：`fixed_jwt`（默认）与 `mock_header`（仅开发）。.
 
     两种模式互斥且都在配置层校验过必填项（见 `Settings._check_cross_field`），
     所以这里不需要在运行时猜"没配 secret 是不是想用 mock"。
     """
 
     def __init__(self, settings: Settings) -> None:
+        """Initialize the instance."""
         self._settings = settings
         self._secret = settings.auth_jwt_secret.get_secret_value()
 
     @property
     def mode(self) -> Literal["fixed_jwt", "mock_header"]:
+        """Run mode."""
         return self._settings.auth_mode
 
     def resolve(
@@ -150,18 +161,24 @@ class IdentityResolver:
         authorization: str | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> IdentitySnapshot:
+        """Run resolve."""
         if self.mode == "mock_header":
             return self._from_headers(headers or {})
         return self._from_authorization(authorization)
 
     # --- fixed_jwt ---
 
-    def _from_authorization(self, authorization: str | None) -> IdentitySnapshot:
+    def _from_authorization(
+        self, authorization: str | None
+    ) -> IdentitySnapshot:
+        """Run _from_authorization."""
         if not authorization or not authorization.strip():
             raise _invalid("缺少 Authorization 头")
         scheme, _, token = authorization.strip().partition(" ")
         if scheme.lower() != "bearer":
-            raise _invalid(f"Authorization 方案必须是 Bearer，实际是 {scheme or '空'}")
+            raise _invalid(
+                f"Authorization 方案必须是 Bearer，实际是 {scheme or '空'}"
+            )
         token = token.strip()
         if not token:
             raise _invalid("Bearer 后面没有 token")
@@ -169,12 +186,14 @@ class IdentityResolver:
         return self._snapshot_from_claims(claims)
 
     def _decode(self, token: str) -> dict[str, Any]:
+        """Run _decode."""
         s = self._settings
         try:
             claims = jwt.decode(
                 token,
                 key=self._secret,
-                # 只接受配置里那一个 alg：把 token 头部的 alg 当权威是算法混淆漏洞。
+                # 只接受配置里那一个 alg：把 token 头部的 alg 当权威
+                # 是算法混淆漏洞。
                 algorithms=[s.auth_jwt_alg],
                 # 没有 exp 的 token 永不过期，等于发了一张长期通行证。
                 options={"require": ["exp"]},
@@ -186,18 +205,22 @@ class IdentityResolver:
         except jwt.InvalidAlgorithmError as exc:
             raise _invalid(f"token alg 不是 {s.auth_jwt_alg}") from exc
         except jwt.InvalidTokenError as exc:
-            # 解码失败的原因（格式/claims/必须项缺失）只进 detail，不回显给用户。
+            # 解码失败的原因（格式/claims/必须项缺失）只进 detail，
+            # 不回显给用户。
             raise _invalid(f"token 无法解析: {type(exc).__name__}") from exc
         if not isinstance(claims, dict):
             raise _invalid("token payload 不是对象")
         return claims
 
-    def _snapshot_from_claims(self, claims: Mapping[str, Any]) -> IdentitySnapshot:
+    def _snapshot_from_claims(
+        self, claims: Mapping[str, Any]
+    ) -> IdentitySnapshot:
+        """Run _snapshot_from_claims."""
         s = self._settings
         raw_user = claims.get(s.auth_jwt_user_id_claim)
         if raw_user is None:
             raise _invalid(f"token 缺少 {s.auth_jwt_user_id_claim} 声明")
-        if isinstance(raw_user, (int,)) and not isinstance(raw_user, bool):
+        if isinstance(raw_user, int) and not isinstance(raw_user, bool):
             raw_user = str(raw_user)
         if not isinstance(raw_user, str) or not raw_user.strip():
             raise _invalid(f"{s.auth_jwt_user_id_claim} 声明必须是非空字符串")
@@ -217,7 +240,7 @@ class IdentityResolver:
 
     @staticmethod
     def _admin_from_claim(value: Any) -> bool:
-        """只认布尔与明确的字符串写法，其余按非管理员处理。
+        """只认布尔与明确的字符串写法，其余按非管理员处理。.
 
         刻意**不**用 `bool(value)`：`bool("false")` 是 True，一个把 admin 写成
         字符串 "false" 的上游会把所有人变成管理员。
@@ -237,6 +260,7 @@ class IdentityResolver:
     # --- mock_header（仅开发）---
 
     def _from_headers(self, headers: Mapping[str, str]) -> IdentitySnapshot:
+        """Run _from_headers."""
         lowered = {key.lower(): value for key, value in headers.items()}
         user_id = (lowered.get(HEADER_USER_ID.lower()) or "").strip()
         if not user_id:
@@ -257,7 +281,7 @@ class IdentityResolver:
     # --- 日志 ---
 
     def _log_identity(self, snapshot: IdentitySnapshot) -> None:
-        """管理员访问单独打一条 ERROR 级不可忽略的事件（§5.1 审计可辨）。
+        """管理员访问单独打一条 ERROR 级不可忽略的事件（§5.1 审计可辨）。.
 
         user_id 进日志是刻意的：它和 qa_log 的审计行是同一个标识，两者合起来
         才能回答"谁在什么时候看了什么"。日志本身不含问题与原文。
@@ -290,7 +314,9 @@ def mint_dev_token(
     admin: bool = False,
     ttl_s: int = 3600,
 ) -> str:
-    """签发一枚开发用 token：测试、curl、前端联调都靠它，避免各自手搓 claim 名。
+    """签发一枚开发用 token。.
+
+    测试、curl、前端联调都靠它，避免各自手搓 claim 名。
 
     生产环境拒绝调用——把签发能力留在生产进程里，等于给了一个"谁都能当"的入口。
     """

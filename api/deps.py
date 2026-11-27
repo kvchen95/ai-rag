@@ -1,4 +1,4 @@
-"""FastAPI 依赖：把凭证换成身份快照与过滤条件。
+"""FastAPI 依赖：把凭证换成身份快照与过滤条件。.
 
 为什么放一层依赖而不是在路由里 `resolver.resolve(...)`：
 路由函数只需要声明 `identity: IdentitySnapshot = Depends(require_identity)`，
@@ -25,6 +25,7 @@ from api.identity import (
 
 
 def get_identity_resolver(request: Request) -> IdentityResolver:
+    """Run get_identity_resolver."""
     resolver = getattr(request.app.state, "identity_resolver", None)
     if resolver is None:
         # 懒建而不是在 lifespan 里建：没有身份的路径（healthz/livez）不该因为
@@ -38,7 +39,7 @@ def require_identity(
     request: Request,
     resolver: Annotated[IdentityResolver, Depends(get_identity_resolver)],
 ) -> IdentitySnapshot:
-    """凭证无效时抛 `auth_invalid`（401），由 errors.py 的表映射成响应。"""
+    """凭证无效时抛 `auth_invalid`（401），由 errors.py 的表映射成响应。."""
     headers = {
         HEADER_USER_ID: request.headers.get(HEADER_USER_ID, ""),
         HEADER_DEPTS: request.headers.get(HEADER_DEPTS, ""),

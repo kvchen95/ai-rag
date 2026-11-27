@@ -1,4 +1,4 @@
-"""变异测试：把每个关键判据故意改坏，确认对应用例变红，再改回。
+"""变异测试：把每个关键判据故意改坏，确认对应用例变红，再改回。.
 
 判据从没红过 = 和被删掉等价。这里跑四组，每组改一处语义、不改数量：
 
@@ -26,7 +26,10 @@ import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-PYTEST_TARGETS = ["api/tests/test_filter_parity.py", "api/tests/test_filters.py"]
+PYTEST_TARGETS = [
+    "api/tests/test_filter_parity.py",
+    "api/tests/test_filters.py",
+]
 
 
 def run(targets: list[str]) -> tuple[int, str]:
@@ -45,7 +48,9 @@ def run(targets: list[str]) -> tuple[int, str]:
     combined = proc.stdout + proc.stderr
     # 只留结论行，避免把 pytest-asyncio 的弃用警告当结果。
     lines = [
-        ln for ln in combined.strip().splitlines() if "passed" in ln or "failed" in ln
+        ln
+        for ln in combined.strip().splitlines()
+        if "passed" in ln or "failed" in ln
     ]
     return proc.returncode, (lines[-1] if lines else combined.strip()[-200:])
 
@@ -70,7 +75,7 @@ MUTATIONS = [
                 FieldCondition(
                     key=P_DATE_CONFIDENCE,
                     match=MatchValue(value=EXPLICIT_CONFIDENCE),
-                )
+        )
             )""",
         "new": "            pass  # 变异：去掉只认显式时间的条件",
     },
@@ -85,8 +90,11 @@ MUTATIONS = [
     {
         "name": "去掉版本兜底（§7.4）",
         "file": "api/version_guard.py",
-        "old": """        if expected is not None and item.get("version_id") == expected:
-            kept.append(item)""",
+        "old": (
+            "        if expected is not None and item.get(\"version_id\") "
+            "== expected:\n"
+            "            kept.append(item)"
+        ),
         "new": """        if True:  # 变异：不做版本兜底
             kept.append(item)""",
     },

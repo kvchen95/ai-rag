@@ -1,4 +1,4 @@
-"""向量库侧的"按过滤条件取候选"。
+"""向量库侧的"按过滤条件取候选"。.
 
 存在的理由和 `chunks_repo.select_ids` 一样：让"两边过滤语义一致"这件事可以被
 对拍证明。真正的检索（稠密 + BM25 两路 prefetch + RRF）属于 B3 卡，这里刻意
@@ -28,7 +28,7 @@ def scroll_rows(
     *,
     limit: int = DEFAULT_SCROLL_LIMIT,
 ) -> list[dict[str, Any]]:
-    """返回满足前置过滤的切片 payload（去重后按 chunk_id 排序）。"""
+    """返回满足前置过滤的切片 payload（去重后按 chunk_id 排序）。."""
     qdrant_filter = flt.to_qdrant()
     rows: dict[str, dict[str, Any]] = {}
     offset = None
@@ -58,6 +58,8 @@ def scroll_ids(
     *,
     limit: int = DEFAULT_SCROLL_LIMIT,
 ) -> list[str]:
+    """Run scroll_ids."""
     return [
-        row["chunk_id"] for row in scroll_rows(client, collection, flt, limit=limit)
+        row["chunk_id"]
+        for row in scroll_rows(client, collection, flt, limit=limit)
     ]

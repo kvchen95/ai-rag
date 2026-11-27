@@ -45,12 +45,18 @@ class FakeQdrant:
 
 
 def _client(pg: FakePg, qdrant: FakeQdrant, **overrides: object) -> TestClient:
-    return TestClient(create_app(make_settings(**overrides), pg=pg, qdrant=qdrant))
+    return TestClient(
+        create_app(make_settings(**overrides), pg=pg, qdrant=qdrant)
+    )
 
 
 def test_healthy_returns_200_with_both_checks() -> None:
-    pg = FakePg(Probe(ok=True, latency_ms=1.2, extra={"server_version": "16.4"}))
-    qd = FakeQdrant(Probe(ok=True, latency_ms=2.3, extra={"collection_present": True}))
+    pg = FakePg(
+        Probe(ok=True, latency_ms=1.2, extra={"server_version": "16.4"})
+    )
+    qd = FakeQdrant(
+        Probe(ok=True, latency_ms=2.3, extra={"collection_present": True})
+    )
     with _client(pg, qd) as client:
         resp = client.get("/healthz")
         assert resp.status_code == 200
@@ -65,7 +71,11 @@ def test_healthy_returns_200_with_both_checks() -> None:
 
 def test_postgres_down_is_503_and_points_at_postgres() -> None:
     pg = FakePg(
-        Probe(ok=False, latency_ms=2000.0, error="OperationalError: connection refused")
+        Probe(
+            ok=False,
+            latency_ms=2000.0,
+            error="OperationalError: connection refused",
+        )
     )
     qd = FakeQdrant(Probe(ok=True, latency_ms=2.0))
     with _client(pg, qd) as client:
@@ -92,7 +102,10 @@ def test_qdrant_down_is_503_and_points_at_qdrant() -> None:
 
 
 def test_probe_crash_does_not_become_500() -> None:
-    """探针自己抛异常时，healthz 必须仍是可解析的 503，而不是 handler 兜底的 500。"""
+    """探针自己抛异常时 healthz 仍须是可解析的 503。
+
+    不能退化成 handler 兜底的 500。
+    """
     pg = FakePg(Probe(ok=True, latency_ms=1.0))
     qd = FakeQdrant(RuntimeError("event loop closed"))
     with _client(pg, qd) as client:

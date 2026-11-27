@@ -10,7 +10,8 @@
 左上角的值）会立刻红。
 
 另外单独钉住三件容易写错的事：
-* 被 `rowspan`/`colspan` 覆盖的格在 HTML 里**不输出标签**（输出了浏览器会整体错位）；
+* 被 `rowspan`/`colspan` 覆盖的格在 HTML 里**不输出标签**（输出了浏览器
+  会整体错位）；
 * md 里的 `|` 要转义（单元格文本真的会带竖线："500|380"）；
 * 表头推断（`header_inferred`）只影响字段语义，不影响 HTML 标记。
 """
@@ -77,8 +78,8 @@ def test_html_keeps_span_attributes() -> None:
 def test_html_omits_cells_covered_by_a_span() -> None:
     """被覆盖的位置不输出 `<td>`——输出了浏览器会把后面的格整体挤到下一行。
 
-    4 行 × 3 列 = 12 个位置，减掉被 colspan 覆盖的 1 个、被 rowspan 覆盖的 1 个，
-    HTML 里应该正好 10 个 `<td>/<th>`。
+    4 行 × 3 列 = 12 个位置，减掉被 colspan 覆盖的 1 个、被 rowspan 覆盖
+    的 1 个，HTML 里应该正好 10 个 `<td>/<th>`。
     """
     html = render_html(MERGED, 4, 3)
     assert html.count("<td") + html.count("<th") == 10
@@ -111,13 +112,25 @@ def test_html_writes_placeholder_for_missing_cells() -> None:
 
 
 @pytest.mark.parametrize("name,cells", [("plain", PLAIN), ("merged", MERGED)])
-def test_cells_to_html_to_cells_roundtrip(name: str, cells: list[TableCell]) -> None:
+def test_cells_to_html_to_cells_roundtrip(
+    name: str, cells: list[TableCell]
+) -> None:
     del name
     html = render_html(cells, 4, 3)
     back, rows, cols = cells_from_html(html)
     assert (rows, cols) == (4, 3)
-    assert [(c.row, c.col, c.text, c.is_header, c.row_span, c.col_span) for c in back] == [
-        (c.row, c.col, clean_cell_text(c.text), c.is_header, c.row_span, c.col_span)
+    assert [
+        (c.row, c.col, c.text, c.is_header, c.row_span, c.col_span)
+        for c in back
+    ] == [
+        (
+            c.row,
+            c.col,
+            clean_cell_text(c.text),
+            c.is_header,
+            c.row_span,
+            c.col_span,
+        )
         for c in cells
     ]
 
@@ -155,13 +168,16 @@ def test_md_expands_colspan_into_repeated_column_names() -> None:
 
 
 def test_md_fills_empty_cells_with_placeholder() -> None:
-    cells = [TableCell(0, 0, "a", is_header=True), TableCell(0, 1, "", is_header=True)]
+    cells = [
+        TableCell(0, 0, "a", is_header=True),
+        TableCell(0, 1, "", is_header=True),
+    ]
     md = render_md(cells, 1, 2)
     assert BLANK_CELL in md
 
 
 def test_md_escapes_pipes_inside_cells() -> None:
-    """"标准 500|380" 是真实写法。不转义会把一行切成更多列。"""
+    """“标准 500|380”是真实写法，不转义会把一行切成更多列。"""
     cells = [TableCell(0, 0, "500|380", is_header=True)]
     md = render_md(cells, 1, 1)
     assert "\\|" in md
@@ -176,7 +192,9 @@ def test_md_of_empty_table_is_empty_string() -> None:
 
 
 @pytest.mark.parametrize("name,cells", [("plain", PLAIN), ("merged", MERGED)])
-def test_md_parses_back_to_the_same_matrix(name: str, cells: list[TableCell]) -> None:
+def test_md_parses_back_to_the_same_matrix(
+    name: str, cells: list[TableCell]
+) -> None:
     del name
     md = render_md(cells, 4, 3)
     assert parse_md(md) == expand_to_matrix(cells, 4, 3)
@@ -204,7 +222,10 @@ def test_parse_md_requires_header_and_separator() -> None:
 def test_expand_copies_the_top_left_value_across_a_span() -> None:
     """§3.3 规则 1：合并单元格按"左上角为值、其余格复制该值"展开。"""
     cells = [TableCell(0, 0, "merged", col_span=2, row_span=2)]
-    assert expand_to_matrix(cells, 2, 2) == [["merged", "merged"], ["merged", "merged"]]
+    assert expand_to_matrix(cells, 2, 2) == [
+        ["merged", "merged"],
+        ["merged", "merged"],
+    ]
 
 
 def test_expand_does_not_overwrite_existing_values() -> None:
@@ -283,7 +304,9 @@ def test_table_content_text_keeps_the_title_line() -> None:
 
 def test_label_table_detection() -> None:
     """单行单列的"表格"其实是标签（§3.3 边界表）。"""
-    assert is_label_table(build_table([TableCell(0, 0, "x")], row_count=1, col_count=1))
+    assert is_label_table(
+        build_table([TableCell(0, 0, "x")], row_count=1, col_count=1)
+    )
     assert not is_label_table(build_table(PLAIN, row_count=4, col_count=3))
 
 
@@ -302,7 +325,14 @@ def test_cells_json_matches_the_database_shape() -> None:
     """`chunks.table_cells` 是 jsonb 数组，键名必须与落库口径一致。"""
     table = build_table(PLAIN, row_count=4, col_count=3)
     first = table.cells_json()[0]
-    assert set(first) == {"row", "col", "text", "is_header", "row_span", "col_span"}
+    assert set(first) == {
+        "row",
+        "col",
+        "text",
+        "is_header",
+        "row_span",
+        "col_span",
+    }
     assert first == {
         "row": 0,
         "col": 0,

@@ -6,7 +6,11 @@ from decimal import Decimal
 
 import pytest
 
-from api.generate.calculator import CalculationError, execute_expression, validate_calculation
+from api.generate.calculator import (
+    CalculationError,
+    execute_expression,
+    validate_calculation,
+)
 
 
 def test_percentage_difference_is_executed_exactly() -> None:
@@ -40,14 +44,26 @@ def test_ratio_expression_can_report_percentage() -> None:
 
 
 def test_calculation_rejects_wrong_result() -> None:
-    assert validate_calculation("45.46% - 37.90%", "7.65 个百分点", "45.46%；37.90%") is None
+    assert (
+        validate_calculation(
+            "45.46% - 37.90%", "7.65 个百分点", "45.46%；37.90%"
+        )
+        is None
+    )
 
 
 def test_calculation_rejects_input_missing_from_evidence() -> None:
-    assert validate_calculation("45.46% - 37.90%", "7.56 个百分点", "45.46%") is None
+    assert (
+        validate_calculation("45.46% - 37.90%", "7.56 个百分点", "45.46%")
+        is None
+    )
 
 
-@pytest.mark.parametrize("expression", ["__import__('os')", "45 ** 2", "1 / 0", "abc + 1"])
-def test_calculation_rejects_unsafe_or_invalid_expression(expression: str) -> None:
+@pytest.mark.parametrize(
+    "expression", ["__import__('os')", "45 ** 2", "1 / 0", "abc + 1"]
+)
+def test_calculation_rejects_unsafe_or_invalid_expression(
+    expression: str,
+) -> None:
     with pytest.raises(CalculationError):
         execute_expression(expression)

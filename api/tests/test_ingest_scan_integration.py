@@ -39,8 +39,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 MIGRATE_SCRIPT = REPO_ROOT / "scripts" / "db_migrate.py"
 
 # 测试自己的命名空间：绝不碰真实样本的 doc_key（policy/travel-cn 等）。
-# 6c6cb7a 起 doc_key 走拼音归一化（pypinyin 是硬依赖），但 SAMPLE_* 保留中文原名。
-# 这两个常量曾经写死中文 key，重装依赖后 9 条用例连环红——期望值必须跟算法同源。
+# 6c6cb7a 起 doc_key 走拼音归一化（pypinyin 是硬依赖），但 SAMPLE_*
+# 保留中文原名。这两个常量曾经写死中文 key，重装依赖后 9 条用例连环红
+# ——期望值必须跟算法同源。
 DOC_A = "itest/a-ban-fa"
 DOC_B = "itest/b-ban-fa"
 SAMPLE_A = "itest/a-办法-2025版.pdf"
@@ -58,7 +59,9 @@ def migrated(pg_dsn: str) -> str:
     )
     assert proc.returncode == 0, f"db_migrate.py failed: {proc.stderr[-800:]}"
     with psycopg.connect(normalize_dsn(pg_dsn)) as conn:
-        assert conn.execute("SELECT to_regclass('public.ingest_jobs')").fetchone()[0]
+        assert conn.execute(
+            "SELECT to_regclass('public.ingest_jobs')"
+        ).fetchone()[0]
     return pg_dsn
 
 
@@ -100,9 +103,12 @@ def samples(tmp_path: Path) -> Path:
 def _counts(db: PgDatabase) -> dict[str, int]:
     row = db.fetch_one(
         """
-        SELECT (SELECT count(*) FROM documents   WHERE doc_key LIKE 'itest/%') AS docs,
-               (SELECT count(*) FROM doc_versions WHERE doc_key LIKE 'itest/%') AS versions,
-               (SELECT count(*) FROM ingest_jobs WHERE doc_key LIKE 'itest/%') AS jobs
+        SELECT (SELECT count(*) FROM documents
+                WHERE doc_key LIKE 'itest/%') AS docs,
+               (SELECT count(*) FROM doc_versions
+                WHERE doc_key LIKE 'itest/%') AS versions,
+               (SELECT count(*) FROM ingest_jobs
+                WHERE doc_key LIKE 'itest/%') AS jobs
         """
     )
     assert row is not None
@@ -134,7 +140,8 @@ def test_cold_scan_creates_document_version_and_job(
 
     # 版本是 pending（待转正），不是 active —— 翻牌是 A3 的事（§4.1）。
     row = db.fetch_one(
-        "SELECT status, activated_at, file_hash FROM doc_versions WHERE doc_key = %s",
+        "SELECT status, activated_at, file_hash FROM doc_versions "
+        "WHERE doc_key = %s",
         (DOC_A,),
     )
     assert row is not None
@@ -143,7 +150,8 @@ def test_cold_scan_creates_document_version_and_job(
     assert len(row["file_hash"]) == 64
 
     job = db.fetch_one(
-        "SELECT status, retry_count, version_id FROM ingest_jobs WHERE doc_key = %s",
+        "SELECT status, retry_count, version_id FROM ingest_jobs "
+        "WHERE doc_key = %s",
         (DOC_A,),
     )
     assert job is not None
@@ -177,11 +185,14 @@ def test_rescan_after_version_failed_reports_the_reason(
     运维只会看到"skipped 一直很大"而看不出这个文件一直失败。
     """
     scan_samples(db, samples)
-    db.execute("UPDATE doc_versions SET status = 'failed' WHERE doc_key = %s", (DOC_A,))
+    db.execute(
+        "UPDATE doc_versions SET status = 'failed' WHERE doc_key = %s", (DOC_A,)
+    )
     # failed 是版本终态，任务那条也标成 failed（进度口径一致）。
     db.execute(
-        "UPDATE ingest_jobs SET status = 'failed', started_at = now(), finished_at = now(),"
-        " error = 'parse_failed: synthetic' WHERE doc_key = %s",
+        "UPDATE ingest_jobs SET status = 'failed', started_at = now(), "
+        "finished_at = now(), error = 'parse_failed: synthetic' "
+        "WHERE doc_key = %s",
         (DOC_A,),
     )
 
@@ -208,7 +219,8 @@ def test_content_revert_to_deprecated_version_is_reported(
     scan_samples(db, samples)
     # 把 DOC_A 的版本标成 deprecated（模拟它被某个更新版本取代过）。
     db.execute(
-        "UPDATE doc_versions SET status = 'deprecated' WHERE doc_key = %s", (DOC_A,)
+        "UPDATE doc_versions SET status = 'deprecated' WHERE doc_key = %s",
+        (DOC_A,),
     )
     db.execute(
         "UPDATE ingest_jobs SET status = 'succeeded', started_at = now(),"
@@ -226,14 +238,18 @@ def test_content_revert_to_deprecated_version_is_reported(
     assert _counts(db) == before  # 一个版本都没新增
 
 
-# --- 2. 并发扫描 ---------------------------------------------------------------
+# --- 2. 并发扫描
+# ---------------------------------------------------------------
 
 
-def test_concurrent_scan_raises_scan_in_progress(db: PgDatabase, samples: Path) -> None:
+def test_concurrent_scan_raises_scan_in_progress(
+    db: PgDatabase, samples: Path
+) -> None:
     """验收第一条：并发 scan 返回 409（库层异常，接口映射成 409）。
 
-    锁挂在另一条连接上模拟"另一个进程正在扫"——同一进程里用两个 PgDatabase
-    也行，但那样测的更像"同进程重入"，而真实并发是两个 api 副本/一个副本 + 手跑脚本。
+    锁挂在另一条连接上模拟“另一个进程正在扫”——同一进程里用两个
+    PgDatabase 也行，但那样测的更像“同进程重入”，而真实并发是两个 api
+    副本/一个副本 + 手跑脚本。
     """
     blocker = psycopg.connect(normalize_dsn(db.dsn), autocommit=True)
     try:
@@ -251,12 +267,17 @@ def test_concurrent_scan_raises_scan_in_progress(db: PgDatabase, samples: Path) 
 def test_scan_does_not_start_when_samples_dir_is_missing(
     db: PgDatabase, tmp_path: Path
 ) -> None:
-    """目录不存在 != 目录为空。前者是挂载/路径配错，报 0 条会让运维以为一切正常。"""
+    """目录不存在 != 目录为空。
+
+    前者是挂载/路径配错，报 0 条会让运维以为一切正常。
+    """
     with pytest.raises(SamplesRootMissing):
         scan_samples(db, tmp_path / "nope")
 
 
-def test_empty_samples_dir_is_a_clean_noop(db: PgDatabase, tmp_path: Path) -> None:
+def test_empty_samples_dir_is_a_clean_noop(
+    db: PgDatabase, tmp_path: Path
+) -> None:
     root = tmp_path / "empty"
     root.mkdir()
     report = scan_samples(db, root)
@@ -264,7 +285,8 @@ def test_empty_samples_dir_is_a_clean_noop(db: PgDatabase, tmp_path: Path) -> No
     assert report.items == []
 
 
-# --- 3. 指纹变化：新 pending 版本，旧 active 不受影响 --------------------------
+# --- 3. 指纹变化：新 pending 版本，旧 active 不受影响
+# --------------------------
 
 
 def test_fingerprint_change_creates_pending_version_and_leaves_active_alone(
@@ -288,7 +310,9 @@ def test_fingerprint_change_creates_pending_version_and_leaves_active_alone(
         "WHERE version_id = %s",
         (old_version,),
     )
-    db.execute("UPDATE documents SET status = 'active' WHERE doc_key = %s", (DOC_A,))
+    db.execute(
+        "UPDATE documents SET status = 'active' WHERE doc_key = %s", (DOC_A,)
+    )
     db.execute(
         """
         INSERT INTO chunks (chunk_id, doc_key, version_id, chunk_type, page_num,
@@ -299,7 +323,8 @@ def test_fingerprint_change_creates_pending_version_and_leaves_active_alone(
         (DOC_A, old_version),
     )
     before_version = db.fetch_one(
-        "SELECT status, activated_at, file_hash FROM doc_versions WHERE version_id = %s",
+        "SELECT status, activated_at, file_hash FROM doc_versions "
+        "WHERE version_id = %s",
         (old_version,),
     )
     before_chunk = db.fetch_one(
@@ -317,8 +342,8 @@ def test_fingerprint_change_creates_pending_version_and_leaves_active_alone(
     assert changed.version_id != old_version
 
     rows = db.fetch_all(
-        "SELECT version_id, status, activated_at, superseded_by FROM doc_versions "
-        "WHERE doc_key = %s ORDER BY created_at",
+        "SELECT version_id, status, activated_at, superseded_by "
+        "FROM doc_versions WHERE doc_key = %s ORDER BY created_at",
         (DOC_A,),
     )
     assert len(rows) == 2
@@ -328,7 +353,8 @@ def test_fingerprint_change_creates_pending_version_and_leaves_active_alone(
 
     # 旧 active 完全没动。
     after_version = db.fetch_one(
-        "SELECT status, activated_at, file_hash FROM doc_versions WHERE version_id = %s",
+        "SELECT status, activated_at, file_hash FROM doc_versions "
+        "WHERE version_id = %s",
         (old_version,),
     )
     assert after_version == before_version
@@ -338,12 +364,15 @@ def test_fingerprint_change_creates_pending_version_and_leaves_active_alone(
     )
 
     # 文档仍然 active：新版本待转正不影响旧版本继续服务。
-    doc = db.fetch_one("SELECT status FROM documents WHERE doc_key = %s", (DOC_A,))
+    doc = db.fetch_one(
+        "SELECT status FROM documents WHERE doc_key = %s", (DOC_A,)
+    )
     assert doc["status"] == "active"
 
     # 新版本有一条 queued 任务；旧版本那条任务不受影响（它可能已经 succeeded）。
     jobs = db.fetch_all(
-        "SELECT version_id, status FROM ingest_jobs WHERE doc_key = %s ORDER BY job_id",
+        "SELECT version_id, status FROM ingest_jobs "
+        "WHERE doc_key = %s ORDER BY job_id",
         (DOC_A,),
     )
     assert {j["version_id"] for j in jobs} == {old_version, new["version_id"]}
@@ -352,8 +381,10 @@ def test_fingerprint_change_creates_pending_version_and_leaves_active_alone(
 def test_reverting_content_back_to_previous_fingerprint_is_not_a_new_version(
     db: PgDatabase, samples: Path
 ) -> None:
-    """内容改回旧版（指纹撞上历史版本）：不能建第三个版本（唯一约束会拒），
-    也不能当 unchanged 混过去——要报 content_revert，让人去走 §4.4 的回滚翻牌。
+    """内容改回旧版（指纹撞上历史版本）时不能建第三个版本。
+
+    唯一约束会拒，也不能当 unchanged 混过去——要报 content_revert，
+    让人去走 §4.4 的回滚翻牌。
 
     这里必须先模拟一次真实的翻牌（rev1 -> deprecated，rev2 -> active），
     否则 rev1 还是 pending，两次扫描都只是 unchanged，测不到这个分支。
@@ -368,7 +399,8 @@ def test_reverting_content_back_to_previous_fingerprint_is_not_a_new_version(
     path.write_bytes(b"%PDF-1.4\n% A rev 2\n")
     scan_samples(db, samples)
     rev2_version = db.fetch_one(
-        "SELECT version_id FROM doc_versions WHERE doc_key = %s AND version_id <> %s",
+        "SELECT version_id FROM doc_versions "
+        "WHERE doc_key = %s AND version_id <> %s",
         (DOC_A, rev1_version),
     )["version_id"]
 
@@ -396,13 +428,15 @@ def test_reverting_content_back_to_previous_fingerprint_is_not_a_new_version(
     # 没有新版本，active 也没被自动翻回去——回滚是人的决定，不是扫描的。
     assert _counts(db) == before
     active = db.fetch_one(
-        "SELECT version_id FROM doc_versions WHERE doc_key = %s AND status = 'active'",
+        "SELECT version_id FROM doc_versions "
+        "WHERE doc_key = %s AND status = 'active'",
         (DOC_A,),
     )
     assert active["version_id"] == rev2_version
 
 
-# --- 4. 失败路径 ---------------------------------------------------------------
+# --- 4. 失败路径
+# ---------------------------------------------------------------
 
 
 def test_unreadable_file_records_failed_job_without_touching_versions(
@@ -466,21 +500,27 @@ def test_doc_key_collision_fails_both_files_and_keeps_others(
     report = scan_samples(db, root)
 
     assert report.counts == {"add": 1, "change": 0, "skip": 0, "fail": 2}
-    assert report.as_dict()["reasons"] == {SkipReason.DOC_KEY_COLLISION.value: 2}
+    assert report.as_dict()["reasons"] == {
+        SkipReason.DOC_KEY_COLLISION.value: 2
+    }
     assert {item.doc_key for item in report.added} == {"itest/qi-ta"}
     assert (
         db.fetch_one(
-            "SELECT count(*) AS n FROM documents WHERE doc_key = %s", ("itest/zhi-du",)
+            "SELECT count(*) AS n FROM documents WHERE doc_key = %s",
+            ("itest/zhi-du",),
         )["n"]
         == 0
     )
 
 
-# --- 5. ingest_jobs 状态机落库 -------------------------------------------------
+# --- 5. ingest_jobs 状态机落库
+# -------------------------------------------------
 
 
-def test_job_lifecycle_with_retry_then_success(db: PgDatabase, samples: Path) -> None:
-    """queued -> running -> (失败 x3) -> succeeded，四次之后成功。
+def test_job_lifecycle_with_retry_then_success(
+    db: PgDatabase, samples: Path
+) -> None:
+    """Queued -> running -> (失败 x3) -> succeeded，四次之后成功。
 
     重试是同一行原地累加 retry_count，不是新插一行：否则"失败过几次"这个数
     会散在多行里，统计口径就说不清了。
@@ -505,7 +545,9 @@ def test_job_lifecycle_with_retry_then_success(db: PgDatabase, samples: Path) ->
             assert claimed is not None and claimed["job_id"] == job_id
 
         # 第 4 次失败：额度用完，终态 failed
-        status, retries = job_store.fail_job(conn, job_id, "boom final", max_retries=3)
+        status, retries = job_store.fail_job(
+            conn, job_id, "boom final", max_retries=3
+        )
         conn.commit()
         assert status == job_store.JobStatus.FAILED
         assert retries == 3
@@ -522,7 +564,9 @@ def test_job_lifecycle_with_retry_then_success(db: PgDatabase, samples: Path) ->
         conn.rollback()
 
 
-def test_job_success_clears_previous_error(db: PgDatabase, samples: Path) -> None:
+def test_job_success_clears_previous_error(
+    db: PgDatabase, samples: Path
+) -> None:
     scan_samples(db, samples)
     with db.session() as conn:
         job = job_store.claim_next_job(conn, doc_key=DOC_A)
@@ -545,7 +589,9 @@ def test_job_success_clears_previous_error(db: PgDatabase, samples: Path) -> Non
         assert row["finished_at"] is not None
 
 
-def test_cancel_only_applies_to_open_jobs(db: PgDatabase, samples: Path) -> None:
+def test_cancel_only_applies_to_open_jobs(
+    db: PgDatabase, samples: Path
+) -> None:
     scan_samples(db, samples)
     with db.session() as conn:
         # 必须按 DOC_A 定向领取：全局 claim 会领到库里别的（真实）queued job，
@@ -574,7 +620,8 @@ def test_open_job_count_tracks_queue(db: PgDatabase, samples: Path) -> None:
         assert job_store.open_job_count(conn) >= 2  # 全局至少包含这两条
 
 
-# --- 6. 002 迁移的约束真的拦得住 -----------------------------------------------
+# --- 6. 002 迁移的约束真的拦得住
+# -----------------------------------------------
 
 
 UNDEFINED_STATUS_SQL = (
@@ -587,7 +634,10 @@ SUCCEEDED_WITHOUT_FINISHED_SQL = (
     "INSERT INTO ingest_jobs (doc_key, status, started_at) "
     "VALUES ('itest/x', 'succeeded', now())"
 )
-FAILED_WITHOUT_ERROR_SQL = "INSERT INTO ingest_jobs (doc_key, status, error) VALUES ('itest/x', 'failed', NULL)"
+FAILED_WITHOUT_ERROR_SQL = (
+    "INSERT INTO ingest_jobs (doc_key, status, error) "
+    "VALUES ('itest/x', 'failed', NULL)"
+)
 BAD_ROWS = {
     "undefined_status": UNDEFINED_STATUS_SQL,
     "running_without_started_at": RUNNING_WITHOUT_STARTED_SQL,
@@ -599,9 +649,11 @@ BAD_ROWS = {
 @pytest.mark.parametrize("case", list(BAD_ROWS))
 def test_002_constraints_reject_bad_rows(pg_dsn: str, case: str) -> None:
     """每条 CHECK 都喂一次坏数据。没红过的约束和被删掉是一回事。"""
-    with psycopg.connect(normalize_dsn(pg_dsn), autocommit=True) as conn:
-        with pytest.raises(psycopg.errors.IntegrityError):
-            conn.execute(BAD_ROWS[case])
+    with (
+        psycopg.connect(normalize_dsn(pg_dsn), autocommit=True) as conn,
+        pytest.raises(psycopg.errors.IntegrityError),
+    ):
+        conn.execute(BAD_ROWS[case])
 
 
 def test_one_open_job_per_version(pg_dsn: str) -> None:
@@ -613,7 +665,8 @@ def test_one_open_job_per_version(pg_dsn: str) -> None:
     dsn = normalize_dsn(pg_dsn)
     with psycopg.connect(dsn, autocommit=True) as conn:
         conn.execute(
-            "INSERT INTO documents (doc_key, filename) VALUES ('itest/dup', 'd.pdf')"
+            "INSERT INTO documents (doc_key, filename) "
+            "VALUES ('itest/dup', 'd.pdf')"
         )
         conn.execute(
             "INSERT INTO doc_versions (version_id, doc_key, file_hash) "
@@ -621,7 +674,8 @@ def test_one_open_job_per_version(pg_dsn: str) -> None:
             ("c" * 64,),
         )
         conn.execute(
-            "INSERT INTO ingest_jobs (doc_key, version_id) VALUES ('itest/dup', 'itest/dup#v1')"
+            "INSERT INTO ingest_jobs (doc_key, version_id) "
+            "VALUES ('itest/dup', 'itest/dup#v1')"
         )
         with pytest.raises(psycopg.errors.UniqueViolation):
             conn.execute(
@@ -634,7 +688,8 @@ def test_one_open_job_per_version(pg_dsn: str) -> None:
             " finished_at = now() WHERE version_id = 'itest/dup#v1'"
         )
         conn.execute(
-            "INSERT INTO ingest_jobs (doc_key, version_id) VALUES ('itest/dup', 'itest/dup#v1')"
+            "INSERT INTO ingest_jobs (doc_key, version_id) "
+            "VALUES ('itest/dup', 'itest/dup#v1')"
         )
         conn.execute("DELETE FROM ingest_jobs WHERE doc_key = 'itest/dup'")
         conn.execute("DELETE FROM doc_versions WHERE doc_key = 'itest/dup'")
@@ -644,8 +699,11 @@ def test_one_open_job_per_version(pg_dsn: str) -> None:
 def test_version_id_is_derived_so_same_content_cannot_get_two_versions(
     db: PgDatabase, samples: Path
 ) -> None:
-    """同内容 -> 同 version_id，加上 `UNIQUE (doc_key, file_hash)`：
-    两条独立的约束都指向"同一内容只有一个版本行"。"""
+    """同内容必然得到同一个 version_id。
+
+    再加上 `UNIQUE (doc_key, file_hash)`，两条独立的约束都指向
+    “同一内容只有一个版本行”。
+    """
     scan_samples(db, samples)
     path = samples / SAMPLE_A
     original = path.read_bytes()
@@ -660,7 +718,10 @@ def test_version_id_is_derived_so_same_content_cannot_get_two_versions(
 
 @pytest.fixture(autouse=True)
 def _has_chmod(tmp_path: Path) -> None:
-    """在读不到文件那条用例里改权限位；Windows 挂载盘上 chmod 不生效，跳过更诚实。"""
+    """在读不到文件那条用例里改权限位。
+
+    Windows 挂载盘上 chmod 不生效，跳过更诚实。
+    """
     probe = tmp_path / "probe"
     probe.write_text("x")
     probe.chmod(0o000)
@@ -668,7 +729,8 @@ def _has_chmod(tmp_path: Path) -> None:
     probe.chmod(0o644)
     if readable != 0o000:
         pytest.skip(
-            "filesystem ignores permission bits (chmod cannot make a file unreadable)"
+            "filesystem ignores permission bits "
+            "(chmod cannot make a file unreadable)"
         )
 
 

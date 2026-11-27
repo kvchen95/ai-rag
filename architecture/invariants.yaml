@@ -1,0 +1,75 @@
+# 项目级不变量（Policy as Code）
+#
+# 每个不变量必须有：
+# - id: 稳定编号，PR/告警/复盘共用
+# - statement: 可判定的陈述
+# - scope: 适用路径
+# - severity: blocker / major / minor
+# - detectors: 机器执行器
+# - owner: 负责人
+# - exception: 例外审批方式；默认 none
+
+- id: INV-001
+  statement: 捕获异常后不得返回空值、None 或继续成功路径
+  scope: ["api/**/*.py"]
+  severity: blocker
+  detectors: ["ast:broad_except_empty_return", "ast:silent_pass"]
+  owner: architecture
+  exception: "仅 SSE/进程边界允许，且必须转成显式错误事件"
+
+- id: INV-002
+  statement: 外部响应不得用 or [] / or {} / or "" 静默降级
+  scope: ["api/**/*.py"]
+  severity: blocker
+  detectors: ["ast:or_empty_default"]
+  owner: architecture
+  exception: none
+
+- id: INV-003
+  statement: 时序/查询解析不得调用生成模型兜底
+  scope: ["api/time_range.py", "api/temporal/**/*.py", "api/query/**/*.py"]
+  severity: blocker
+  detectors: ["ast:no_llm_in_deterministic"]
+  owner: architecture
+  exception: none
+
+- id: INV-004
+  statement: 缺失 metadata 必须 fail-closed，不得默认放行
+  scope: ["api/temporal/**/*.py", "api/retrieval/**/*.py", "api/filters.py"]
+  severity: blocker
+  detectors: ["review:missing_metadata_default", "test:fault_injection"]
+  owner: architecture
+  exception: none
+
+- id: INV-005
+  statement: 所有显式降级必须通过 degrade() 网关并带 reason/audit
+  scope: ["api/**/*.py"]
+  severity: blocker
+  detectors: ["review:degradation_gateway", "runtime:degraded_metric"]
+  owner: architecture
+  exception: none
+
+- id: INV-006
+  statement: 确定性模块不得使用关键词特判补语义
+  scope: ["api/time_range.py", "api/temporal/**/*.py", "api/query/**/*.py"]
+  severity: blocker
+  detectors: ["review:keyword_semantic_patch", "ast:banned_temporal_heuristics"]
+  owner: architecture
+  exception: none
+
+- id: INV-007
+  statement: 任何降级必须在审计中可见，禁止 silent fallback
+  scope: ["api/**/*.py"]
+  severity: blocker
+  detectors: ["runtime:degraded_metric", "review:audit_reason"]
+  owner: architecture
+  exception: none
+
+- id: INV-008
+  statement: 生产代码不得出现中文字符串字面量；prompt/词表/单位/文案只能放在 api/prompts 或 api/resources
+  scope: ["api/**/*.py"]
+  severity: blocker
+  detectors: ["ast:cjk_literal_outside_resources"]
+  owner: architecture
+  exception: "api/tests 不扫；注释与 docstring 不扫"
+

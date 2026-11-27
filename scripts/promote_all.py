@@ -1,4 +1,4 @@
-"""一次性转正所有 pending 版本（开发/评测用）。
+"""一次性转正所有 pending 版本（开发/评测用）。.
 
 作为脚本存在而不是 Makefile heredoc，理由见 scripts/pending_versions.py 的说明。
 

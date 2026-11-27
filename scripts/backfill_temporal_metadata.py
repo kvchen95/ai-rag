@@ -8,9 +8,7 @@ Usage:
 
 from __future__ import annotations
 
-import argparse
 import os
-import re
 import sys
 from pathlib import Path
 
@@ -41,7 +39,9 @@ def parse_doc_key(doc_key: str) -> tuple[str, str, str, str, str]:
             break
     if company_slug is None:
         raise ValueError(f"cannot identify company for {doc_key}")
-    report_type, start, end, granularity = PERIODS["san-ji-bao" if "san-ji-bao" in stem else "ban-nian-bao"]
+    report_type, start, end, granularity = PERIODS[
+        "san-ji-bao" if "san-ji-bao" in stem else "ban-nian-bao"
+    ]
     return COMPANIES[company_slug], report_type, start, end, granularity
 
 
@@ -52,24 +52,43 @@ def main() -> int:
         print("usage: --dry-run or --apply", file=sys.stderr)
         return 2
 
-    dsn = os.getenv("DATABASE_URL", "postgresql://ai_rag:ai_rag_dev_password@postgres:5432/ai_rag")
-    for prefix in ("postgresql+psycopg://", "postgresql+psycopg2://", "postgres+psycopg://"):
+    dsn = os.getenv(
+        "DATABASE_URL",
+        "postgresql://ai_rag:ai_rag_dev_password@postgres:5432/ai_rag",
+    )
+    for prefix in (
+        "postgresql+psycopg://",
+        "postgresql+psycopg2://",
+        "postgres+psycopg://",
+    ):
         if dsn.startswith(prefix):
-            dsn = "postgresql://" + dsn[len(prefix):]
+            dsn = "postgresql://" + dsn[len(prefix) :]
 
     conn = psycopg.connect(dsn)
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT doc_key, filename FROM documents ORDER BY doc_key")
+            cur.execute(
+                "SELECT doc_key, filename FROM documents ORDER BY doc_key"
+            )
             docs = cur.fetchall()
             plan = []
-            for doc_key, filename in docs:
-                company, report_type, start, end, granularity = parse_doc_key(doc_key)
-                plan.append((doc_key, company, report_type, start, end, granularity))
-                print(f"{doc_key}: company={company}, type={report_type}, period={start}..{end}, granularity={granularity}")
+            for doc_key, _filename in docs:
+                company, report_type, start, end, granularity = parse_doc_key(
+                    doc_key
+                )
+                plan.append(
+                    (doc_key, company, report_type, start, end, granularity)
+                )
+                print(
+                    f"{doc_key}: company={company}, type={report_type}, "
+                    f"period={start}..{end}, granularity={granularity}"
+                )
 
             if dry_run:
-                print(f"dry-run: would update {len(plan)} documents and their active chunks")
+                print(
+                    f"dry-run: would update {len(plan)} documents and "
+                    "their active chunks"
+                )
                 return 0
 
             for doc_key, company, report_type, start, end, granularity in plan:

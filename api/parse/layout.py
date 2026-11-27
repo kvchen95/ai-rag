@@ -1,12 +1,13 @@
-"""版面还原：行、栏序、表格、图、页眉页脚（详细设计.md §3.2）。
+"""版面还原：行、栏序、表格、图、页眉页脚（详细设计.md §3.2）。.
 
 输入是 pdfplumber 的一页 + 本页的 `PageSpace`，输出「阅读空间里的行、表格区域、
 图区域」。五个决定写在这里，别处不再重复：
 
 ### 1. 先把字符搬进阅读空间，再做任何聚类
 
-pdfplumber 给的是**显示空间**坐标。`/Rotate 90` 的页在显示空间里一行横排文字是
-竖着排的，实测会被切成 34 个单字符行（`The highlight box...` → `T S R` / `h e` / …）。
+pdfplumber 给的是**显示空间**坐标。`/Rotate 90` 的页在显示空间里一行横排文字
+是竖着排的，实测会被切成 34 个单字符行
+（`The highlight box...` → `T S R` / `h e` / …）。
 所以第一步统一转成阅读空间（未旋转、左上原点），之后所有聚类、分栏、表格判断
 都在那里面做。输出 bbox 时由 `Region.bbox(space)` 一次性转回去。
 
@@ -40,8 +41,9 @@ PDF 里的"空格"经常不是空格字符而是横向间隔。不补就会得�
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Any, Iterable, Sequence
+from typing import Any
 
 from api.parse.geometry import PageSpace, Rect, iou
 from api.parse.model import (
@@ -56,7 +58,8 @@ from api.parse.tables import build_table, clean_cell_text
 
 # --- 行的聚类参数（单位 pt）-------------------------------------------------
 #
-# 同一行的字符 top 会有 ±0.3pt 抖动（不同字号的基线对齐），所以容差取字号的一半：
+# 同一行的字符 top 会有 ±0.3pt 抖动（不同字号的基线对齐），
+# 所以容差取字号的一半：
 # 10pt 正文给 5pt，14pt 标题给 7pt，都不会把相邻行并进来。
 LINE_Y_TOLERANCE_RATIO = 0.5
 # 一行内切成两段的横向间距阈值。正文词距约 2-4pt，栏间距通常 > 20pt；
@@ -69,10 +72,11 @@ WORD_GAP_PT = 1.6
 CJK_GAP_PT = 6.0
 # --- 行内文字宽度兜底 -------------------------------------------------------
 #
-# 有些 PDF（包括本项目 `scripts/make_samples.py` 生成的那三份：标准 14 字体但没写
-# `/Widths`）的字符宽度是 0：泵出来的每个 char 的 `x0 == x1`。pdfplumber 照实报，
-# 于是"行宽 = 0"——bbox 退化成一个竖条，`require_complete()` 会把它判成非法
-# （`x1 > x0` 不成立），整份文档一条切片都出不来。
+# 有些 PDF（包括本项目 `scripts/make_samples.py` 生成的那三份：标准 14
+# 字体但没写 `/Widths`）的字符宽度是 0：泵出来的每个 char 的
+# `x0 == x1`。pdfplumber 照实报，于是"行宽 = 0"——bbox 退化成一个竖条，
+# `require_complete()` 会把它判成非法（`x1 > x0` 不成立），整份文档
+# 一条切片都出不来。
 #
 # 实测：`samples/policy/travel-cn.pdf` 的 268 个字符全是 `w=0.00`。
 #
@@ -110,8 +114,8 @@ _SENTENCE_END_CHARS = "。！？；.!?;"
 
 # --- 图识别参数 -------------------------------------------------------------
 #
-# 位图小于这个尺寸忽略：图标、印章、装饰线不是"图"。§3.4 的图要能被 VLM 读出数值，
-# 120×80pt（约 1.7×1.1 英寸）是能读出刻度的下限。
+# 位图小于这个尺寸忽略：图标、印章、装饰线不是"图"。§3.4 的图要能被
+# VLM 读出数值，120×80pt（约 1.7×1.1 英寸）是能读出刻度的下限。
 FIGURE_MIN_WIDTH = 120.0
 FIGURE_MIN_HEIGHT = 80.0
 # 矢量图元聚簇间距：柱状图的柱子之间、折线图的线段之间都是几个到几十 pt。
@@ -135,21 +139,24 @@ HEADER_FOOTER_MAX_CHARS = 40
 # `classify_header_footer` 的 docstring。
 HEADER_BAND_RATIO = 0.12
 FOOTER_BAND_RATIO = 0.12
-# 数字+单位：金额、比例、期限、日期。带这些的行即便重复也不删——它多半是每页都印的
-# "标准值"提示，删掉就是丢正文（§3.2 的原话）。
+# 数字+单位：金额、比例、期限、日期。带这些的行即便重复也不删——
+# 它多半是每页都印的"标准值"提示，删掉就是丢正文（§3.2 的原话）。
 _NUMERIC_UNIT = re.compile(
     r"\d[\d,.]*\s*"
-    r"(?:元|块|万|亿|%|％|天|日|个工作日|工作日|个月|月|年|小时|分钟|次|人|页|pt|px|CNY|RMB|USD|¥|\$)"
+    r"(?:元|块|万|亿|%|％|天|日|个工作日|工作日|个月|月|年|"
+    r"小时|分钟|次|人|页|pt|px|CNY|RMB|USD|¥|\$)"
     r"|(?:CNY|RMB|USD|¥|\$)\s*\d",
     re.IGNORECASE,
 )
 _DIGITS = re.compile(r"\d+")
 _CJK = re.compile(
-    "[\u3000-\u303f\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef]"
+    "[\u3000-\u303f\u3040-\u30ff\u3400-\u4dbf"
+    "\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef]"
 )
 
 
 def _is_cjk(char: str) -> bool:
+    """Run _is_cjk."""
     return bool(_CJK.match(char))
 
 
@@ -157,6 +164,7 @@ def _is_cjk(char: str) -> bool:
 
 
 def _char_rect(char: dict[str, Any]) -> Rect:
+    """Run _char_rect."""
     return Rect(
         float(char["x0"]),
         float(char["top"]),
@@ -166,7 +174,7 @@ def _char_rect(char: dict[str, Any]) -> Rect:
 
 
 def _estimated_width(char: dict[str, Any]) -> float | None:
-    """字宽为 0 时的估算宽度（pt）。字宽有效时返回 None。
+    """字宽为 0 时的估算宽度（pt）。字宽有效时返回 None。.
 
     触发条件：`x1 - x0 <= 0.01`（不是严格的 0——浮点误差会有 1e-6 级的零宽）。
     """
@@ -188,8 +196,10 @@ def _estimated_width(char: dict[str, Any]) -> float | None:
     return em * FALLBACK_LATIN_EM
 
 
-def fill_missing_widths(chars: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
-    """给字宽为 0 的字符补上估算宽度，并把**后续字符的 x0/x1 依次推进**。
+def fill_missing_widths(
+    chars: Sequence[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """给字宽为 0 的字符补上估算宽度，并把**后续字符的 x0/x1 依次推进**。.
 
     为什么必须推进（而不是只给每个字符自己一个宽度）：字宽为 0 的 PDF 里所有
     字符的 `x0` 都是同一个值（实测 `travel-cn.pdf` 268 个字符全在 x=72）。
@@ -201,7 +211,9 @@ def fill_missing_widths(chars: Sequence[dict[str, Any]]) -> list[dict[str, Any]]
     """
     out: list[dict[str, Any]] = []
     cursor: dict[float, float] = {}  # top -> 下一个可用 x
-    for char in sorted(chars, key=lambda c: (round(float(c["top"]), 1), float(c["x0"]))):
+    for char in sorted(
+        chars, key=lambda c: (round(float(c["top"]), 1), float(c["x0"]))
+    ):
         clone = dict(char)
         estimated = _estimated_width(char)
         if estimated is None:
@@ -221,7 +233,7 @@ def fill_missing_widths(chars: Sequence[dict[str, Any]]) -> list[dict[str, Any]]
 
 
 def reading_chars(page: Any, space: PageSpace) -> list[dict[str, Any]]:
-    """页面字符 -> 阅读空间副本（顺带补齐字宽为 0 的字符）。
+    """页面字符 -> 阅读空间副本（顺带补齐字宽为 0 的字符）。.
 
     只搬坐标，不改其它键（`upright` 等仍可用于竖排判断）。`rotation=0` 时不做
     坐标变换，但**仍然要补字宽**：实测 `samples/` 里的三份制度文件全是零宽字符。
@@ -237,13 +249,15 @@ def reading_chars(page: Any, space: PageSpace) -> list[dict[str, Any]]:
     for char in chars:
         rect = space.display_to_reading(_char_rect(char))
         clone = dict(char)
-        clone["x0"], clone["top"], clone["x1"], clone["bottom"] = rect.as_tuple()
+        clone["x0"], clone["top"], clone["x1"], clone["bottom"] = (
+            rect.as_tuple()
+        )
         out.append(clone)
     return out
 
 
 def extract_lines(chars: Sequence[dict[str, Any]], page_num: int) -> list[Line]:
-    """把（已经在阅读空间的）字符聚成行。
+    """把（已经在阅读空间的）字符聚成行。.
 
     **没有"竖排"分支**——这是实测改出来的（本模块第一版有，结果把旋转页的整段
     正文拆成了几十个单字符行）。原因：pdfplumber 的 `char["upright"]` 表达的是
@@ -273,18 +287,25 @@ def extract_lines(chars: Sequence[dict[str, Any]], page_num: int) -> list[Line]:
 
 
 def _group_by_row(chars: Sequence[dict[str, Any]], page_num: int) -> list[Line]:
-    """按 y 聚行 + 按 x 大缝隙切段。"""
+    """按 y 聚行 + 按 x 大缝隙切段。."""
     if not chars:
         return []
-    ordered = sorted(chars, key=lambda c: (round(float(c["top"]), 1), float(c["x0"])))
+    ordered = sorted(
+        chars, key=lambda c: (round(float(c["top"]), 1), float(c["x0"]))
+    )
     buckets: list[list[dict[str, Any]]] = []
     for char in ordered:
         height = float(char["bottom"]) - float(char["top"])
         tolerance = max(1.0, height * LINE_Y_TOLERANCE_RATIO)
         placed = False
         for bucket in reversed(buckets[-3:]):  # 只需回看最近几行
-            center = sum(float(c["top"]) + float(c["bottom"]) for c in bucket) / (2 * len(bucket))
-            if abs((float(char["top"]) + float(char["bottom"])) / 2 - center) <= tolerance:
+            center = sum(
+                float(c["top"]) + float(c["bottom"]) for c in bucket
+            ) / (2 * len(bucket))
+            if (
+                abs((float(char["top"]) + float(char["bottom"])) / 2 - center)
+                <= tolerance
+            ):
                 bucket.append(char)
                 placed = True
                 break
@@ -303,7 +324,9 @@ def _group_by_row(chars: Sequence[dict[str, Any]], page_num: int) -> list[Line]:
                 max(float(c["x1"]) for c in segment),
                 max(float(c["bottom"]) for c in segment),
             )
-            heights = sorted(float(c["bottom"]) - float(c["top"]) for c in segment)
+            heights = sorted(
+                float(c["bottom"]) - float(c["top"]) for c in segment
+            )
             lines.append(
                 Line(
                     text=text,
@@ -315,12 +338,15 @@ def _group_by_row(chars: Sequence[dict[str, Any]], page_num: int) -> list[Line]:
     return lines
 
 
-def _split_on_gap(chars: Sequence[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+def _split_on_gap(
+    chars: Sequence[dict[str, Any]],
+) -> list[list[dict[str, Any]]]:
+    """Run _split_on_gap."""
     ordered = sorted(chars, key=lambda c: float(c["x0"]))
     if not ordered:
         return []
     segments: list[list[dict[str, Any]]] = [[ordered[0]]]
-    for prev, char in zip(ordered, ordered[1:]):
+    for prev, char in zip(ordered, ordered[1:], strict=False):
         gap = float(char["x0"]) - float(prev["x1"])
         if gap > LINE_X_GAP_SPLIT:
             segments.append([char])
@@ -330,7 +356,7 @@ def _split_on_gap(chars: Sequence[dict[str, Any]]) -> list[list[dict[str, Any]]]
 
 
 def _join_segment(segment: Sequence[dict[str, Any]]) -> str:
-    """按坐标拼接一行。
+    """按坐标拼接一行。.
 
     两种"空格"分开处理：
       * 字面量空格字符：原样保留（PDF 里真有）；
@@ -345,7 +371,11 @@ def _join_segment(segment: Sequence[dict[str, Any]]) -> str:
     previous: dict[str, Any] | None = None
     for char in ordered:
         text = char["text"]
-        if previous is not None and text.strip() and str(previous["text"]).strip():
+        if (
+            previous is not None
+            and text.strip()
+            and str(previous["text"]).strip()
+        ):
             gap = float(char["x0"]) - float(previous["x1"])
             prev_char = str(previous["text"])[-1]
             cur_char = text[0]
@@ -365,7 +395,7 @@ def _join_segment(segment: Sequence[dict[str, Any]]) -> str:
 def detect_columns(
     lines: Sequence[Line], *, min_gutter: float = 12.0
 ) -> list[tuple[float, float]] | None:
-    """检测竖向栏缝，返回各栏的 x 区间；单栏返回 None。
+    """检测竖向栏缝，返回各栏的 x 区间；单栏返回 None。.
 
     三条同时成立才算双栏：
       1. 存在宽度 ≥ `min_gutter` 的竖带，**没有任何行**横穿它；
@@ -379,7 +409,7 @@ def detect_columns(
         return None
     ordered = sorted(lines, key=lambda line: line.rect.x0)
     best: tuple[float, float, int, int] | None = None
-    for left, right in zip(ordered, ordered[1:]):
+    for left, right in zip(ordered, ordered[1:], strict=False):
         gap_start = left.rect.x1
         gap_end = right.rect.x0
         if gap_end - gap_start < min_gutter:
@@ -410,14 +440,17 @@ def detect_columns(
 
 
 def sort_in_columns(lines: Sequence[Line]) -> list[Line]:
-    """按栏序 + 行序排序；检测不出双栏就只按行序排。"""
+    """按栏序 + 行序排序；检测不出双栏就只按行序排。."""
     if not lines:
         return []
     columns = detect_columns(lines)
     if columns is None:
-        return sorted(lines, key=lambda line: (round(line.rect.top, 1), line.rect.x0))
+        return sorted(
+            lines, key=lambda line: (round(line.rect.top, 1), line.rect.x0)
+        )
 
     def key(line: Line) -> tuple[int, float, float]:
+        """Run key."""
         for index, (x0, x1) in enumerate(columns):
             if line.rect.x0 >= x0 - 0.5 and line.rect.x1 <= x1 + 0.5:
                 return (index, round(line.rect.top, 1), line.rect.x0)
@@ -432,6 +465,7 @@ def sort_in_columns(lines: Sequence[Line]) -> list[Line]:
 
 @dataclass(frozen=True, slots=True)
 class DetectedTable:
+    """DetectedTable."""
     rect: Rect
     table: TableData
 
@@ -445,7 +479,7 @@ def find_tables(
     column_gutters: Sequence[tuple[float, float]] = (),
     lines: Sequence[Line] = (),
 ) -> list[DetectedTable]:
-    """找出页面上的表格，产出三表示（矩形已换算到阅读空间）。
+    """找出页面上的表格，产出三表示（矩形已换算到阅读空间）。.
 
     两份策略都要用，但顺序与去重规则不一样（实测出来的）：
 
@@ -453,9 +487,9 @@ def find_tables(
       * `text`（无线、靠对齐的表）后跑，只接受"落在已认表格之外"的结果。
 
     去重不能只看 IoU：实测 `text` 策略会把同一张有线的表识成更小的一块
-    （7 行 × 2 列，只盖住左半边），与 `lines` 结果 IoU 只有 0.19，用 IoU 拦不住，
-    于是一张表变两张、切片里出现两条互相矛盾的"同一个表"。用"这份结果有多大比例
-    落在已认表格里"（> 0.3 就丢）才拦得住。
+    （7 行 × 2 列，只盖住左半边），与 `lines` 结果 IoU 只有 0.19，用 IoU
+    拦不住，于是一张表变两张、切片里出现两条互相矛盾的"同一个表"。用
+    "这份结果有多大比例落在已认表格里"（> 0.3 就丢）才拦得住。
 
     表格交给 pdfplumber 在**显示空间**里检测，检测完再把 bbox 换算到阅读空间：
     pdfplumber 的线检测与字符位置同在显示空间，混两个空间去比会全错。
@@ -469,8 +503,8 @@ def find_tables(
     out: list[DetectedTable] = []
     taken_reading = list(taken)
     for settings in strategies or TABLE_STRATEGIES:
-        # 只有 `lines` 策略是"有网格线"（硬证据）。传进来的 strategies 可能是子集
-        # （旋转页只用 lines），此时第一个就是 wired。
+        # 只有 `lines` 策略是"有网格线"（硬证据）。传进来的 strategies
+        # 可能是子集（旋转页只用 lines），此时第一个就是 wired。
         wired = settings.get("vertical_strategy") == "lines"
         try:
             found = page.find_tables(table_settings=settings)
@@ -479,7 +513,10 @@ def find_tables(
         for table in found:
             display_rect = Rect(*[float(v) for v in _display_bbox(table.bbox)])
             reading_rect = space.display_to_reading(display_rect)
-            if reading_rect.width < TABLE_MIN_WIDTH or reading_rect.height < TABLE_MIN_HEIGHT:
+            if (
+                reading_rect.width < TABLE_MIN_WIDTH
+                or reading_rect.height < TABLE_MIN_HEIGHT
+            ):
                 continue
             if _covered_by(reading_rect, [*accepted, *taken_reading]):
                 continue
@@ -487,8 +524,11 @@ def find_tables(
             if data is None:
                 continue
             if not wired:
-                # 只看无线候选：有线的表哪怕格子很长、跨着栏缝也是表（线段是硬证据）。
-                if _crosses_gutter(reading_rect, column_gutters) or _looks_like_prose(data):
+                # 只看无线候选：有线的表哪怕格子很长、跨着栏缝也是表
+                # （线段是硬证据）。
+                if _crosses_gutter(
+                    reading_rect, column_gutters
+                ) or _looks_like_prose(data):
                     continue
                 if _cells_are_fragments(data, reading_rect, lines):
                     # 每个"格"都是一行文字被**横向截断**的两半（实测：单栏正文在
@@ -513,8 +553,10 @@ def find_tables(
     return out
 
 
-def _contains_a_known_table(rect: Rect, accepted: Sequence[Rect], *, ratio: float = 0.8) -> bool:
-    """`rect` 是否把某张已认表格的 80% 以上包在里面。
+def _contains_a_known_table(
+    rect: Rect, accepted: Sequence[Rect], *, ratio: float = 0.8
+) -> bool:
+    """`rect` 是否把某张已认表格的 80% 以上包在里面。.
 
     这是"假表格 = 标题 + 说明 + 真表格"这种形态的直接判据。反向的
     "候选落在已认表格里"由 `_covered_by` 负责，两个方向都要查：
@@ -529,7 +571,10 @@ def _contains_a_known_table(rect: Rect, accepted: Sequence[Rect], *, ratio: floa
     return False
 
 
-def _has_too_many_blank_rows(data: TableData, *, threshold: float = 0.15) -> bool:
+def _has_too_many_blank_rows(
+    data: TableData, *, threshold: float = 0.15
+) -> bool:
+    """Run _has_too_many_blank_rows."""
     if data.row_count < 3:
         return False
     matrix = data.matrix()
@@ -537,8 +582,10 @@ def _has_too_many_blank_rows(data: TableData, *, threshold: float = 0.15) -> boo
     return blank / data.row_count > threshold
 
 
-def _swallows_the_page(rect: Rect, space: PageSpace, *, ratio: float = 0.6) -> bool:
-    """这份候选表是否占掉了页面的大部分面积。
+def _swallows_the_page(
+    rect: Rect, space: PageSpace, *, ratio: float = 0.6
+) -> bool:
+    """这份候选表是否占掉了页面的大部分面积。.
 
     真表格可以很大，但不会同时占掉**大半页的宽度与大半个页高**——那种形态是
     "这一页的版面"，不是表格。实测：夹具里的表格贴近页面底部之后，`text` 策略把
@@ -551,9 +598,13 @@ def _swallows_the_page(rect: Rect, space: PageSpace, *, ratio: float = 0.6) -> b
 
 
 def _cells_are_fragments(
-    data: TableData, rect: Rect, lines: Sequence[Line], *, threshold: float = 0.4
+    data: TableData,
+    rect: Rect,
+    lines: Sequence[Line],
+    *,
+    threshold: float = 0.4,
 ) -> bool:
-    """表格的格是否是"同一行文字被截断的两半"。
+    """表格的格是否是"同一行文字被截断的两半"。.
 
     判据：占比 ≥ `threshold` 的格，其文本恰好是某一整行的**真前缀/真后缀**（且
     不是整行本身）。这只能是无线的 `text` 策略在正文上按对齐切出来的假表格——
@@ -567,21 +618,24 @@ def _cells_are_fragments(
     candidates = [
         line.text.strip()
         for line in lines
-        if rect.intersection(line.rect) is not None and len(line.text.strip()) > 6
+        if rect.intersection(line.rect) is not None
+        and len(line.text.strip()) > 6
     ]
     if not candidates:
         return False
     fragments = 0
     for text in texts:
         for line_text in candidates:
-            if text != line_text and (line_text.startswith(text) or line_text.endswith(text)):
+            if text != line_text and (
+                line_text.startswith(text) or line_text.endswith(text)
+            ):
                 fragments += 1
                 break
     return fragments / len(texts) >= threshold
 
 
 def _crosses_gutter(rect: Rect, gutters: Sequence[tuple[float, float]]) -> bool:
-    """`rect` 是否横跨某条栏缝（两头都在缝外）。
+    """`rect` 是否横跨某条栏缝（两头都在缝外）。.
 
     只要有一端落在缝里就不算"跨"——表格边线压在栏缝上是正常的排版。
     """
@@ -592,14 +646,15 @@ def _crosses_gutter(rect: Rect, gutters: Sequence[tuple[float, float]]) -> bool:
 
 
 def _looks_like_prose(table: TableData) -> bool:
-    """这张"表"是不是其实是分栏正文。
+    """这张"表"是不是其实是分栏正文。.
 
     两条判据，命中任一即判成正文：
       * 超长单元格（> `TABLE_CELL_MAX_CHARS`）占比 ≥ `TABLE_LONG_CELL_RATIO`；
       * 以句末标点结尾的格占比 ≥ `TABLE_SENTENCE_CELL_RATIO`。
 
-    都用比例而不是"有就否"：正常表格里也会有一两个描述格（"备注：本表自 2025 年起
-    执行……"）或一个带句号的说明，按"有就否"会把真表格也毙掉。
+    都用比例而不是"有就否"：正常表格里也会有一两个描述格
+    （"备注：本表自 2025 年起执行……"）或一个带句号的说明，按"有就否"会
+    把真表格也毙掉。
 
     第二条是针对实测形态的：双栏排版被 `text` 策略识成 7×7 的格，每格很短
     （`Left column` / `line` / `one explains scope.`），只靠长度判不出来；
@@ -611,18 +666,25 @@ def _looks_like_prose(table: TableData) -> bool:
     long_cells = sum(1 for text in texts if len(text) > TABLE_CELL_MAX_CHARS)
     if long_cells / len(texts) >= TABLE_LONG_CELL_RATIO:
         return True
-    sentence_cells = sum(1 for text in texts if text.rstrip()[-1:] in _SENTENCE_END_CHARS)
+    sentence_cells = sum(
+        1 for text in texts if text.rstrip()[-1:] in _SENTENCE_END_CHARS
+    )
     return sentence_cells / len(texts) >= TABLE_SENTENCE_CELL_RATIO
 
 
 def _display_bbox(bbox: Sequence[float]) -> tuple[float, float, float, float]:
-    """pdfplumber 的 bbox 是 `(x0, top, x1, bottom)`（显示空间）。"""
+    """Pdfplumber 的 bbox 是 `(x0, top, x1, bottom)`（显示空间）。."""
     x0, top, x1, bottom = bbox
     return (min(x0, x1), min(top, bottom), max(x0, x1), max(top, bottom))
 
 
-def _covered_by(rect: Rect, blocks: Sequence[Rect], *, threshold: float = TABLE_COVERED_RATIO) -> bool:
-    """`rect` 有多大比例落在已占用区域里（超过阈值就算重复/不是独立区域）。"""
+def _covered_by(
+    rect: Rect,
+    blocks: Sequence[Rect],
+    *,
+    threshold: float = TABLE_COVERED_RATIO,
+) -> bool:
+    """`rect` 有多大比例落在已占用区域里（超过阈值就算重复/不是独立区域）。."""
     if not blocks or rect.area <= 0:
         return False
     covered = 0.0
@@ -634,18 +696,19 @@ def _covered_by(rect: Rect, blocks: Sequence[Rect], *, threshold: float = TABLE_
 
 
 def _table_data(table: Any) -> TableData | None:
-    """pdfplumber 的 Table -> 我们的 TableData。
+    """Pdfplumber 的 Table -> 我们的 TableData。.
 
-    合并单元格**不靠猜**：pdfplumber 已经把跨行/跨列的格给成一个"大 bbox"，被覆盖
-    的位置是 `None`（实测：表头跨三列时 row0 只有 cell0，bbox 撑满整行宽）。
+    合并单元格**不靠猜**：pdfplumber 已经把跨行/跨列的格给成一个"大 bbox"，
+    被覆盖的位置是 `None`（实测：表头跨三列时 row0 只有 cell0，
+    bbox 撑满整行宽）。
 
     两件事分开取，来源不同：
-      * **几何**（span）：从 `table.rows[..].cells` 的 bbox 反推网格线——bbox 跨了
-        几条边界就是跨了几行/列。这里不能用 `.text`：`cells` 里放的是纯 `tuple`
-        （实测没有 `.text`，第一版按 `.text` 取，整张表全空）。
-      * **文本**：只能从 `table.extract()` 拿——它按网格返回矩阵，合并格的文本落在
-        左上角那一格，其余位置是 `None`。自己按 bbox 过滤 chars 再拼是第二套实现，
-        与 pdfplumber 的空格处理必然有细微差异。
+      * **几何**（span）：从 `table.rows[..].cells` 的 bbox 反推网格线——
+        bbox 跨了几条边界就是跨了几行/列。这里不能用 `.text`：`cells` 里放的
+        是纯 `tuple`（实测没有 `.text`，第一版按 `.text` 取，整张表全空）。
+      * **文本**：只能从 `table.extract()` 拿——它按网格返回矩阵，合并格的
+        文本落在左上角那一格，其余位置是 `None`。自己按 bbox 过滤 chars 再拼
+        是第二套实现，与 pdfplumber 的空格处理必然有细微差异。
     """
     rows = getattr(table, "rows", None)
     if not rows:
@@ -659,7 +722,12 @@ def _table_data(table: Any) -> TableData | None:
             if cell is None:
                 parsed.append(None)
                 continue
-            box = (float(cell[0]), float(cell[1]), float(cell[2]), float(cell[3]))
+            box = (
+                float(cell[0]),
+                float(cell[1]),
+                float(cell[2]),
+                float(cell[3]),
+            )
             parsed.append(box)
             boxes.append(box)
         row_boxes.append(parsed)
@@ -672,6 +740,7 @@ def _table_data(table: Any) -> TableData | None:
         matrix = []
 
     def edges(values: Iterable[float]) -> list[float]:
+        """Run edges."""
         collected: list[float] = []
         for value in sorted(values):
             if not collected or abs(value - collected[-1]) > 1.0:
@@ -696,7 +765,9 @@ def _table_data(table: Any) -> TableData | None:
             col_end = _edge_index(x_edges, box[2])
             row = _edge_index(y_edges, box[1])
             row_end = _edge_index(y_edges, box[3])
-            text = _matrix_text(matrix, row, col, fallback=(source_row, source_col))
+            text = _matrix_text(
+                matrix, row, col, fallback=(source_row, source_col)
+            )
             placed.setdefault(
                 (row, col),
                 TableCell(
@@ -739,7 +810,7 @@ def _matrix_text(
     *,
     fallback: tuple[int, int],
 ) -> str:
-    """从 `table.extract()` 的矩阵取文本：先按网格坐标，取不到按行内位置。"""
+    """从 `table.extract()` 的矩阵取文本：先按网格坐标，取不到按行内位置。."""
     for r, c in ((row, col), fallback):
         if 0 <= r < len(matrix) and 0 <= c < len(matrix[r]):
             value = matrix[r][c]
@@ -749,7 +820,7 @@ def _matrix_text(
 
 
 def _edge_index(edges: Sequence[float], value: float) -> int:
-    """`value` 落在第几条网格线上（取最近的一条；`edges` 已按 1pt 合并过）。"""
+    """`value` 落在第几条网格线上（取最近的一条；`edges` 已按 1pt 合并过）。."""
     best = 0
     best_delta = float("inf")
     for index, edge in enumerate(edges):
@@ -760,7 +831,7 @@ def _edge_index(edges: Sequence[float], value: float) -> int:
 
 
 def _looks_like_header(texts: Sequence[str]) -> bool:
-    """首行是不是表头：**没有一格是纯数值**。
+    """首行是不是表头：**没有一格是纯数值**。.
 
     第一版写成"不是所有格都是数值就当表头"，实测立刻错：跨页续表的首行是
     `['Chengdu', '380', 'tier-2']`，只有 `380` 是数值（1/3），于是被判成表头，
@@ -776,12 +847,16 @@ def _looks_like_header(texts: Sequence[str]) -> bool:
 
 
 def _bare_number(text: str) -> bool:
+    """Run _bare_number."""
     stripped = text.strip()
     if not stripped:
         return False
     cleaned = re.sub(r"[,\s¥$%％]", "", stripped)
     cleaned = re.sub(
-        r"(元|块|万|亿|天|日|个月|年|小时|分钟|次|人|页|CNY|RMB|USD)$", "", cleaned, flags=re.I
+        r"(元|块|万|亿|天|日|个月|年|小时|分钟|次|人|页|CNY|RMB|USD)$",
+        "",
+        cleaned,
+        flags=re.I,
     )
     try:
         float(cleaned)
@@ -795,13 +870,13 @@ def _bare_number(text: str) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class DetectedFigure:
-    """一块图区域（阅读空间）。`rect` 已外扩到含刻度/标签/图注。
+    """一块图区域（阅读空间）。`rect` 已外扩到含刻度/标签/图注。.
 
-    `core_rect` 是外扩之前的紧致矩形，裁图时用**它 + 一点余量**（把刻度也裁进去是
-    有意的：VLM 要读刻度才能对账）。
+    `core_rect` 是外扩之前的紧致矩形，裁图时用**它 + 一点余量**
+    （把刻度也裁进去是有意的：VLM 要读刻度才能对账）。
 
-    `data` 是转译 + 对账都通过之后挂上的 `FigureData`（由 `pipeline` 填）。为空的
-    `DetectedFigure` 永远不该进 regions——那是一条没有内容的图切片。
+    `data` 是转译 + 对账都通过之后挂上的 `FigureData`（由 `pipeline` 填）。
+    为空的 `DetectedFigure` 永远不该进 regions——那是一条没有内容的图切片。
     """
 
     rect: Rect
@@ -818,18 +893,20 @@ def find_figures(
     *,
     taken: Sequence[Rect] = (),
 ) -> list[DetectedFigure]:
-    """在没被表格占用的地方找图（矩形换算到阅读空间）。
+    """在没被表格占用的地方找图（矩形换算到阅读空间）。.
 
     两类来源：
       * 位图对象（`page.images`）：扫描件、贴进去的截图；
       * 矢量图元（rects/curves/lines）：柱状图、折线图、流程图。按间距聚簇。
 
-    矢量图元的难点是"它也可能是表格线或分隔线"：表格已被 `taken` 占掉，剩下的零散
-    线要求个数 ≥ `FIGURE_MIN_PRIMITIVES` 才当图——正文里的两条分隔线不该产出图表切片。
+    矢量图元的难点是"它也可能是表格线或分隔线"：表格已被 `taken` 占掉，
+    剩下的零散线要求个数 ≥ `FIGURE_MIN_PRIMITIVES` 才当图——正文里的两条
+    分隔线不该产出图表切片。
 
-    找到之后按 `FIGURE_LABEL_PAD_RATIO` 外扩，并把外扩带内的**文字行**一并吸收：
-    刻度的 `0/50/100`、类别的 `Transport`、图注都在图的矩形外（实测柱状图的
-    刻度在 x0-30 的位置）。不外扩，VLM 只能看到柱子看不到刻度，数值对账必然失败。
+    找到之后按 `FIGURE_LABEL_PAD_RATIO` 外扩，并把外扩带内的**文字行**一并
+    吸收：刻度的 `0/50/100`、类别的 `Transport`、图注都在图的矩形外
+    （实测柱状图的刻度在 x0-30 的位置）。不外扩，VLM 只能看到柱子看不到
+    刻度，数值对账必然失败。
     """
     out: list[DetectedFigure] = []
 
@@ -877,9 +954,15 @@ def find_figures(
 
     if len(primitives) >= FIGURE_MIN_PRIMITIVES:
         for cluster in merge_nearby(primitives, max_gap=FIGURE_CLUSTER_GAP):
-            if cluster.width < FIGURE_MIN_WIDTH or cluster.height < FIGURE_MIN_HEIGHT:
+            if (
+                cluster.width < FIGURE_MIN_WIDTH
+                or cluster.height < FIGURE_MIN_HEIGHT
+            ):
                 continue
-            if any(iou(cluster.as_tuple(), other.core_rect.as_tuple()) > 0.5 for other in out):
+            if any(
+                iou(cluster.as_tuple(), other.core_rect.as_tuple()) > 0.5
+                for other in out
+            ):
                 continue
             out.append(
                 DetectedFigure(
@@ -893,7 +976,7 @@ def find_figures(
 
 
 def _center_inside(rect: Rect, blocks: Sequence[Rect]) -> bool:
-    """`rect` 的**中心点**是否落在某个已占用区域里。
+    """`rect` 的**中心点**是否落在某个已占用区域里。.
 
     表格的网格线与矢量图的图元经常共用同一条线（柱状图的轴线就是表格的下边框），
     按面积重叠判会把它们互相吃掉；中心点只落在一处。
@@ -904,12 +987,18 @@ def _center_inside(rect: Rect, blocks: Sequence[Rect]) -> bool:
 
 
 def _absorb_labels(core: Rect, lines: Sequence[Line]) -> Rect:
-    """外扩 + 吸收外扩带内的文字行（刻度、类别名、图注）。
+    """外扩 + 吸收外扩带内的文字行（刻度、类别名、图注）。.
 
     迭代两轮：第一轮吸进来的图注可能把区域撑大到能覆盖更多标签，第二轮再吸一次。
     两轮足够（再远就不是这张图的标签了），固定次数比"循环到收敛"更容易预测。
     """
-    pad = min(FIGURE_LABEL_PAD_MAX, max(FIGURE_LABEL_PAD_MIN, max(core.width, core.height) * FIGURE_LABEL_PAD_RATIO))
+    pad = min(
+        FIGURE_LABEL_PAD_MAX,
+        max(
+            FIGURE_LABEL_PAD_MIN,
+            max(core.width, core.height) * FIGURE_LABEL_PAD_RATIO,
+        ),
+    )
     region = core.expand(pad)
     for _ in range(2):
         grown = region
@@ -925,14 +1014,14 @@ def _absorb_labels(core: Rect, lines: Sequence[Line]) -> Rect:
 
 
 def _line_touches(line: Rect, region: Rect, pad: float) -> bool:
-    """这行文字是否贴着区域（在区域里，或在 pad 带内）。"""
+    """这行文字是否贴着区域（在区域里，或在 pad 带内）。."""
     if region.contains_point((line.x0 + line.x1) / 2.0, line.center_y):
         return True
     return region.expand(pad).intersection(line) is not None
 
 
 def has_large_image(page: Any) -> bool:
-    """这一页有没有占面积 ≥ 1/4 的位图（扫描页判定的必要条件）。"""
+    """这一页有没有占面积 ≥ 1/4 的位图（扫描页判定的必要条件）。."""
     page_area = float(page.width) * float(page.height)
     if page_area <= 0:
         return False
@@ -950,14 +1039,14 @@ def has_large_image(page: Any) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class HeaderFooterVerdict:
-    """一行的页眉页脚判定结果。`reason` 用于日志与验收报告（别处不再解释）。"""
+    """一行的页眉页脚判定结果。`reason` 用于日志与验收报告（别处不再解释）。."""
 
     is_header_footer: bool
     reason: str
 
 
 def repeated_key(text: str) -> str:
-    """比较用的键：数字抹平 + 大小写归一 + 空白收拢。
+    """比较用的键：数字抹平 + 大小写归一 + 空白收拢。.
 
     抹平数字是必须的：真实页眉/页脚几乎都带页码，逐字比较一个都认不出来。
     """
@@ -966,11 +1055,12 @@ def repeated_key(text: str) -> str:
 
 
 def has_numeric_unit(text: str) -> bool:
+    """Run has_numeric_unit."""
     return bool(_NUMERIC_UNIT.search(text))
 
 
 def in_margin_band(line: Line, page_width: float, page_height: float) -> bool:
-    """这行是否落在页边带（上 12% 或下 12%）。
+    """这行是否落在页边带（上 12% 或下 12%）。.
 
     用**行的中心点**而不是"任意一部分进入带内"：一行骑在 12% 线上时，
     按中心点判才不会因为一两个像素的抖动改变结论。
@@ -989,8 +1079,8 @@ def classify_header_footer(
     page_ratio: float = HEADER_FOOTER_PAGE_RATIO,
     max_chars: int = HEADER_FOOTER_MAX_CHARS,
     require_margin: bool = True,
-) -> dict[str, "HeaderFooterVerdict"]:
-    """跨页判定：返回 {原文: 判定}。
+) -> dict[str, HeaderFooterVerdict]:
+    """跨页判定：返回 {原文: 判定}。.
 
     输入是每页的 `[(行文本, 是否在页边带内), ...]`。带"页边带"这条不是可选的实
     现细节，是本设计对 §3.2 的**一处收紧**（理由见下）。
@@ -1006,8 +1096,8 @@ def classify_header_footer(
     §3.2 的规则是"同一段文字在一半以上页面出现即判页眉页脚"，并承认它会误删
     "每页都出现的条款编号"。实测（三页的 `header-demo` 夹具 + 两页的
     `table-demo`）：这条规则还会删掉**每页的章节标题**——
-    `Section 1/2/3. Scope` 抹平数字后同键，三页都命中，于是三页的正文标题全被删，
-    合计丢掉整篇文档的结构。这不是"误删一个条款编号"的量级。
+    `Section 1/2/3. Scope` 抹平数字后同键，三页都命中，于是三页的正文标题
+    全被删，合计丢掉整篇文档的结构。这不是"误删一个条款编号"的量级。
 
     收紧的判据是"重复 **且** 位于页边带（上/下 12%）"。页眉页脚的定义本来就包含
     位置；而"重复"仍然是主判据（只看位置会把正文顶部的第一行删掉）。
@@ -1030,7 +1120,9 @@ def classify_header_footer(
             pages_by_key.setdefault(key, set()).add(page_index)
             originals_by_key.setdefault(key, set()).add(text)
             # 同一原文只要有一处在页边带外，就不能靠"在页边带内"的那次判它。
-            in_margin_by_original[text] = in_margin_by_original.get(text, True) and in_margin
+            in_margin_by_original[text] = (
+                in_margin_by_original.get(text, True) and in_margin
+            )
 
     verdicts: dict[str, HeaderFooterVerdict] = {}
     for key, hit_pages in pages_by_key.items():
@@ -1041,10 +1133,16 @@ def classify_header_footer(
                 verdicts[original] = HeaderFooterVerdict(False, "too_long")
                 continue
             if has_numeric_unit(original):
-                verdicts[original] = HeaderFooterVerdict(False, "numeric_unit_protected")
+                verdicts[original] = HeaderFooterVerdict(
+                    False, "numeric_unit_protected"
+                )
                 continue
-            if require_margin and not in_margin_by_original.get(original, False):
-                verdicts[original] = HeaderFooterVerdict(False, "not_in_margin_band")
+            if require_margin and not in_margin_by_original.get(
+                original, False
+            ):
+                verdicts[original] = HeaderFooterVerdict(
+                    False, "not_in_margin_band"
+                )
                 continue
             verdicts[original] = HeaderFooterVerdict(
                 True, f"repeated_on_{len(hit_pages)}_pages"
@@ -1053,6 +1151,7 @@ def classify_header_footer(
 
 
 def _ceil(value: float) -> int:
+    """Run _ceil."""
     integer = int(value)
     return integer if integer == value else integer + 1
 
@@ -1066,7 +1165,7 @@ def build_text_regions(
     blocked: Sequence[Rect],
     paragraph_gap_ratio: float = 0.9,
 ) -> list[tuple[Rect, list[Line]]]:
-    """把正文行按段落聚成区域（每段一块矩形 + 行列表）。
+    """把正文行按段落聚成区域（每段一块矩形 + 行列表）。.
 
     `blocked` 是表格与图的矩形：落进去的行不属于正文（已经被表格/图吃掉）。
     用"行中心点在不在块里"而不是面积重叠——一行横跨表格边线时面积会一半在内
@@ -1085,10 +1184,14 @@ def build_text_regions(
         if paragraphs:
             previous = paragraphs[-1][-1]
             gap = line.rect.top - previous.rect.bottom
-            tolerance = max(previous.rect.height, line.rect.height, 1.0) * paragraph_gap_ratio
+            tolerance = (
+                max(previous.rect.height, line.rect.height, 1.0)
+                * paragraph_gap_ratio
+            )
             same_font = abs(previous.font_size - line.font_size) <= 1.5
-            # 同一段要求：同一栏、间距不过大、字号同级。字号变了就是标题/正文切换，
-            # 并进同一段会让"标题 + 正文"变成一块 bbox，高亮时框住一屏。
+            # 同一段要求：同一栏、间距不过大、字号同级。字号变了就是
+            # 标题/正文切换，并进同一段会让"标题 + 正文"变成一块 bbox，
+            # 高亮时框住一屏。
             if same_font and gap <= tolerance and gap > -previous.rect.height:
                 paragraphs[-1].append(line)
                 continue
@@ -1107,13 +1210,14 @@ def build_text_regions(
 
 
 def _line_blocked(line: Line, blocked: Sequence[Rect]) -> bool:
+    """Run _line_blocked."""
     cx = (line.rect.x0 + line.rect.x1) / 2.0
     cy = line.rect.center_y
     return any(block.contains_point(cx, cy) for block in blocked)
 
 
 def paragraph_text(lines: Sequence[Line]) -> str:
-    """段落文本：同段内用空格连接。
+    r"""段落文本：同段内用空格连接。.
 
     不用 `\\n`：这些文本要进 BM25 与向量，换行在词法上是额外分隔符，会让
     "同一句话被切成两段"变成一个无法解释的召回下降。
@@ -1122,13 +1226,13 @@ def paragraph_text(lines: Sequence[Line]) -> str:
 
 
 def page_rect(space: PageSpace) -> Rect:
-    """整页矩形（**阅读空间**）。"""
+    """整页矩形（**阅读空间**）。."""
     width, height = space.reading_size
     return Rect(0.0, 0.0, width, height)
 
 
 def remaining_rects(space: PageSpace, taken: Sequence[Rect]) -> list[Rect]:
-    """页面减去已占用区域的剩余块。"""
+    """页面减去已占用区域的剩余块。."""
     return subtract_regions(page_rect(space), taken)
 
 

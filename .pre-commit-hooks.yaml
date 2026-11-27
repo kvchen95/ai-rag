@@ -1,0 +1,6 @@
+name: python-source-language
+description: Reject Chinese string literals in Python outside prompts/resources
+entry: python3 scripts/check_source_language.py --files
+language: system
+types: [python]
+pass_filenames: true

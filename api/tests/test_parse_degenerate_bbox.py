@@ -19,11 +19,11 @@ from api.parse.chunking import Acl
 from api.parse.pipeline import parse_document
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DOC_KEY = "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang"
-VERSION_ID = DOC_KEY + "#07cf6e6f2d84"
-SAMPLE = next(
-    (REPO_ROOT / "samples" / "pdf_reports").glob("*华泰*.pdf"), None
+DOC_KEY = (
+    "pdf_reports/hua-tai-zheng-quan-zhong-xin-guo-ji-688981-shang-diao-gang"
 )
+VERSION_ID = DOC_KEY + "#07cf6e6f2d84"
+SAMPLE = next((REPO_ROOT / "samples" / "pdf_reports").glob("*华泰*.pdf"), None)
 
 pytestmark = pytest.mark.skipif(
     SAMPLE is None, reason="samples/pdf_reports/ 不在仓库里（华泰样本缺失）"
@@ -36,7 +36,9 @@ EXPECTED_CHUNKS = 330
 
 def test_huatai_sample_parses_with_no_degenerate_bbox() -> None:
     """端到端：这份样本必须能解析成功，且所有切片的 bbox 都是真矩形。"""
-    assert SAMPLE is not None, "sample missing (pytest.skip should have caught this)"
+    assert (
+        SAMPLE is not None
+    ), "sample missing (pytest.skip should have caught this)"
     outcome = parse_document(
         SAMPLE,
         doc_key=DOC_KEY,
@@ -48,10 +50,13 @@ def test_huatai_sample_parses_with_no_degenerate_bbox() -> None:
     for chunk in outcome.chunks:
         for rect in chunk.bbox:
             x0, y0, x1, y1 = (float(v) for v in rect)
-            assert x1 > x0 and y1 > y0, (
-                f"degenerate bbox in {chunk.chunk_id} (page {chunk.page_num}): {rect}"
+            assert (
+                x1 > x0 and y1 > y0
+            ), (
+                f"degenerate bbox in {chunk.chunk_id} "
+                f"(page {chunk.page_num}): {rect}"
             )
     # 切片数稳定：过滤的只是那一条内嵌流垃圾，不能顺带吃掉正文。
-    assert len(outcome.chunks) == EXPECTED_CHUNKS, (
-        f"chunk count drifted: {len(outcome.chunks)} != {EXPECTED_CHUNKS}"
-    )
+    assert (
+        len(outcome.chunks) == EXPECTED_CHUNKS
+    ), f"chunk count drifted: {len(outcome.chunks)} != {EXPECTED_CHUNKS}"

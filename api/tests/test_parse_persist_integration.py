@@ -82,7 +82,9 @@ def migrated(pg_dsn: str) -> str:
 
 
 @pytest.fixture(scope="module")
-def parsed_table_doc(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, object]:
+def parsed_table_doc(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> tuple[Path, object]:
     """解析一份带表格的版面样本（夹具在测试里现造，不依赖 samples/）。"""
     if str(SCRIPTS) not in sys.path:
         sys.path.insert(0, str(SCRIPTS))
@@ -107,7 +109,8 @@ def _persist(conn, outcome, path: Path) -> list[str]:
     doc_key = outcome.doc.doc_key
     version_id = outcome.chunks[0].version_id
     conn.execute(
-        "INSERT INTO documents (doc_key, filename, status) VALUES (%s, %s, 'queued')"
+        "INSERT INTO documents (doc_key, filename, status) "
+        "VALUES (%s, %s, 'queued')"
         " ON CONFLICT (doc_key) DO NOTHING",
         (doc_key, path.name),
     )
@@ -123,10 +126,13 @@ def _persist(conn, outcome, path: Path) -> list[str]:
             INSERT_SQL,
             {
                 **row,
-                # jsonb 列必须显式序列化：psycopg 不会把 list[dict] 当 jsonb 送。
+                # jsonb 列必须显式序列化：psycopg 不会把 list[dict] 当 jsonb
+                # 送。
                 "bbox": _to_json(row["bbox"]),
                 "table_cells": (
-                    _to_json(row["table_cells"]) if row["table_cells"] is not None else None
+                    _to_json(row["table_cells"])
+                    if row["table_cells"] is not None
+                    else None
                 ),
             },
         )
@@ -142,7 +148,9 @@ def _to_json(value: object) -> str:
 
 
 @pytest.fixture(scope="module")
-def written(migrated: str, parsed_table_doc: tuple[Path, object]) -> dict[str, object]:
+def written(
+    migrated: str, parsed_table_doc: tuple[Path, object]
+) -> dict[str, object]:
     import psycopg  # noqa: PLC0415
     from psycopg.rows import dict_row  # noqa: PLC0415
 
@@ -163,9 +171,12 @@ def written(migrated: str, parsed_table_doc: tuple[Path, object]) -> dict[str, o
         if ids:
             conn.execute("DELETE FROM chunks WHERE chunk_id = ANY(%s)", (ids,))
         conn.execute(
-            "DELETE FROM doc_versions WHERE version_id LIKE %s", (DOC_PREFIX + "%",)
+            "DELETE FROM doc_versions WHERE version_id LIKE %s",
+            (DOC_PREFIX + "%",),
         )
-        conn.execute("DELETE FROM documents WHERE doc_key LIKE %s", (DOC_PREFIX + "%",))
+        conn.execute(
+            "DELETE FROM documents WHERE doc_key LIKE %s", (DOC_PREFIX + "%",)
+        )
         conn.commit()
         conn.close()
     return {"ids": ids, "rows": rows}
@@ -173,12 +184,15 @@ def written(migrated: str, parsed_table_doc: tuple[Path, object]) -> dict[str, o
 
 def test_table_three_representations_survive_a_round_trip(written) -> None:
     """库里读回来的三份表示必须互相重建得出——这是 §3.3 可执行的定义。"""
-    table_rows = [row for row in written["rows"] if row["chunk_type"] == "table"]
+    table_rows = [
+        row for row in written["rows"] if row["chunk_type"] == "table"
+    ]
     assert table_rows, "样本里没有表格切片：这条判据根本没验到"
 
     for row in table_rows:
         assert row["table_cells"] is not None, (
-            f"{row['chunk_id']}: table_cells 入库后丢了（001 没有这列时就是这个症状）"
+            f"{row['chunk_id']}: table_cells 入库后丢了"
+            "（001 没有这列时就是这个症状）"
         )
         assert row["table_html"] and row["table_md"]
 
@@ -198,14 +212,19 @@ def test_table_three_representations_survive_a_round_trip(written) -> None:
         html_cells, rows_n, cols_n = cells_from_html(row["table_html"])
         from_html = expand_to_matrix(html_cells, rows_n, cols_n)
 
-        assert from_html == from_cells, f"{row['chunk_id']}: html 与 cells 不一致"
+        assert (
+            from_html == from_cells
+        ), f"{row['chunk_id']}: html 与 cells 不一致"
         assert from_cells == md_matrix, f"{row['chunk_id']}: cells 与 md 不一致"
 
 
 def test_merged_cell_spans_survive_the_round_trip(
     migrated: str, tmp_path: Path
 ) -> None:
-    """`col_span` 必须从库里读得回来：校验阶段靠它对齐数字，丢了就退化成正则拆 HTML。"""
+    """`col_span` 必须从库里读得回来。
+
+    校验阶段靠它对齐数字，丢了就退化成正则拆 HTML。
+    """
     import psycopg  # noqa: PLC0415
     from psycopg.rows import dict_row  # noqa: PLC0415
 
@@ -234,9 +253,12 @@ def test_merged_cell_spans_survive_the_round_trip(
         if ids:
             conn.execute("DELETE FROM chunks WHERE chunk_id = ANY(%s)", (ids,))
         conn.execute(
-            "DELETE FROM doc_versions WHERE version_id LIKE %s", (DOC_PREFIX + "%",)
+            "DELETE FROM doc_versions WHERE version_id LIKE %s",
+            (DOC_PREFIX + "%",),
         )
-        conn.execute("DELETE FROM documents WHERE doc_key LIKE %s", (DOC_PREFIX + "%",))
+        conn.execute(
+            "DELETE FROM documents WHERE doc_key LIKE %s", (DOC_PREFIX + "%",)
+        )
         conn.commit()
         conn.close()
 
@@ -246,15 +268,18 @@ def test_merged_cell_spans_survive_the_round_trip(
 
 
 def test_notes_survive_the_round_trip(written) -> None:
-    """`notes` 往返后还在：否则下游看不出"这段文字是识别出来的"。
+    """`notes` 往返后还在：否则下游看不出“这段文字是识别出来的”。
 
-    这里不造 OCR（那要真引擎、慢），而是直接验 `notes` 这条通道——OCR 的来源
-    标记走的就是同一个字段，`scripts/verify_parse_pipeline.py` 用真引擎验端到端。
+    这里不造 OCR（那要真引擎、慢），而是直接验 `notes` 这条通道——OCR
+    的来源标记走的就是同一个字段，`scripts/verify_parse_pipeline.py`
+    用真引擎验端到端。
     """
     for row in written["rows"]:
         # 正文切片的 notes 应当是空数组（不是 NULL）：下游判"有没有 ocr"时
         # 不必区分两种"没有"。
-        assert row["notes"] is not None, f"{row['chunk_id']}: notes 是 NULL，应为空数组"
+        assert (
+            row["notes"] is not None
+        ), f"{row['chunk_id']}: notes 是 NULL，应为空数组"
     assert all(isinstance(row["notes"], list) for row in written["rows"])
 
 
@@ -280,13 +305,15 @@ def test_notes_column_carries_ocr_source(migrated: str) -> None:
     conn = psycopg.connect(normalize_dsn(migrated), row_factory=dict_row)
     try:
         conn.execute(
-            "INSERT INTO documents (doc_key, filename, status) VALUES (%s, 'x.pdf', 'queued')"
+            "INSERT INTO documents (doc_key, filename, status) "
+            "VALUES (%s, 'x.pdf', 'queued')"
             " ON CONFLICT (doc_key) DO NOTHING",
             (chunk.doc_key,),
         )
         conn.execute(
             "INSERT INTO doc_versions (version_id, doc_key, file_hash, status)"
-            " VALUES (%s, %s, %s, 'pending') ON CONFLICT (version_id) DO NOTHING",
+            " VALUES (%s, %s, %s, 'pending') "
+            "ON CONFLICT (version_id) DO NOTHING",
             (chunk.version_id, chunk.doc_key, "c" * 64),
         )
         row = chunk.as_row()
@@ -304,11 +331,16 @@ def test_notes_column_carries_ocr_source(migrated: str) -> None:
             (chunk.chunk_id,),
         ).fetchone()
     finally:
-        conn.execute("DELETE FROM chunks WHERE chunk_id = %s", (chunk.chunk_id,))
         conn.execute(
-            "DELETE FROM doc_versions WHERE version_id LIKE %s", (DOC_PREFIX + "%",)
+            "DELETE FROM chunks WHERE chunk_id = %s", (chunk.chunk_id,)
         )
-        conn.execute("DELETE FROM documents WHERE doc_key LIKE %s", (DOC_PREFIX + "%",))
+        conn.execute(
+            "DELETE FROM doc_versions WHERE version_id LIKE %s",
+            (DOC_PREFIX + "%",),
+        )
+        conn.execute(
+            "DELETE FROM documents WHERE doc_key LIKE %s", (DOC_PREFIX + "%",)
+        )
         conn.commit()
         conn.close()
 
@@ -328,7 +360,8 @@ def test_table_cells_rejects_non_array(migrated: str) -> None:
     conn = psycopg.connect(normalize_dsn(migrated))
     try:
         conn.execute(
-            "INSERT INTO documents (doc_key, filename, status) VALUES (%s, 'x.pdf', 'queued')",
+            "INSERT INTO documents (doc_key, filename, status) "
+            "VALUES (%s, 'x.pdf', 'queued')",
             (doc_key,),
         )
         conn.execute(
@@ -338,15 +371,18 @@ def test_table_cells_rejects_non_array(migrated: str) -> None:
         )
         with pytest.raises(psycopg.errors.CheckViolation):
             conn.execute(
-                "INSERT INTO chunks (chunk_id, doc_key, version_id, chunk_type, page_num,"
-                " bbox, content_text, table_cells) VALUES"
-                " (%s, %s, %s, 'table', 1, '[[0,0,1,1]]'::jsonb, 'x', '\"not an array\"'::jsonb)",
+                "INSERT INTO chunks (chunk_id, doc_key, version_id, "
+                "chunk_type, page_num, bbox, content_text, table_cells) "
+                "VALUES (%s, %s, %s, 'table', 1, '[[0,0,1,1]]'::jsonb, "
+                "'x', '\"not an array\"'::jsonb)",
                 (f"ch_itest_bad_{suffix}", doc_key, version_id),
             )
         conn.rollback()
     finally:
         conn.execute("DELETE FROM chunks WHERE doc_key = %s", (doc_key,))
-        conn.execute("DELETE FROM doc_versions WHERE version_id = %s", (version_id,))
+        conn.execute(
+            "DELETE FROM doc_versions WHERE version_id = %s", (version_id,)
+        )
         conn.execute("DELETE FROM documents WHERE doc_key = %s", (doc_key,))
         conn.commit()
         conn.close()

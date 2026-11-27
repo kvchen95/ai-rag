@@ -1,4 +1,4 @@
-"""忠实性判别器（详细设计.md §10.1 第四道 / 附录 D.4）。
+"""忠实性判别器（详细设计.md §10.1 第四道 / 附录 D.4）。.
 
 判别器是这套系统里唯一"用模型判模型"的地方，所以它的约束比生成还紧：
 
@@ -21,23 +21,28 @@ from dataclasses import dataclass
 from typing import Literal, cast
 
 from api.generate.llm import (
-    JUDGE_SYSTEM_PROMPT,
     GenerationUnavailable,
     LlmClient,
     strip_code_fence,
 )
 from api.observability import get_logger, log_event
+from api.prompts.generate import JUDGE_SYSTEM_PROMPT
 
 logger = get_logger("api.generate.judge")
 
 Verdict = Literal["SUPPORTED", "NOT_SUPPORTED", "skipped"]
 
-_VERDICT_WORDS = re.compile(r"SUPPORTED|NOT_SUPPORTED|NOT SUPPORTED", re.IGNORECASE)
+_VERDICT_WORDS = re.compile(
+    r"SUPPORTED|NOT_SUPPORTED|NOT SUPPORTED", re.IGNORECASE
+)
 
 
 @dataclass(frozen=True, slots=True)
 class JudgeResult:
-    """一次判别。`skipped=True` 表示没跑（没配模型），与"判了不支持"必须分开。"""
+    """一次判别。.
+
+    `skipped=True` 表示没跑（没配模型），与"判了不支持"必须分开。
+    """
 
     verdict: Verdict
     reason: str = ""
@@ -46,10 +51,12 @@ class JudgeResult:
 
     @property
     def supported(self) -> bool:
+        """Run supported."""
         return self.verdict == "SUPPORTED"
 
     def as_audit(self) -> dict[str, object]:
         # 审计只记判定与原因，不记录被引证据原文（§11.2 不存原文）。
+        """Run as_audit."""
         return {
             "verdict": self.verdict,
             "reason": self.reason,
@@ -58,8 +65,10 @@ class JudgeResult:
         }
 
 
-def build_judge_messages(question: str, evidence_block: str, answer: str) -> list[dict[str, str]]:
-    """问题 + 被引证据 + 答案，三段固定顺序。"""
+def build_judge_messages(
+    question: str, evidence_block: str, answer: str
+) -> list[dict[str, str]]:
+    """问题 + 被引证据 + 答案，三段固定顺序。."""
     return [
         {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
         {
@@ -75,7 +84,7 @@ def build_judge_messages(question: str, evidence_block: str, answer: str) -> lis
 
 
 def parse_verdict(payload: str) -> tuple[str, str]:
-    """解析判别器输出。返回 (verdict, reason)；判不出来时抛 ValueError。
+    """解析判别器输出。返回 (verdict, reason)；判不出来时抛 ValueError。.
 
     两种可救的形状：约定 JSON，以及"整句只说了 SUPPORTED / NOT_SUPPORTED"。
     后者是真实会出现的（判别器是通用模型，不一定守 JSON 约束），而它的语义
@@ -88,7 +97,9 @@ def parse_verdict(payload: str) -> tuple[str, str]:
     except ValueError:
         data = None
     if isinstance(data, dict):
-        verdict = str(data.get("verdict") or "").strip().upper().replace(" ", "_")
+        verdict = (
+            str(data.get("verdict") or "").strip().upper().replace(" ", "_")
+        )
         if verdict in ("SUPPORTED", "NOT_SUPPORTED"):
             return verdict, str(data.get("reason") or "")[:500]
         raise ValueError(f"verdict 缺失或非法: {data.get('verdict')!r}")
@@ -107,21 +118,26 @@ def judge(
     evidence_block: str,
     answer: str,
 ) -> JudgeResult:
-    """跑第四道校验。`client=None` 表示没配生成/判别模型 → `skipped`（不是不支持）。
+    """跑第四道校验。.
+
+    `client=None` 表示没配生成/判别模型 → `skipped`（不是不支持）。
 
     `skipped` 与 `NOT_SUPPORTED` 的处置相同（都走降级），但审计里必须能分辨：
     前者是部署缺配置，后者是答案真的没被判据支持。混成一个码会让"模型没配"
     看起来像"模型说答案错了"。
     """
     if client is None:
-        return JudgeResult(verdict="skipped", reason="未配置判别模型", skipped=True)
+        return JudgeResult(
+            verdict="skipped", reason="未配置判别模型", skipped=True
+        )
 
     import time
 
     started = time.perf_counter()
     try:
         content = client.complete(
-            build_judge_messages(question, evidence_block, answer), temperature=0.0
+            build_judge_messages(question, evidence_block, answer),
+            temperature=0.0,
         )
         verdict, reason = parse_verdict(content)
     except GenerationUnavailable as exc:
@@ -148,7 +164,9 @@ def judge(
             elapsed_ms=elapsed,
         )
     elapsed = (time.perf_counter() - started) * 1000
-    return JudgeResult(verdict=cast(Verdict, verdict), reason=reason, elapsed_ms=elapsed)
+    return JudgeResult(
+        verdict=cast(Verdict, verdict), reason=reason, elapsed_ms=elapsed
+    )
 
 
 __all__ = [

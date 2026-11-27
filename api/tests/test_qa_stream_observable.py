@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
-
 from api.qa.stream import CLOSE, from_async_queue
 
 
@@ -49,7 +47,9 @@ def test_stream_completes_after_close_sentinel() -> None:
                 queue.put_nowait(("event", item))
             queue.put_nowait(CLOSE)
 
-        stream = from_async_queue(loop=loop, queue=queue, start=lambda: loop.create_task(worker()))
+        stream = from_async_queue(
+            loop=loop, queue=queue, start=lambda: loop.create_task(worker())
+        )
         got, errors, completed = await _drain(stream)
         assert got == ["step", "token", "done"]
         assert errors == []
@@ -59,7 +59,7 @@ def test_stream_completes_after_close_sentinel() -> None:
 
 
 def test_dispose_stops_delivery_and_calls_on_dispose_once() -> None:
-    """dispose 之后不再有 next，`on_dispose` 恰好调用一次。"""
+    """Dispose 之后不再有 next，`on_dispose` 恰好调用一次。"""
     called: list[int] = []
 
     async def scenario() -> None:
@@ -77,7 +77,9 @@ def test_dispose_stops_delivery_and_calls_on_dispose_once() -> None:
             start=lambda: loop.create_task(worker()),
             on_dispose=lambda: called.append(1),
         )
-        disposable = stream.observable.subscribe(on_next=lambda x: got.append(x))
+        disposable = stream.observable.subscribe(
+            on_next=lambda x: got.append(x)
+        )
         await asyncio.sleep(0.05)
         disposable.dispose()
         disposable.dispose()  # 幂等：第二次不该再调 on_dispose
@@ -100,7 +102,9 @@ def test_worker_exception_goes_to_on_error() -> None:
             queue.put_nowait(("event", "step"))
             raise RuntimeError("pipeline exploded")
 
-        stream = from_async_queue(loop=loop, queue=queue, start=lambda: loop.create_task(worker()))
+        stream = from_async_queue(
+            loop=loop, queue=queue, start=lambda: loop.create_task(worker())
+        )
         got, errors, _ = await _drain(stream)
         assert got == ["step"]
         assert len(errors) == 1

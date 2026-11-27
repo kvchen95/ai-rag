@@ -50,7 +50,9 @@ def test_reject_requires_reason(verdict: str) -> None:
     assert _entry(gate1_verdict=verdict, reject_reason=ErrorCode.LOW_CONFIDENCE)
 
 
-@pytest.mark.parametrize("reason", [ErrorCode.NO_EVIDENCE, ErrorCode.LOW_CONFIDENCE])
+@pytest.mark.parametrize(
+    "reason", [ErrorCode.NO_EVIDENCE, ErrorCode.LOW_CONFIDENCE]
+)
 def test_reason_requires_reject_verdict(reason: ErrorCode) -> None:
     with pytest.raises(ValidationError) as excinfo:
         _entry(gate1_verdict="pass", reject_reason=reason)
@@ -60,7 +62,9 @@ def test_reason_requires_reject_verdict(reason: ErrorCode) -> None:
 
 def test_unverifiable_can_coexist_with_supported() -> None:
     # 第五道失败时判别器仍可能判定 supported，两者不是自相矛盾。
-    assert _entry(gate2_verdict="supported", reject_reason=ErrorCode.UNVERIFIABLE)
+    assert _entry(
+        gate2_verdict="supported", reject_reason=ErrorCode.UNVERIFIABLE
+    )
     # unverifiable 配 not_supported / skipped / None 也都成立
     for gate2 in ("not_supported", "skipped", None):
         assert _entry(gate2_verdict=gate2, reject_reason=ErrorCode.UNVERIFIABLE)

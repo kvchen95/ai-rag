@@ -1,4 +1,6 @@
-"""在线检索编排的端到端验证（§6 → §7 → §8 一条链路，真 PG + 真 Qdrant + 真 TEI）。
+"""在线检索编排的端到端验证（真 PG + 真 Qdrant + 真 TEI）。
+
+覆盖 §6 → §7 → §8 这一条链路。
 
 `test_pipeline.py` 验的是各段的**部件**；这个文件验的是它们串起来之后的**顺序**
 与**出口**。顺序错了部件全对也没用——§7.4 的版本兜底放在精排后面，每个部件都
@@ -10,7 +12,8 @@
    旧版本切片若进了精排，那个计数会包含它——这是"顺序"唯一可观测的痕迹。
 2. **`mode` 可被推翻**：预判多跳但第一跳证据齐了 → 最终仍按单跳收口，
    `hop_count` 不增加。
-3. **门外不检索**：超范围与指代不清两条路都必须在**没有调用编码服务**的情况下收口
+3.
+**门外不检索**：超范围与指代不清两条路都必须在**没有调用编码服务**的情况下收口
    （用 `EmbeddingUnavailable` 的替身证明"真的没调"）。
 4. **审计快照可用**：`score_snapshot()` 能直接填 `qa_log.score_snapshot`，
    且不含原文。
@@ -23,15 +26,14 @@ import pytest
 from api.identity import IdentitySnapshot
 from api.query import NeedsClarification, understand
 from api.retrieval.gate import GateConfig
+from api.retrieval.hybrid import HybridRetriever
 from api.retrieval.pipeline import (
-    EmbeddingUnavailable,
     QueryEmbedder,
     RetrievalPipeline,
     build_pipeline,
 )
-from api.retrieval.hybrid import HybridRetriever
 from api.retrieval.rerank import Reranker
-from api.tests.b3.conftest import doc_key, make_chunk, publish, unique
+from api.tests.b3.conftest import make_chunk, publish, unique
 
 pytestmark = pytest.mark.integration
 
@@ -96,7 +98,10 @@ def test_happy_path_returns_evidence_and_a_reusable_audit(
         ],
     )
     pipeline = _pipeline(
-        b3_pg=b3_pg, retriever=retriever, reranker=reranker, query_embedder=query_embedder
+        b3_pg=b3_pg,
+        retriever=retriever,
+        reranker=reranker,
+        query_embedder=query_embedder,
     )
     try:
         snapshot = pipeline.run("住宿费标准是多少", FIN)
@@ -112,7 +117,9 @@ def test_happy_path_returns_evidence_and_a_reusable_audit(
     # 能直接进 qa_log 的四组字段
     assert audit["verdict"] == "pass"
     assert audit["rerank"]["degraded"] is False
-    assert audit["filter"], "审计必须带这次的过滤条件（事后能复现按什么权限搜的）"
+    assert audit[
+        "filter"
+    ], "审计必须带这次的过滤条件（事后能复现按什么权限搜的）"
     assert audit["routes"]["dense"] > 0
     # 不存原文（§11.2）：审计只有编号与分数
     assert "500" not in str(audit), "审计快照里不该出现正文"
@@ -128,10 +135,17 @@ def test_unrelated_question_is_rejected_not_answered(
         embedder,
         name=name,
         tag="v1",
-        chunks=[make_chunk(chunk_id=f"ch_{name}_a", text="住宿费标准：每人每天 500 元。")],
+        chunks=[
+            make_chunk(
+                chunk_id=f"ch_{name}_a", text="住宿费标准：每人每天 500 元。"
+            )
+        ],
     )
     pipeline = _pipeline(
-        b3_pg=b3_pg, retriever=retriever, reranker=reranker, query_embedder=query_embedder
+        b3_pg=b3_pg,
+        retriever=retriever,
+        reranker=reranker,
+        query_embedder=query_embedder,
     )
     try:
         snapshot = pipeline.run("如何申报个人所得税专项附加扣除", FIN)
@@ -141,7 +155,9 @@ def test_unrelated_question_is_rejected_not_answered(
     assert not snapshot.decision.evidence
 
 
-def test_out_of_scope_question_never_touches_the_embedding_service(b3_pg) -> None:
+def test_out_of_scope_question_never_touches_the_embedding_service(
+    b3_pg,
+) -> None:
     """§6.3："明显超出库范围 → 直接拒答，不检索"。
 
     用一个一调就炸的编码替身证明"真的没调"：如果实现里先检索再判范围，
@@ -149,14 +165,18 @@ def test_out_of_scope_question_never_touches_the_embedding_service(b3_pg) -> Non
     """
 
     class ExplodingEmbedder(QueryEmbedder):
-        def embed(self, text: str) -> list[float]:  # pragma: no cover - 不该被调用
+        def embed(
+            self, text: str
+        ) -> list[float]:  # pragma: no cover - 不该被调用
             raise AssertionError("超出范围的问句不该触发编码")
 
     pipeline = RetrievalPipeline(
         pg=b3_pg,
         retriever=None,  # type: ignore[arg-type]
         reranker=None,  # type: ignore[arg-type]
-        embedder=ExplodingEmbedder(base_url="http://unused", model="m", dim=512),
+        embedder=ExplodingEmbedder(
+            base_url="http://unused", model="m", dim=512
+        ),
         gate=GATE,
         top_k=30,
         rerank_top_n_min=2,
@@ -176,14 +196,18 @@ def test_unresolvable_pronoun_asks_instead_of_searching(b3_pg) -> None:
     """§6.1："指代不清（多个候选）→ 不替换，触发澄清"。"""
 
     class ExplodingEmbedder(QueryEmbedder):
-        def embed(self, text: str) -> list[float]:  # pragma: no cover - 不该被调用
+        def embed(
+            self, text: str
+        ) -> list[float]:  # pragma: no cover - 不该被调用
             raise AssertionError("指代不清时不该检索")
 
     pipeline = RetrievalPipeline(
         pg=b3_pg,
         retriever=None,  # type: ignore[arg-type]
         reranker=None,  # type: ignore[arg-type]
-        embedder=ExplodingEmbedder(base_url="http://unused", model="m", dim=512),
+        embedder=ExplodingEmbedder(
+            base_url="http://unused", model="m", dim=512
+        ),
         gate=GATE,
         top_k=30,
         rerank_top_n_min=2,
@@ -194,7 +218,9 @@ def test_unresolvable_pronoun_asks_instead_of_searching(b3_pg) -> None:
         max_hops=3,
         evidence_max_chars=6000,
     )
-    snapshot = pipeline.run("这个流程要几天", FIN, previous_entities=["甲办法", "乙办法"])
+    snapshot = pipeline.run(
+        "这个流程要几天", FIN, previous_entities=["甲办法", "乙办法"]
+    )
     assert snapshot.verdict == "clarify"
     assert snapshot.candidates == []
 
@@ -215,7 +241,12 @@ def test_stale_version_never_reaches_the_reranker(
         embedder,
         name=name,
         tag="old",
-        chunks=[make_chunk(chunk_id=f"ch_{name}_old", text="住宿费标准：每人每天 800 元（旧版）。")],
+        chunks=[
+            make_chunk(
+                chunk_id=f"ch_{name}_old",
+                text="住宿费标准：每人每天 800 元（旧版）。",
+            )
+        ],
     )
     publish(
         conn,
@@ -224,12 +255,22 @@ def test_stale_version_never_reaches_the_reranker(
         name=name,
         tag="new",
         chunks=[
-            make_chunk(chunk_id=f"ch_{name}_new1", text="住宿费标准：每人每天 500 元（现行）。"),
-            make_chunk(chunk_id=f"ch_{name}_new2", text="住宿费标准：管理层每人每天 900 元（现行）。", page_num=2),
+            make_chunk(
+                chunk_id=f"ch_{name}_new1",
+                text="住宿费标准：每人每天 500 元（现行）。",
+            ),
+            make_chunk(
+                chunk_id=f"ch_{name}_new2",
+                text="住宿费标准：管理层每人每天 900 元（现行）。",
+                page_num=2,
+            ),
         ],
     )
     pipeline = _pipeline(
-        b3_pg=b3_pg, retriever=retriever, reranker=reranker, query_embedder=query_embedder
+        b3_pg=b3_pg,
+        retriever=retriever,
+        reranker=reranker,
+        query_embedder=query_embedder,
     )
     try:
         snapshot = pipeline.run("住宿费标准是多少", FIN)
@@ -261,12 +302,23 @@ def test_single_hop_prediction_is_downgraded_when_first_hop_suffices(
         name=name,
         tag="v1",
         chunks=[
-            make_chunk(chunk_id=f"ch_{name}_a", text="住宿费标准：每人每天 500 元。", page_num=1),
-            make_chunk(chunk_id=f"ch_{name}_b", text="交通费标准：市内交通单次不超过 100 元。", page_num=2),
+            make_chunk(
+                chunk_id=f"ch_{name}_a",
+                text="住宿费标准：每人每天 500 元。",
+                page_num=1,
+            ),
+            make_chunk(
+                chunk_id=f"ch_{name}_b",
+                text="交通费标准：市内交通单次不超过 100 元。",
+                page_num=2,
+            ),
         ],
     )
     pipeline = _pipeline(
-        b3_pg=b3_pg, retriever=retriever, reranker=reranker, query_embedder=query_embedder
+        b3_pg=b3_pg,
+        retriever=retriever,
+        reranker=reranker,
+        query_embedder=query_embedder,
     )
     try:
         snapshot = pipeline.run("住宿费和交通费分别是多少", FIN)
@@ -278,13 +330,16 @@ def test_single_hop_prediction_is_downgraded_when_first_hop_suffices(
     # 库里两条实体一次都找到了 → 缺口为空 → 多跳一跳都不该跑
     if snapshot.multihop is not None:
         assert snapshot.multihop.stop == "fulfilled"
-        assert snapshot.hop_count == 0, (
-            f"第一跳已找齐却跑了 {snapshot.hop_count} 跳（mode 没有被推翻）"
-        )
+        assert (
+            snapshot.hop_count == 0
+        ), f"第一跳已找齐却跑了 {snapshot.hop_count} 跳（mode 没有被推翻）"
 
 
 def test_build_pipeline_reads_every_threshold_from_settings(settings) -> None:
-    """装配只走 `build_pipeline`：阈值全部来自 `Settings`，不在代码里另写一份。"""
+    """装配只走 `build_pipeline`。
+
+    阈值全部来自 `Settings`，不在代码里另写一份。
+    """
     pipeline = build_pipeline(settings, pg=None)  # type: ignore[arg-type]
     try:
         assert pipeline.top_k == settings.retrieval_top_k

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""F2 前端验收的可复现取证：不点浏览器，只用 HTTP 验前端依赖的那几条契约。
+"""F2 前端验收的可复现取证：不点浏览器，只用 HTTP 验前端依赖的那几条契约。.
 
 为什么用 stdlib 的 urllib 而不引 httpx/requests：这个脚本要在**宿主**上直接跑
 （`python3 scripts/verify_f2_frontend.py`），宿主的 python 未必装了第三方库；
@@ -8,10 +8,13 @@
 
 四条判据（任一不成立即非零退出）：
 
-1. **SSE 顺序**：`done` 是最后一帧；拒答路径没有 `token`；`citations` 在 `done` 之前。
+1. **SSE 顺序**：`done` 是最后一帧；拒答路径没有 `token`；`citations` 在 `done`
+ 之前。
 2. **角标可点回**：正文里出现的 `[n]` 都能在 `citations` 里找到，每项带
-   doc_key / doc_name / page_num / snippet / chunk_id（bbox 可缺，缺了前端降级）。
-3. **样本与切片图四态**：200（有权限）/ 401（无凭证）/ 403（无权限）/ 404（不存在）。
+   doc_key / doc_name / page_num / snippet / chunk_id
+   （bbox 可缺，缺了前端降级）。
+3. **样本与切片图四态**：200（有权限）/ 401（无凭证）/ 403（无权限）/ 404（不存
+在）。
 4. **错误体不泄露**：没有 Traceback、DSN、容器内路径、异常类名。
 
 用法（宿主，需要 API 在跑）：
@@ -28,7 +31,6 @@ import argparse
 import json
 import re
 import subprocess
-import sys
 import time
 import urllib.error
 import urllib.request
@@ -52,13 +54,25 @@ CHECKS: list[tuple[str, bool, str]] = []
 
 def check(name: str, ok: bool, detail: str = "") -> None:
     CHECKS.append((name, ok, detail))
-    print(f"  [{'PASS' if ok else 'FAIL'}] {name}" + (f" — {detail}" if detail else ""), flush=True)
+    print(
+        f"  [{'PASS' if ok else 'FAIL'}] {name}"
+        + (f" — {detail}" if detail else ""),
+        flush=True,
+    )
 
 
-def _mint_jwt(secret: str, *, sub: str, depts: list[str], roles: list[str]) -> str:
-    """现签一份开发 JWT：宿主有 pyjwt 就用宿主，没有就借容器里的 python。"""
+def _mint_jwt(
+    secret: str, *, sub: str, depts: list[str], roles: list[str]
+) -> str:
+    """现签一份开发 JWT：宿主有 pyjwt 就用宿主，没有就借容器里的 python。."""
     now = int(time.time())
-    payload = {"sub": sub, "user_depts": depts, "user_roles": roles, "iat": now, "exp": now + 3600}
+    payload = {
+        "sub": sub,
+        "user_depts": depts,
+        "user_roles": roles,
+        "iat": now,
+        "exp": now + 3600,
+    }
     try:
         import jwt  # noqa: PLC0415
 
@@ -71,7 +85,16 @@ def _mint_jwt(secret: str, *, sub: str, depts: list[str], roles: list[str]) -> s
         "print(jwt.encode(p, sys.argv[2], algorithm='HS256'))"
     )
     out = subprocess.run(
-        ["docker", "exec", "ai-rag-api", "python", "-c", code, json.dumps(payload), secret],
+        [
+            "docker",
+            "exec",
+            "ai-rag-api",
+            "python",
+            "-c",
+            code,
+            json.dumps(payload),
+            secret,
+        ],
         capture_output=True,
         text=True,
         check=True,
@@ -96,9 +119,17 @@ def _request(
         request.add_header("Content-Type", "application/json")
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - 本地地址
-            return response.status, {k.lower(): v for k, v in response.headers.items()}, response.read()
+            return (
+                response.status,
+                {k.lower(): v for k, v in response.headers.items()},
+                response.read(),
+            )
     except urllib.error.HTTPError as error:
-        return error.code, {k.lower(): v for k, v in error.headers.items()}, error.read()
+        return (
+            error.code,
+            {k.lower(): v for k, v in error.headers.items()},
+            error.read(),
+        )
 
 
 def parse_sse(text: str) -> list[tuple[str, dict[str, Any]]]:
@@ -125,21 +156,30 @@ def parse_sse(text: str) -> list[tuple[str, dict[str, Any]]]:
     return frames
 
 
-def check_event_order(label: str, frames: list[tuple[str, dict[str, Any]]]) -> None:
+def check_event_order(
+    label: str, frames: list[tuple[str, dict[str, Any]]]
+) -> None:
     names = [name for name, _ in frames]
     check(f"{label}: 有事件", bool(names), f"{len(names)} frame(s)")
     if not names:
         return
-    check(f"{label}: done 是最后一帧", names[-1] == "done", f"最后是 {names[-1:]}")
+    check(
+        f"{label}: done 是最后一帧", names[-1] == "done", f"最后是 {names[-1:]}"
+    )
     check(f"{label}: step 打头", names[0] == "step", f"第一帧 {names[:1]}")
     if any(name in {"clarify", "fallback"} for name in names):
         # §10.4：拒答路径只有进度与收尾，没有逐字。
         check(f"{label}: 拒答路径无 token", "token" not in names, f"{names}")
     if "citations" in names:
-        check(f"{label}: citations 先于 done", names.index("citations") < names.index("done"))
+        check(
+            f"{label}: citations 先于 done",
+            names.index("citations") < names.index("done"),
+        )
 
 
-def check_citation_fields(label: str, frames: list[tuple[str, dict[str, Any]]]) -> None:
+def check_citation_fields(
+    label: str, frames: list[tuple[str, dict[str, Any]]]
+) -> None:
     items: list[dict[str, Any]] = []
     text = ""
     for name, payload in frames:
@@ -156,24 +196,32 @@ def check_citation_fields(label: str, frames: list[tuple[str, dict[str, Any]]]) 
 
     referenced: set[int] = set()
     for match in CITE_RE.finditer(text):
-        referenced.update(int(p) for p in match.group(1).split(",") if p.strip().isdigit())
+        referenced.update(
+            int(p) for p in match.group(1).split(",") if p.strip().isdigit()
+        )
     known = {int(item["n"]) for item in items}
     orphans = sorted(referenced - known)
     check(
         f"{label}: 角标全部可点回",
         not orphans,
-        f"正文 {sorted(referenced)} / citations {sorted(known)} / 点不动 {orphans}",
+        f"正文 {sorted(referenced)} / citations {sorted(known)} / "
+        f"点不动 {orphans}",
     )
     check(
         f"{label}: bbox 是数组或缺省（缺省即降级展示）",
-        all(isinstance(item.get("bbox"), list) or item.get("bbox") is None for item in items),
+        all(
+            isinstance(item.get("bbox"), list) or item.get("bbox") is None
+            for item in items
+        ),
         f"{[(item['n'], bool(item.get('bbox'))) for item in items]}",
     )
 
 
 def check_no_leak(leaks: list[tuple[str, str]]) -> None:
     for label, text in leaks:
-        hits = [pattern.pattern for pattern in LEAK_PATTERNS if pattern.search(text)]
+        hits = [
+            pattern.pattern for pattern in LEAK_PATTERNS if pattern.search(text)
+        ]
         check(f"不泄露：{label}", not hits, f"命中 {hits}" if hits else "")
 
 
@@ -185,16 +233,24 @@ def main() -> int:
     api = args.api.rstrip("/")
 
     fin = _mint_jwt(args.secret, sub="u_fin", depts=["fin"], roles=["staff"])
-    stranger = _mint_jwt(args.secret, sub="u_eng", depts=["eng"], roles=["viewer"])
+    stranger = _mint_jwt(
+        args.secret, sub="u_eng", depts=["eng"], roles=["viewer"]
+    )
 
     print("=" * 78)
-    print(f"F2 验收：SSE 顺序 / 角标可点回 / 样本四态 / 错误体不泄露  (api={api})")
+    print(
+        f"F2 验收：SSE 顺序 / 角标可点回 / 样本四态 / 错误体不泄露  (api={api})"
+    )
     print("=" * 78)
 
     leaks: list[tuple[str, str]] = []
     for question in DEMO_QUESTIONS:
         status, _headers, raw = _request(
-            api, "/api/v1/qa/stream", method="POST", token=fin, body={"question": question}
+            api,
+            "/api/v1/qa/stream",
+            method="POST",
+            token=fin,
+            body={"question": question},
         )
         body = raw.decode("utf-8", "replace")
         frames = parse_sse(body)
@@ -202,7 +258,9 @@ def main() -> int:
         print(f"  事件序列：{[name for name, _ in frames]}")
         for name, payload in frames:
             if name in ("fallback", "done", "citations"):
-                print(f"  {name}: {json.dumps(payload, ensure_ascii=False)[:220]}")
+                print(
+                    f"  {name}: {json.dumps(payload, ensure_ascii=False)[:220]}"
+                )
         check(f"{question}: 流式响应 200", status == 200, f"{status}")
         check_event_order(question, frames)
         check_citation_fields(question, frames)
@@ -212,9 +270,24 @@ def main() -> int:
     four = (
         ("/api/v1/samples/policy/travel-cn.pdf", None, 401, "样本：无凭证 401"),
         ("/api/v1/samples/policy/travel-cn.pdf", fin, 200, "样本：有权限 200"),
-        ("/api/v1/samples/policy/travel-cn.pdf", stranger, 403, "样本：无权限 403"),
-        ("/api/v1/samples/policy/does-not-exist.pdf", fin, 404, "样本：不存在 404"),
-        ("/api/v1/chunks/ch_fig_f2_1/figure", stranger, 403, "切片图：无权限 403"),
+        (
+            "/api/v1/samples/policy/travel-cn.pdf",
+            stranger,
+            403,
+            "样本：无权限 403",
+        ),
+        (
+            "/api/v1/samples/policy/does-not-exist.pdf",
+            fin,
+            404,
+            "样本：不存在 404",
+        ),
+        (
+            "/api/v1/chunks/ch_fig_f2_1/figure",
+            stranger,
+            403,
+            "切片图：无权限 403",
+        ),
         ("/api/v1/chunks/no_such_chunk/figure", fin, 404, "切片图：不存在 404"),
     )
     for path, token, expect, label in four:
@@ -222,13 +295,25 @@ def main() -> int:
         check(label, status == expect, f"{status}")
         if expect == 200:
             content_type = headers.get("content-type", "")
-            expect_type = "image/webp" if path.endswith("/figure") else "application/pdf"
-            check(f"{label}：content-type 是 {expect_type}", content_type.startswith(expect_type), content_type)
+            expect_type = (
+                "image/webp" if path.endswith("/figure") else "application/pdf"
+            )
+            check(
+                f"{label}：content-type 是 {expect_type}",
+                content_type.startswith(expect_type),
+                content_type,
+            )
         else:
-            leaks.append((f"{path} -> {status}", raw.decode("utf-8", "replace")))
+            leaks.append(
+                (f"{path} -> {status}", raw.decode("utf-8", "replace"))
+            )
 
     bad_status, _headers, bad_raw = _request(
-        api, "/api/v1/qa/stream", method="POST", token="not-a-jwt", body={"question": "x"}
+        api,
+        "/api/v1/qa/stream",
+        method="POST",
+        token="not-a-jwt",
+        body={"question": "x"},
     )
     check("问答：坏凭证 401", bad_status == 401, f"{bad_status}")
     leaks.append(("坏凭证 401", bad_raw.decode("utf-8", "replace")))

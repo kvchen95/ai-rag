@@ -1,4 +1,4 @@
-"""切片：父子两级 + 六项随行信息（详细设计.md §3.5 / §2.3 / 附录 A.3）。
+"""切片：父子两级 + 六项随行信息（详细设计.md §3.5 / §2.3 / 附录 A.3）。.
 
 ### 六项随行信息，缺一项后面就有一处功能不可用
 
@@ -7,15 +7,15 @@
 | 1 | `page_num` | 引用不能跳页（前端拿不到页号） |
 | 2 | `bbox` | 高亮框画不出来（前端只有页码没有位置） |
 | 3 | `chunk_type` | 取文本时选错列（正文 / 表格 / 图三套取法） |
-| 4 | `effective_date`+`date_confidence` | 时间过滤混进过期条款，或把推断当显式 |
+| 4 | `effective_date`+`date_confidence` | 过期条款混进过滤，推断当显式 |
 | 5 | `is_public`+`allowed_depts`+`allowed_roles` | 越权命中 |
 | 6 | `version_id` | 检索入口没法做版本兜底（§7.4） |
 
 `Chunk.require_complete()` 是这六项的**可执行判据**：少一项就抛，而不是"入库时
 再说"。这条在验收里叫"切片字段缺失被校验拦截"——拦截点在这里，不在数据库：
 `chunks` 表的 NOT NULL 只管"这一列有没有值"，管不了"这个值有没有意义"
-（`bbox` 可以是 `[]`，`allowed_depts` 可以是空数组但 `is_public=false` 时它意味着
-**谁都看不到**，那几乎一定是漏填）。
+（`bbox` 可以是 `[]`，`allowed_depts` 可以是空数组但
+`is_public=false` 时它意味着**谁都看不到**，那几乎一定是漏填）。
 
 ### 父子两级
 
@@ -43,8 +43,9 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Any, Iterable, Sequence
+from typing import Any
 
 from api.parse.dates import BusinessDate
 from api.parse.geometry import BBox, Rect, union_bboxes
@@ -67,20 +68,26 @@ _SENTENCE_END = re.compile(r"(?<=[。！？；!?])|(?<=[.])\s+")
 CHUNK_TYPES = ("text", "table", "figure")
 
 
-class IncompleteChunk(ValueError):
-    """切片缺随行信息。消息里点名缺哪几项——否则排障要靠猜。"""
+class IncompleteChunkError(ValueError):
+    """切片缺随行信息。消息里点名缺哪几项——否则排障要靠猜。."""
 
     def __init__(self, chunk_id: str, missing: Sequence[str]) -> None:
+        """Initialize the instance."""
         self.chunk_id = chunk_id
         self.missing = tuple(missing)
         super().__init__(f"{chunk_id}: missing {', '.join(self.missing)}")
 
 
+# 旧名保留给既有调用方（worker、脚本、测试仍按这个名字导入）。
+IncompleteChunk = IncompleteChunkError
+
+
 @dataclass(slots=True)
 class Chunk:
-    """一个待入库的切片。字段与 `chunks` 表逐列对应（附录 A.3）。
+    """一个待入库的切片。字段与 `chunks` 表逐列对应（附录 A.3）。.
 
-    没有 `status`：切片不维护自己的状态，显示"是否可检索"一律看所属版本（§2.3）。
+    没有 `status`：切片不维护自己的状态，显示"是否可检索"一律看所属版本
+    （§2.3）。
     入库时由调用方写 `pending`，翻牌时由 A3 按 `version_id` 批量改。
     """
 
@@ -111,7 +118,7 @@ class Chunk:
     # --- 校验 ---
 
     def missing_fields(self) -> list[str]:
-        """六项随行信息里缺/无效的那些。空列表才算完整。"""
+        """六项随行信息里缺/无效的那些。空列表才算完整。."""
         missing: list[str] = []
         if not self.page_num or self.page_num < 1:
             missing.append("page_num")
@@ -126,11 +133,18 @@ class Chunk:
         if self.date_confidence == "explicit" and self.effective_date is None:
             # explicit 却没有日期 = 声称"这是原文显式时间"但拿不出来。
             missing.append("effective_date(explicit without date)")
-        if self.effective_date is not None and self.effective_year != self.effective_date // 10000:
+        if (
+            self.effective_date is not None
+            and self.effective_year != self.effective_date // 10000
+        ):
             missing.append("effective_year(mismatched)")
         # 权限：既不是公开、又没有任何放行项 = 谁都看不到。这几乎一定是漏填，
         # 而不是"真的谁都不许看"（真的不许看不入库即可）。
-        if not self.is_public and not self.allowed_depts and not self.allowed_roles:
+        if (
+            not self.is_public
+            and not self.allowed_depts
+            and not self.allowed_roles
+        ):
             missing.append("acl(everyone denied)")
         if not self.version_id:
             missing.append("version_id")
@@ -144,19 +158,20 @@ class Chunk:
             missing.append("parent_id(self)")
         return missing
 
-    def require_complete(self) -> "Chunk":
-        """验收判据：缺一项就抛 `IncompleteChunk`。"""
+    def require_complete(self) -> Chunk:
+        """验收判据：缺一项就抛 `IncompleteChunkError`。."""
         missing = self.missing_fields()
         if missing:
-            raise IncompleteChunk(self.chunk_id, missing)
+            raise IncompleteChunkError(self.chunk_id, missing)
         return self
 
     @property
     def char_count(self) -> int:
+        """Run char_count."""
         return len(self.content_text)
 
     def as_row(self) -> dict[str, Any]:
-        """落库形状（列名与 001/004 迁移一致）。`require_complete()` 必须先过。
+        """落库形状（列名与 001/004 迁移一致）。`require_complete()` 必须先过。.
 
         为什么 `table_cells` 与 `notes` 也在这张行里：它们是"§3.3 的三份表示"之
         第三份与"这条证据的来源"。只放在内存对象上等于入库即丢——校验阶段要拿
@@ -189,6 +204,7 @@ class Chunk:
 
 
 def _valid_bbox(rect: Sequence[float]) -> bool:
+    """Run _valid_bbox."""
     if len(rect) != 4:
         return False
     return all(0.0 <= float(value) <= 1.0 for value in rect) and (
@@ -199,43 +215,47 @@ def _valid_bbox(rect: Sequence[float]) -> bool:
 def chunk_id_for(
     version_id: str, *, page_num: int, kind: str, index: int, part: int = 0
 ) -> str:
-    """切片编号：`ch_` + 12 位十六进制（附录 A.3 的形状 `ch_9f2c31`）。
+    """切片编号：`ch_` + 12 位十六进制（附录 A.3 的形状 `ch_9f2c31`）。.
 
     **为什么不用"version_id + 序号"拼**（第一版就是这么做的，两个问题）：
 
-    1. `chunk_id` 会进 `figures/{chunk_id}.webp` 这个**文件路径**。`version_id` 里有
-       `doc_key`（`policy/travel-cn`）和 `#`，拼出来的路径是
-       `figures/policy/travel-cn#a91f#c001000-000.webp`——目录不存在、`#` 在 URL 里
-       是 fragment 分隔符，取图会 404。编号必须文件系统安全。
+    1. `chunk_id` 会进 `figures/{chunk_id}.webp` 这个**文件路径**。
+       `version_id` 里有 `doc_key`（`policy/travel-cn`）和 `#`，拼出来的路径是
+       `figures/policy/travel-cn#a91f#c001000-000.webp`——目录不存在、`#` 在 URL
+       里是 fragment 分隔符，取图会 404。编号必须文件系统安全。
     2. 附录 A.3 的示例就是短码。编号是标识符，不是"人能读懂的描述"；可读性该由
        `page_num` / `chunk_type` / `parent_id` 承担。
 
-    但**必须是确定性的**：同一份文件重跑要得到同一批编号，否则"两次解析结果是否
-    一致"就没法比，upsert 也会变成插入新行。所以用 `sha256(version_id|page|kind|index)`
-    的前 12 位（16^12 ≈ 2.8e14，40 万切片撞号概率可忽略）。
+    但**必须是确定性的**：同一份文件重跑要得到同一批编号，否则"两次解析结果
+    是否一致"就没法比，upsert 也会变成插入新行。所以用
+    `sha256(version_id|page|kind|index)` 的前 12 位
+    （16^12 ≈ 2.8e14，40 万切片撞号概率可忽略）。
     """
     digest = hashlib.sha256(
-        f"{version_id}|{page_num}|{kind}|{index}|{part}".encode("utf-8")
+        f"{version_id}|{page_num}|{kind}|{index}|{part}".encode()
     ).hexdigest()
     return f"ch_{digest[:12]}"
 
 
 def parent_id_for(version_id: str, *, page_num: int, index: int) -> str:
-    """父片编号。同样由 `chunk_id_for` 派生，只是 `kind=fixed "parent"`。"""
-    return chunk_id_for(version_id, page_num=page_num, kind="parent", index=index)
+    """父片编号。同样由 `chunk_id_for` 派生，只是 `kind=fixed "parent"`。."""
+    return chunk_id_for(
+        version_id, page_num=page_num, kind="parent", index=index
+    )
 
 
 def image_path_for(chunk_id: str) -> str:
-    """图的相对路径：`figures/{chunk_id}.webp`（附录 A.3 的形状）。"""
+    """图的相对路径：`figures/{chunk_id}.webp`（附录 A.3 的形状）。."""
     return f"figures/{chunk_id}.webp"
 
 
 @dataclass(slots=True)
 class Acl:
-    """权限三项。**默认不给任何放行**：解析器不知道业务权限，调用方必须显式传。
+    """权限三项。**默认不给任何放行**：解析器不知道业务权限，调用方必须显式传。.
 
     这不是"安全的默认值"而是"必须回答的问题"：一份文档是公开的还是部门的，
-    只有入库的调用方（A3 / 评测脚本）知道。给个"默认公开"会让每份材料都变成全公司可见。
+    只有入库的调用方（A3 / 评测脚本）知道。给个"默认公开"会让每份材料都变成
+    全公司可见。
     """
 
     is_public: bool = False
@@ -243,7 +263,12 @@ class Acl:
     allowed_roles: tuple[str, ...] = ()
 
     def is_empty(self) -> bool:
-        return not self.is_public and not self.allowed_depts and not self.allowed_roles
+        """Run is_empty."""
+        return (
+            not self.is_public
+            and not self.allowed_depts
+            and not self.allowed_roles
+        )
 
 
 # --- 切分 -------------------------------------------------------------------
@@ -251,7 +276,7 @@ class Acl:
 
 @dataclass(frozen=True, slots=True)
 class Piece:
-    """切分中间态：一段文本 + 它覆盖的区域（同页！）。
+    """切分中间态：一段文本 + 它覆盖的区域（同页！）。.
 
     `rects` 里所有矩形必须同一页——跨页的并集会产生"两页之间的框"，
     `bbox` 就没意义了。`build_child_chunks` 因此按页切分。
@@ -262,13 +287,13 @@ class Piece:
     rects: tuple[Rect, ...]
 
     def bbox(self, page_bboxes: Sequence[BBox]) -> list[list[float]]:
-        """多个 bbox 的并集（同一页，所以有意义）。"""
+        """多个 bbox 的并集（同一页，所以有意义）。."""
         merged = union_bboxes(page_bboxes)
         return [list(merged)] if merged else []
 
 
 def split_sentences(text: str) -> list[str]:
-    """按句子边界切。中英混排都认，且不丢分隔符。
+    """按句子边界切。中英混排都认，且不丢分隔符。.
 
     `re.split` 带捕获组会保留分隔符；这里用零宽断言切，切点落在分隔符**之后**，
     所以"500 元。"仍是完整一句。
@@ -278,7 +303,7 @@ def split_sentences(text: str) -> list[str]:
 
 
 def split_long_text(text: str, *, max_chars: int) -> list[str]:
-    """把一段文本切成不超过 `max_chars` 的若干段：先按句，再按硬切。
+    """把一段文本切成不超过 `max_chars` 的若干段：先按句，再按硬切。.
 
     硬切只在单句本身超长时发生（长表格行、无标点的条款）。硬切时**尽量在空格或
     逗号处断**——把 `CNY 500` 切成 `CNY 5` + `00` 会让数字检索彻底失效。
@@ -302,7 +327,7 @@ def split_long_text(text: str, *, max_chars: int) -> list[str]:
 
 
 def _soft_cut(text: str, start: int, end: int) -> int:
-    """在 [start+max_chars/2, end] 里找最后一个人读得通的断点。"""
+    """在 [start+max_chars/2, end] 里找最后一个人读得通的断点。."""
     floor = start + max(1, (end - start) // 2)
     for index in range(end, floor, -1):
         if text[index - 1] in " ，,、;；:：)）]】":
@@ -316,7 +341,7 @@ def build_child_pieces(
     max_chars: int = CHILD_MAX_CHARS,
     overlap: int = CHILD_OVERLAP_CHARS,
 ) -> list[str]:
-    """把一段文本切成子片：每片 ≤ `max_chars`，相邻两片重叠约 `overlap` 字。
+    """把一段文本切成子片：每片 ≤ `max_chars`，相邻两片重叠约 `overlap` 字。.
 
     重叠的实现是"回退 `overlap` 个字符再切一段"，不是"在上一片尾部复制 `overlap`
     个字"——后者会让重叠部分在新片开头重复出现两次内容（一次作为上下文一次作为
@@ -346,13 +371,15 @@ def build_child_pieces(
 
 
 def parent_slices(text: str, *, max_chars: int = PARENT_MAX_CHARS) -> list[str]:
-    """父片：按小节/段落切，每片尽可能接近 `max_chars` 但不超过；单段超长则再切。
+    """父片：按小节/段落切，尽量接近 `max_chars` 但不超出；超长再切。.
 
     "按章节标题切，不按字数硬切"（§3.5）——但一章超过 2048 字时要再切一层
     （同节边界表）。所以这里先按段落累加到上限附近，段落本身超长再交给
     `split_long_text`。
     """
-    paragraphs = [para.strip() for para in re.split(r"\n{1,}", text) if para.strip()]
+    paragraphs = [
+        para.strip() for para in re.split(r"\n{1,}", text) if para.strip()
+    ]
     if not paragraphs:
         return []
     out: list[str] = []
@@ -392,7 +419,7 @@ def build_child_chunks(
     allow_permission_override: bool = False,
     notes: tuple[str, ...] = (),
 ) -> list[Chunk]:
-    """把一个正文区域切成子片。
+    """把一个正文区域切成子片。.
 
     `page_bboxes` 是这个区域每一行（或每段）在本页的归一化 bbox，按阅读顺序。
     子片的 bbox 取"它覆盖的那几行"的并集——不是整个区域的 bbox：整段的 bbox 会让
@@ -403,19 +430,20 @@ def build_child_chunks(
     先算出片数，再传对应个数的编号。
     """
     if region.kind is not RegionKind.TEXT:
-        raise ValueError(f"build_child_chunks expects a text region, got {region.kind}")
+        raise ValueError(
+            f"build_child_chunks expects a text region, got {region.kind}"
+        )
     if region.lines and len(page_bboxes) != len(region.lines):
         raise ValueError(
-            f"page_bboxes ({len(page_bboxes)}) must be one per line ({len(region.lines)})"
+            f"page_bboxes ({len(page_bboxes)}) must be one per line "
+            f"({len(region.lines)})"
         )
 
     pieces = build_child_pieces(region.text)
     if not pieces:
         return []
     if len(child_ids) < len(pieces):
-        raise ValueError(
-            f"need {len(pieces)} child ids, got {len(child_ids)}"
-        )
+        raise ValueError(f"need {len(pieces)} child ids, got {len(child_ids)}")
 
     spans = _line_spans([line.text for line in region.lines] or [region.text])
     chunks: list[Chunk] = []
@@ -455,7 +483,7 @@ def build_child_chunks(
 
 
 def child_piece_count(region: Region) -> int:
-    """这个正文区域会切成几片。调用方据此先生成 `child_ids`。"""
+    """这个正文区域会切成几片。调用方据此先生成 `child_ids`。."""
     return len(build_child_pieces(region.text))
 
 
@@ -471,7 +499,7 @@ def build_parent_chunk(
     section: str | None = None,
     notes: tuple[str, ...] = (),
 ) -> Chunk:
-    """父片：整章 / 整段。`parent_id` 为空（附录 A.3）。"""
+    """父片：整章 / 整段。`parent_id` 为空（附录 A.3）。."""
     text = region.text.strip()
     if not text:
         raise ValueError("parent chunk needs non-blank text")
@@ -510,7 +538,7 @@ def build_table_chunk(
     table_md: str | None = None,
     section: str | None = None,
 ) -> Chunk:
-    """表格切片：一张表一条，不切（§3.5：超长表格整表单独成片，标 `may_exceed`）。"""
+    """表格切片：一张表一条不切（§3.5：整表超长则单独成片）。."""
     table = region.table
     if table is None:
         raise ValueError("table region without TableData")
@@ -553,7 +581,7 @@ def build_figure_chunk(
     content_text: str,
     section: str | None = None,
 ) -> Chunk:
-    """图切片：一张图一条，`image_path` 指向 `figures/{chunk_id}.webp`。"""
+    """图切片：一张图一条，`image_path` 指向 `figures/{chunk_id}.webp`。."""
     figure = region.figure
     if figure is None:
         raise ValueError("figure region without FigureData")
@@ -582,7 +610,10 @@ def build_figure_chunk(
 
 
 def _line_spans(line_texts: Sequence[str]) -> list[tuple[int, int]]:
-    """每行在拼接后的全文里占的区间。"" / 空格连接的口径与 `paragraph_text` 一致。"""
+    """每行在拼接后的全文里占的区间。.
+
+    空格连接的口径与 `paragraph_text` 一致。
+    """
     spans: list[tuple[int, int]] = []
     cursor = 0
     for text in line_texts:
@@ -601,7 +632,7 @@ def _cover_bboxes(
     start: int,
     end: int,
 ) -> list[list[float]]:
-    """覆盖 [start, end) 的那些行的 bbox 并集。"""
+    """覆盖 [start, end) 的那些行的 bbox 并集。."""
     if not spans or not page_bboxes or len(spans) != len(page_bboxes):
         return []
     hits = [
@@ -614,22 +645,22 @@ def _cover_bboxes(
 
 
 def validate_chunks(chunks: Iterable[Chunk]) -> list[Chunk]:
-    """批量校验，任何一条缺字段就抛（带全部缺项，不是只报第一条）。
+    """批量校验，任何一条缺字段就抛（带全部缺项，不是只报第一条）。.
 
     一次报全：修一条跑一次会让人以为是"修完这条还有下一条"，
     而实际上多半是同一类漏填（比如整套都漏了 allowed_depts）。
     """
-    failures: list[IncompleteChunk] = []
+    failures: list[IncompleteChunkError] = []
     out: list[Chunk] = []
     for chunk in chunks:
         missing = chunk.missing_fields()
         if missing:
-            failures.append(IncompleteChunk(chunk.chunk_id, missing))
+            failures.append(IncompleteChunkError(chunk.chunk_id, missing))
         else:
             out.append(chunk)
     if failures:
         detail = "; ".join(str(failure) for failure in failures)
-        raise IncompleteChunk(f"{len(failures)} chunk(s)", [detail])
+        raise IncompleteChunkError(f"{len(failures)} chunk(s)", [detail])
     return out
 
 
@@ -641,6 +672,7 @@ __all__ = [
     "CHUNK_TYPES",
     "Chunk",
     "IncompleteChunk",
+    "IncompleteChunkError",
     "MERGE_SHORT_BELOW",
     "PARENT_MAX_CHARS",
     "PARENT_MIN_CHARS",

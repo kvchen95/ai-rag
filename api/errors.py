@@ -1,4 +1,4 @@
-"""错误分类（详细设计.md §11.3）。
+"""错误分类（详细设计.md §11.3）。.
 
 一张表管三件事：对外文案、HTTP 状态、要不要告警。三件事必须同源——
 如果文案在路由里写、状态码在 handler 里写、告警规则在监控里写，
@@ -12,9 +12,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any, Mapping
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -26,6 +27,7 @@ logger = get_logger("api.errors")
 
 
 class ErrorCode(StrEnum):
+    """ErrorCode."""
     AUTH_INVALID = "auth_invalid"
     FORBIDDEN = "forbidden"
     NO_EVIDENCE = "no_evidence"
@@ -34,7 +36,7 @@ class ErrorCode(StrEnum):
     MODEL_TIMEOUT = "model_timeout"
     INDEX_STALE = "index_stale"
     INTERNAL = "internal"
-    # --- 契约层扩展：§11.3 的表只管业务错误 -------------------------------------
+    # --- 契约层扩展：§11.3 的表只管业务错误 -------------------------------
     # 入参不合法需要一个自己的码，不能塞进 internal（会误触发告警），
     # 也不该借 auth_invalid 的文案。
     INVALID_REQUEST = "invalid_request"
@@ -44,7 +46,8 @@ class ErrorCode(StrEnum):
     NOT_FOUND = "not_found"
     SCAN_IN_PROGRESS = "scan_in_progress"
     # 扫描目录不存在/不可读：这不是"扫完发现 0 个文件"，而是摄取根本无法开始。
-    # 归 internal 会跟真正的代码 bug 混在一起，归 invalid_request 又不是入参问题。
+    # 归 internal 会跟真正的代码 bug 混在一起，归 invalid_request 又
+    # 不是入参问题。
     SAMPLES_MISSING = "samples_missing"
     # A3：要翻的版本不在可翻的状态（已 active / 已 deprecated / 已 purged）。
     # 这是并发或操作顺序问题（别人先翻了），不是入参错误也不是服务故障，
@@ -53,6 +56,7 @@ class ErrorCode(StrEnum):
 
 
 class AlertPolicy(StrEnum):
+    """AlertPolicy."""
     NONE = "none"  # 用户侧问题，不告警
     BURST = "burst"  # 连续出现才告警（forbidden：偶发是正常越权拦截）
     ALWAYS = "always"  # 出现即告警
@@ -60,6 +64,7 @@ class AlertPolicy(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ErrorSpec:
+    """ErrorSpec."""
     http_status: int
     user_message: str
     alert: AlertPolicy
@@ -88,26 +93,33 @@ ERROR_SPECS: Mapping[ErrorCode, ErrorSpec] = {
     ErrorCode.INTERNAL: ErrorSpec(
         500, "稍后重试", AlertPolicy.ALWAYS, sse_fallback=True
     ),
-    ErrorCode.INVALID_REQUEST: ErrorSpec(422, "请求格式不正确", AlertPolicy.NONE),
+    ErrorCode.INVALID_REQUEST: ErrorSpec(
+        422, "请求格式不正确", AlertPolicy.NONE
+    ),
     # 404 是用户侧问题（链接/编号错了），不告警。
     ErrorCode.NOT_FOUND: ErrorSpec(404, "未找到该文档", AlertPolicy.NONE),
     # 409 是"有人正在跑"，正常并发行为。但连续出现说明有人在反复点，
     # 或者有一轮扫描卡死没释放锁——两种都需要人看一眼，所以按 BURST。
-    ErrorCode.SCAN_IN_PROGRESS: ErrorSpec(409, "扫描正在进行中", AlertPolicy.BURST),
+    ErrorCode.SCAN_IN_PROGRESS: ErrorSpec(
+        409, "扫描正在进行中", AlertPolicy.BURST
+    ),
     # 配置/部署问题，不是用户问题：出现即告警（通常是挂载没挂上或路径写错）。
     ErrorCode.SAMPLES_MISSING: ErrorSpec(500, "稍后重试", AlertPolicy.ALWAYS),
     # 版本状态冲突：并发翻牌 / 重复翻牌。BURST 而不是 NONE——连续出现说明有人在
     # 反复翻同一份文档，值得看一眼；单次出现是正常的幂等结果。
-    ErrorCode.VERSION_CONFLICT: ErrorSpec(409, "该版本状态已变更，请刷新后重试", AlertPolicy.BURST),
+    ErrorCode.VERSION_CONFLICT: ErrorSpec(
+        409, "该版本状态已变更，请刷新后重试", AlertPolicy.BURST
+    ),
 }
 
 
 def spec_for(code: ErrorCode) -> ErrorSpec:
+    """Run spec_for."""
     return ERROR_SPECS[code]
 
 
 class AppError(Exception):
-    """业务错误。抛出点只关心码与内部细节，对外文案/状态码由表决定。"""
+    """业务错误。抛出点只关心码与内部细节，对外文案/状态码由表决定。."""
 
     def __init__(
         self,
@@ -117,6 +129,7 @@ class AppError(Exception):
         user_message: str | None = None,
         context: Mapping[str, Any] | None = None,
     ) -> None:
+        """Initialize the instance."""
         self.code = code
         self.detail = detail
         self.context = dict(context or {})
@@ -125,6 +138,7 @@ class AppError(Exception):
         super().__init__(f"{code.value}: {detail or self.user_message}")
 
     def body(self, request_id: str) -> dict[str, Any]:
+        """Run body."""
         return {
             "error": {
                 "code": self.code.value,
@@ -135,8 +149,10 @@ class AppError(Exception):
 
 
 def install_error_handlers(app: FastAPI) -> None:
+    """Run install_error_handlers."""
     @app.exception_handler(AppError)
     async def _app_error(_: Request, exc: AppError) -> JSONResponse:
+        """Run _app_error."""
         rid = request_id_var.get()
         log_event(
             logger,
@@ -147,12 +163,15 @@ def install_error_handlers(app: FastAPI) -> None:
             detail=exc.detail,
             **exc.context,
         )
-        return JSONResponse(status_code=exc.spec.http_status, content=exc.body(rid))
+        return JSONResponse(
+            status_code=exc.spec.http_status, content=exc.body(rid)
+        )
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error(
         _: Request, exc: RequestValidationError
     ) -> JSONResponse:
+        """Run _validation_error."""
         rid = request_id_var.get()
         # 入参错误只回字段位置，不回用户传来的原值（可能带敏感内容）。
         fields = [
@@ -160,20 +179,29 @@ def install_error_handlers(app: FastAPI) -> None:
             for err in exc.errors()
         ]
         log_event(logger, "invalid_request", level=30, fields=fields)
-        err = AppError(ErrorCode.INVALID_REQUEST, detail=", ".join(fields) or None)
-        return JSONResponse(status_code=err.spec.http_status, content=err.body(rid))
+        err = AppError(
+            ErrorCode.INVALID_REQUEST, detail=", ".join(fields) or None
+        )
+        return JSONResponse(
+            status_code=err.spec.http_status, content=err.body(rid)
+        )
 
     @app.exception_handler(Exception)
     async def _unhandled(_: Request, exc: Exception) -> JSONResponse:
+        """Run _unhandled."""
         rid = request_id_var.get()
         logger.exception(
-            "unhandled_exception", extra={"fields": {"error_type": type(exc).__name__}}
+            "unhandled_exception",
+            extra={"fields": {"error_type": type(exc).__name__}},
         )
         err = AppError(ErrorCode.INTERNAL, detail=type(exc).__name__)
-        return JSONResponse(status_code=err.spec.http_status, content=err.body(rid))
+        return JSONResponse(
+            status_code=err.spec.http_status, content=err.body(rid)
+        )
 
 
 def _log_level(alert: AlertPolicy) -> int:
     # 业务上可预期的拒绝（无证据/低置信）用 WARNING，其余错误用 ERROR；
     # 真正的分级告警由 alert 字段在日志侧做，不靠日志级别硬猜。
+    """Run _log_level."""
     return 30 if alert is AlertPolicy.NONE else 40

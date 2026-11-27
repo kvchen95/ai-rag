@@ -34,7 +34,9 @@ class _Qdrant:
 
 
 def _record(event: str, **fields: object) -> logging.LogRecord:
-    record = logging.LogRecord("api.test", logging.INFO, __file__, 1, event, None, None)
+    record = logging.LogRecord(
+        "api.test", logging.INFO, __file__, 1, event, None, None
+    )
     record.fields = fields
     return record
 
@@ -72,7 +74,9 @@ def test_configure_logging_is_idempotent() -> None:
     configure_logging(level="INFO", service="ai-rag-api", env="test")
     configure_logging(level="DEBUG", service="ai-rag-api", env="test")
     handlers = [
-        h for h in logging.getLogger().handlers if getattr(h, "_ai_rag_json", False)
+        h
+        for h in logging.getLogger().handlers
+        if getattr(h, "_ai_rag_json", False)
     ]
     assert len(handlers) == 1, "重复配置会叠加 handler，一条日志打多遍"
 
@@ -88,7 +92,9 @@ def test_request_id_from_headers() -> None:
 def test_request_id_is_echoed_and_generated_when_missing() -> None:
     app = create_app(make_settings(), pg=_Pg(), qdrant=_Qdrant())
     with TestClient(app) as client:
-        echoed = client.get("/livez", headers={"X-Request-Id": "caller-supplied"})
+        echoed = client.get(
+            "/livez", headers={"X-Request-Id": "caller-supplied"}
+        )
         generated = client.get("/livez")
     assert echoed.headers["X-Request-Id"] == "caller-supplied"
     assert len(generated.headers["X-Request-Id"]) == 32

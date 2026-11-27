@@ -47,7 +47,8 @@ def test_normalize_and_denormalize_are_inverse() -> None:
     """往返误差上限由归一化精度决定，不是"尽量相等"。
 
     `DEFAULT_DIGITS=4` 意味着横向分辨率 1e-4 × 595pt ≈ 0.06pt，所以往返误差最大
-    是半个量化步长（约 0.03pt）。用"≤ 0.1pt"而不是 1e-6：精度是一个**设计参数**，
+    是半个量化步长（约 0.03pt）。用"≤ 0.1pt"而不是 1e-6：精度是一个
+    **设计参数**，
     测试该断言设计参数推论出来的界，而不是假装浮点是精确的。
     """
     bbox = normalize(RECT, W, H)
@@ -179,7 +180,9 @@ def test_display_size_is_transposed_when_rotated(rotation: int) -> None:
 def test_to_pixels_uses_floor_and_ceil() -> None:
     """取整宁可多带一像素：裁图时舍入会把字切掉半个。"""
     assert to_pixels((0.1, 0.1, 0.2, 0.2), 1000, 1000) == (100, 100, 200, 200)
-    left, top, right, bottom = to_pixels((0.1001, 0.1001, 0.1999, 0.1999), 1000, 1000)
+    left, top, right, bottom = to_pixels(
+        (0.1001, 0.1001, 0.1999, 0.1999), 1000, 1000
+    )
     assert (left, top) == (100, 100)
     assert (right, bottom) == (200, 200)
 

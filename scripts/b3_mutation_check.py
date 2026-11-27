@@ -1,4 +1,4 @@
-"""B3 的变异测试：把每条关键判据故意改坏，确认对应用例会红，再改回。
+"""B3 的变异测试：把每条关键判据故意改坏，确认对应用例会红，再改回。.
 
 判据从没红过 = 和被删掉等价。这里跑七组，每组**只改一处语义、不改数量**——
 只改数量的变异会被"条数"类断言一抓一个准，让人误以为判据很严；只改语义的变异
@@ -55,7 +55,9 @@ def run(targets: list[str]) -> tuple[int, str]:
     )
     combined = proc.stdout + proc.stderr
     lines = [
-        ln for ln in combined.strip().splitlines() if "passed" in ln or "failed" in ln
+        ln
+        for ln in combined.strip().splitlines()
+        if "passed" in ln or "failed" in ln
     ]
     return proc.returncode, (lines[-1] if lines else combined.strip()[-300:])
 
@@ -72,19 +74,26 @@ MUTATIONS = [
         "file": "api/retrieval/hybrid.py",
         # 锚点必须落在**代码**里而不是 docstring 里：`filter_json` 出现多次，
         # 但只有"第二路复用同一个 dict"这一处是判据所在。
-        # （早先的锚点改到了 docstring 上的同名文本，变异等于没改，于是"没被检出"。）
+        # （早先的锚点改到了 docstring
+        # 上的同名文本，变异等于没改，于是"没被检出"。）
         "old": """                "using": SPARSE_VECTOR,
-                "filter": filter_json,
-                "limit": top_k,""",
-        "new": """                "using": SPARSE_VECTOR,
-                "filter": {"must": [{"key": "status", "match": {"value": "active"}}]},
-                "limit": top_k,""",
+            "filter": filter_json,
+            "limit": top_k,""",
+        "new": (
+            "                \"using\": SPARSE_VECTOR,\n"
+            "                \"filter\": {\"must\": [{\"key\": \"status\", "
+            "\"match\": {\"value\": \"active\"}}]},\n"
+            "                \"limit\": top_k,"
+        ),
     },
     {
         "name": "去掉版本兜底（§7.4）",
         "file": "api/version_guard.py",
-        "old": """        if expected is not None and item.get("version_id") == expected:
-            kept.append(item)""",
+        "old": (
+            "        if expected is not None and item.get(\"version_id\") "
+            "== expected:\n"
+            "            kept.append(item)"
+        ),
         "new": """        if True:  # 变异：不做版本兜底
             kept.append(item)""",
     },

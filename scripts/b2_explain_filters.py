@@ -1,6 +1,7 @@
-"""过滤条件的执行计划与耗时（需要真 PG + 种子数据）。
+"""过滤条件的执行计划与耗时（需要真 PG + 种子数据）。.
 
-为什么需要这个脚本：功能测试无法区分 `&&` 与 `<@`、`is_public` 与 `is_public = true`
+为什么需要这个脚本：功能测试无法区分 `&&` 与 `<@`、`is_public` 与
+ `is_public = true`
 在执行计划上的差别。要证明"确权与时间条件能在预算内完成",必须有足够的行数让
 计划器做出真实选择,否则小表一律 Seq Scan,结论没有意义。
 
@@ -8,7 +9,8 @@
 **过滤这一半**,所以阈值定得比 30ms 更紧。
 
 关于 Seq Scan 的诚实结论(实测 20000 行):
-ACL 是 `is_public OR depts && ... OR roles && ...` 三支 OR。PG 要用 BitmapOr 合并
+ACL 是 `is_public OR depts && ... OR roles && ...` 三支 OR。PG 要用 BitmapOr 合
+并
 多个索引,三支必须都能生成 bitmap;而 `is_public` 是低选择性布尔列。实测分别
 加了 is_public 索引、把 depts/roles 改成部分索引、两者都加,三种组合的计划与耗时
 都没有改善(5.4–6.4ms),说明在 2 万行这个规模上 Seq Scan 是计划器的正确选择,
@@ -40,10 +42,16 @@ CASES: dict[str, RetrievalFilter] = {
         identity=IdentitySnapshot(user_id="u_multi", depts=("fin", "corp"))
     ),
     "dept_role_time": RetrievalFilter(
-        identity=IdentitySnapshot(user_id="u_both", depts=("fin",), roles=("staff",)),
-        time_range=TimeRange(20260301, 20260331, "month", "三月", "assumed_year"),
+        identity=IdentitySnapshot(
+            user_id="u_both", depts=("fin",), roles=("staff",)
+        ),
+        time_range=TimeRange(
+            20260301, 20260331, "month", "三月", "assumed_year"
+        ),
     ),
-    "admin": RetrievalFilter(identity=IdentitySnapshot(user_id="u_admin", admin=True)),
+    "admin": RetrievalFilter(
+        identity=IdentitySnapshot(user_id="u_admin", admin=True)
+    ),
 }
 
 
@@ -77,7 +85,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--dsn",
-        default=os.getenv("DATABASE_URL") or os.getenv("AI_RAG_TEST_DATABASE_URL"),
+        default=os.getenv("DATABASE_URL")
+        or os.getenv("AI_RAG_TEST_DATABASE_URL"),
     )
     args = ap.parse_args()
     if not args.dsn:
@@ -90,7 +99,8 @@ def main() -> int:
     try:
         total = db.fetch_one("SELECT count(*) AS n FROM chunks")["n"]
         print(
-            f"chunks 总行数: {total}（过滤预算 {FILTER_BUDGET_MS}ms，§7.5 召回 30ms 的一部分）\n"
+            f"chunks 总行数: {total}"
+            f"（过滤预算 {FILTER_BUDGET_MS}ms，§7.5 召回 30ms 的一部分）\n"
         )
         if total < 5000:
             print("警告：行数太少，计划器一律 Seq Scan，结论仅供参考\n")
@@ -104,7 +114,9 @@ def main() -> int:
                 print("\n".join(walk(doc["Plan"])))
                 print(f"  执行时间: {ms:.2f}ms\n")
                 if ms > FILTER_BUDGET_MS:
-                    problems.append(f"{label}: {ms:.2f}ms > {FILTER_BUDGET_MS}ms")
+                    problems.append(
+                        f"{label}: {ms:.2f}ms > {FILTER_BUDGET_MS}ms"
+                    )
     finally:
         db.close()
 

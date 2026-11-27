@@ -20,7 +20,10 @@ def trace_path(monkeypatch, tmp_path) -> Path:
 
 
 def events(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    return [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+    ]
 
 
 def test_understand_writes_query_stage_with_rewrites(trace_path):
@@ -28,7 +31,9 @@ def test_understand_writes_query_stage_with_rewrites(trace_path):
 
     plan = understand("2025年差旅住宿标准是多少")
 
-    rows = [row for row in events(trace_path) if row["event"] == "query.understood"]
+    rows = [
+        row for row in events(trace_path) if row["event"] == "query.understood"
+    ]
     assert len(rows) == 1
     assert rows[0]["retrieval_text"] == plan.retrieval_text
     assert rows[0]["rewrite_trace"] == ["住宿标准→住宿费限额"]
@@ -59,7 +64,12 @@ def test_hybrid_retrieve_traces_both_routes_fusion_and_dedup(trace_path):
             return {
                 "result": [
                     {"points": [point("ch_dense", 0.91)]},
-                    {"points": [point("ch_sparse", 7.5), point("ch_dense", 3.0)]},
+                    {
+                        "points": [
+                            point("ch_sparse", 7.5),
+                            point("ch_dense", 3.0),
+                        ]
+                    },
                 ]
             }
 
@@ -83,7 +93,9 @@ def test_hybrid_retrieve_traces_both_routes_fusion_and_dedup(trace_path):
     assert [item["chunk_id"] for item in got["hybrid.raw_routes"]["dense"]] == [
         "ch_dense"
     ]
-    assert [item["chunk_id"] for item in got["hybrid.raw_routes"]["sparse"]] == [
+    assert [
+        item["chunk_id"] for item in got["hybrid.raw_routes"]["sparse"]
+    ] == [
         "ch_sparse",
         "ch_dense",
     ]
@@ -97,7 +109,7 @@ def test_hybrid_retrieve_traces_both_routes_fusion_and_dedup(trace_path):
 
 
 def test_rerank_traces_batch_scores_and_selected(trace_path):
-    from api.retrieval import rerank as R
+    from api.retrieval import rerank
     from api.retrieval.hybrid import Candidate
 
     candidates = [
@@ -113,6 +125,7 @@ def test_rerank_traces_batch_scores_and_selected(trace_path):
         for index in range(3)
     ]
     texts = {item.chunk_id: f"证据文本 {item.chunk_id}" for item in candidates}
+
     class FakeRerankResponse:
         status_code = 200
 
@@ -129,9 +142,9 @@ def test_rerank_traces_batch_scores_and_selected(trace_path):
         def close(self):
             return None
 
-    with R.Reranker("http://rerank:8000", "m") as reranker:
+    with rerank.Reranker("http://rerank:8000", "m") as reranker:
         reranker._client = FakeRerankClient()  # type: ignore[assignment]
-        outcome = R.rerank_candidates(
+        outcome = rerank.rerank_candidates(
             reranker,
             "住宿费限额",
             candidates,
@@ -155,7 +168,7 @@ def test_rerank_traces_batch_scores_and_selected(trace_path):
 def test_pipeline_run_traces_full_retrieval_path(trace_path, monkeypatch):
     from api.identity import IdentitySnapshot
     from api.observability import request_id_var
-    from api.retrieval import pipeline as P
+    from api.retrieval import pipeline as pipeline_mod
     from api.retrieval.gate import GateConfig
     from api.retrieval.hybrid import Candidate, HybridResult
     from api.retrieval.texts import ChunkText
@@ -175,7 +188,9 @@ def test_pipeline_run_traces_full_retrieval_path(trace_path, monkeypatch):
     )
 
     class FakeRetriever:
-        def retrieve(self, _query, _flt, *, dense_query, top_k, parent_child_keep):
+        def retrieve(
+            self, _query, _flt, *, dense_query, top_k, parent_child_keep
+        ):
             return HybridResult(
                 candidates=[candidate],
                 dense_count=1,
@@ -199,9 +214,9 @@ def test_pipeline_run_traces_full_retrieval_path(trace_path, monkeypatch):
         def close(self):
             return None
 
-    monkeypatch.setattr(P, "drop_stale", lambda pg, rows: (rows, []))
+    monkeypatch.setattr(pipeline_mod, "drop_stale", lambda pg, rows: (rows, []))
     monkeypatch.setattr(
-        P,
+        pipeline_mod,
         "fetch_texts",
         lambda pg, ids: {
             candidate.chunk_id: ChunkText(
@@ -215,9 +230,13 @@ def test_pipeline_run_traces_full_retrieval_path(trace_path, monkeypatch):
             )
         },
     )
-    monkeypatch.setattr(P, "doc_names", lambda pg, keys: {"policy/travel-cn": "差旅办法"})
+    monkeypatch.setattr(
+        pipeline_mod,
+        "all_doc_names",
+        lambda pg: {"policy/travel-cn": "差旅办法"},
+    )
 
-    pipeline = P.RetrievalPipeline(
+    pipeline = pipeline_mod.RetrievalPipeline(
         pg=object(),  # type: ignore[arg-type]
         retriever=FakeRetriever(),  # type: ignore[arg-type]
         reranker=FakeReranker(),  # type: ignore[arg-type]
@@ -259,17 +278,23 @@ def test_pipeline_run_traces_full_retrieval_path(trace_path, monkeypatch):
     assert "retrieval.texts" in names
     assert "gate.decided" in names
     assert "retrieval.finished" in names
-    assert names.index("retrieval.embed") < names.index("retrieval.version_guard")
-    assert names.index("retrieval.version_guard") < names.index("retrieval.texts")
+    assert names.index("retrieval.embed") < names.index(
+        "retrieval.version_guard"
+    )
+    assert names.index("retrieval.version_guard") < names.index(
+        "retrieval.texts"
+    )
     assert names.index("retrieval.texts") < names.index("rerank.selected")
     assert names.index("rerank.selected") < names.index("gate.decided")
     assert {row["request_id"] for row in rows} == {"rid-pipeline"}
 
 
-def test_qa_service_traces_generation_verification_and_exit(trace_path, monkeypatch):
+def test_qa_service_traces_generation_verification_and_exit(
+    trace_path, monkeypatch
+):
     from api.generate.llm import Draft, Fact
     from api.identity import IdentitySnapshot
-    from api.qa import orchestrator as O
+    from api.qa import orchestrator
     from api.query import understand
     from api.retrieval.gate import GateDecision
     from api.retrieval.hybrid import Candidate
@@ -325,7 +350,7 @@ def test_qa_service_traces_generation_verification_and_exit(trace_path, monkeypa
             return {"items": [], "truncated": False}
 
     monkeypatch.setattr(
-        O,
+        orchestrator,
         "fetch_texts",
         lambda pg, ids: {
             "ch_1": ChunkText(
@@ -339,9 +364,11 @@ def test_qa_service_traces_generation_verification_and_exit(trace_path, monkeypa
             )
         },
     )
-    monkeypatch.setattr(O, "build_evidence_pack", lambda *a, **k: FakePack())
     monkeypatch.setattr(
-        O,
+        orchestrator, "build_evidence_pack", lambda *a, **k: FakePack()
+    )
+    monkeypatch.setattr(
+        orchestrator,
         "generate_draft",
         lambda *a, **k: Draft(
             status="answered",
@@ -349,7 +376,7 @@ def test_qa_service_traces_generation_verification_and_exit(trace_path, monkeypa
         ),
     )
     monkeypatch.setattr(
-        O,
+        orchestrator,
         "verify_draft",
         lambda *a, **k: VerificationReport(
             passed=True,
@@ -359,7 +386,7 @@ def test_qa_service_traces_generation_verification_and_exit(trace_path, monkeypa
         ),
     )
 
-    service = O.QaService(
+    service = orchestrator.QaService(
         pipeline=FakePipeline(),  # type: ignore[arg-type]
         llm=object(),  # type: ignore[arg-type]
         judge_client=None,
@@ -375,7 +402,8 @@ def test_qa_service_traces_generation_verification_and_exit(trace_path, monkeypa
     assert outcome.verdict == "pass"
     assert got["qa.retrieval_done"]["verdict"] == "pass"
     assert got["qa.evidence_pack"]["n_items"] == 1
-    # fact 审计口径固定六字段（§9.4）：kind/name/expression/result 对普通事实为空串。
+    # fact 审计口径固定六字段（§9.4）：kind/name/expression/result 对普通事实为
+    # 空串。
     assert got["qa.draft"]["facts"] == [
         {
             "text": "住宿费每人每天 500 元",
@@ -399,11 +427,13 @@ def test_qa_stream_traces_route_entry(trace_path, monkeypatch):
     from api.observability import request_id_var
     from api.qa.events import done
     from api.qa.orchestrator import QaOutcome
-    from api.routers import qa as QA
+    from api.routers import qa as qa_router
 
     settings = SimpleNamespace(max_question_chars=500, audit_retention_days=365)
     request = SimpleNamespace(
-        app=SimpleNamespace(state=SimpleNamespace(settings=settings, pg=object()))
+        app=SimpleNamespace(
+            state=SimpleNamespace(settings=settings, pg=object())
+        )
     )
     identity = IdentitySnapshot(
         user_id="u_route", depts=("fin",), roles=("staff",)
@@ -414,21 +444,26 @@ def test_qa_stream_traces_route_entry(trace_path, monkeypatch):
 
         def run(self, question, _identity, *, emit=None, **_kwargs):
             emit(done(latency_ms=1.0, hop_count=0, verdict="pass"))
-            return QaOutcome(question=question, verdict="pass", identity=_identity)
+            return QaOutcome(
+                question=question, verdict="pass", identity=_identity
+            )
 
         def close(self):
             return None
 
-    monkeypatch.setattr(QA, "build_service", lambda *a, **k: FakeService())
-    monkeypatch.setattr(QA, "write_audit", lambda *a, **k: None)
+    monkeypatch.setattr(
+        qa_router, "build_service", lambda *a, **k: FakeService()
+    )
+    monkeypatch.setattr(qa_router, "write_audit", lambda *a, **k: None)
 
     token = request_id_var.set("rid-route")
     try:
+
         async def call_and_drain():
-            response = await QA.qa_stream(
-                QA.QaStreamRequest(
+            response = await qa_router.qa_stream(
+                qa_router.QaStreamRequest(
                     question="住宿费限额是多少",
-                    scope=QA.ScopeIn(doc_keys=["policy/travel-cn"]),
+                    scope=qa_router.ScopeIn(doc_keys=["policy/travel-cn"]),
                 ),
                 request,  # type: ignore[arg-type]
                 identity,
@@ -440,7 +475,9 @@ def test_qa_stream_traces_route_entry(trace_path, monkeypatch):
         request_id_var.reset(token)
 
     assert b"event: done" in body
-    rows = [row for row in events(trace_path) if row["event"] == "qa.route_enter"]
+    rows = [
+        row for row in events(trace_path) if row["event"] == "qa.route_enter"
+    ]
     assert len(rows) == 1
     assert rows[0]["request_id"] == "rid-route"
     assert rows[0]["question"] == "住宿费限额是多少"
@@ -453,28 +490,32 @@ def test_qa_stream_traces_worker_failure(trace_path, monkeypatch):
     from types import SimpleNamespace
 
     from api.identity import IdentitySnapshot
-    from api.routers import qa as QA
+    from api.routers import qa as qa_router
 
     settings = SimpleNamespace(max_question_chars=500, audit_retention_days=365)
     request = SimpleNamespace(
-        app=SimpleNamespace(state=SimpleNamespace(settings=settings, pg=object()))
+        app=SimpleNamespace(
+            state=SimpleNamespace(settings=settings, pg=object())
+        )
     )
     identity = IdentitySnapshot(user_id="u", depts=("fin",), roles=("staff",))
 
     def boom(*_args, **_kwargs):
         raise RuntimeError("装配失败")
 
-    monkeypatch.setattr(QA, "build_service", boom)
+    monkeypatch.setattr(qa_router, "build_service", boom)
 
     async def call_and_drain():
-        response = await QA.qa_stream(
-            QA.QaStreamRequest(question="坏请求"),
+        response = await qa_router.qa_stream(
+            qa_router.QaStreamRequest(question="坏请求"),
             request,  # type: ignore[arg-type]
             identity,
         )
         return b"".join([chunk async for chunk in response.body_iterator])
 
     asyncio.run(call_and_drain())
-    rows = [row for row in events(trace_path) if row["event"] == "qa.worker_failed"]
+    rows = [
+        row for row in events(trace_path) if row["event"] == "qa.worker_failed"
+    ]
     assert len(rows) == 1
     assert "装配失败" in rows[0]["error"]

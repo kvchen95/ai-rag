@@ -8,7 +8,8 @@
    因为"有点墨迹"在 A4 页上到处都是。
 2. **表格三表示一致可重建**：切片里的 `table_html` 反解出的矩阵 == `table_cells`
    展开的矩阵 == `table_md` 解析出的矩阵。
-3. **字段缺失被校验拦截**：`parse_document` 出来的每条切片都必须 `require_complete()`；
+3. **字段缺失被校验拦截**：`parse_document` 出来的每条切片都必须
+`require_complete()`；
    再加一条"人为抹掉一个字段，`validate_chunks` 必须抛"。
 
 另外验四件只在端到端才看得见的事：页眉页脚没进切片、双栏没被拼成一句、
@@ -72,10 +73,16 @@ def test_table_document_produces_text_and_table_chunks(fixtures: Path) -> None:
 
 def test_every_chunk_is_complete(fixtures: Path) -> None:
     """验收第三条：出流水线的每一条都必须带齐六项随行信息。"""
-    for name in ("layout/table-demo.pdf", "layout/two-column-demo.pdf", "layout/header-demo.pdf"):
+    for name in (
+        "layout/table-demo.pdf",
+        "layout/two-column-demo.pdf",
+        "layout/header-demo.pdf",
+    ):
         outcome = _parse(fixtures / name)
         for chunk in outcome.chunks:
-            assert chunk.missing_fields() == [], f"{chunk.chunk_id}: {chunk.missing_fields()}"
+            assert (
+                chunk.missing_fields() == []
+            ), f"{chunk.chunk_id}: {chunk.missing_fields()}"
             assert chunk.require_complete() is chunk
 
 
@@ -119,7 +126,8 @@ def test_two_column_text_is_not_spliced_across_columns(fixtures: Path) -> None:
     outcome = _parse(fixtures / "layout/two-column-demo.pdf")
     for chunk in outcome.chunks:
         assert not (
-            "Left column" in chunk.content_text and "Right column" in chunk.content_text
+            "Left column" in chunk.content_text
+            and "Right column" in chunk.content_text
         ), chunk.content_text
     texts = " ".join(chunk.content_text for chunk in outcome.chunks)
     assert "Left column line one explains scope." in texts
@@ -131,7 +139,6 @@ def test_two_column_text_is_not_spliced_across_columns(fixtures: Path) -> None:
 
 def _ink_ratio(image, bbox: tuple[float, float, float, float]) -> float:
     """一块区域里"非白像素"的占比。"""
-
     left = int(bbox[0] * image.width)
     top = int(bbox[1] * image.height)
     right = max(left + 1, int(bbox[2] * image.width))
@@ -146,8 +153,9 @@ def _ink_ratio(image, bbox: tuple[float, float, float, float]) -> float:
 @pytest.fixture(scope="module")
 def renderer(fixtures: Path):
     """按需渲染某一页为 RGB 位图（200 DPI，与图裁片一致）。"""
-    from api.parse import figures as fig  # noqa: PLC0415
     from pypdfium2 import PdfDocument  # noqa: PLC0415
+
+    from api.parse import figures as fig  # noqa: PLC0415
 
     cache: dict[tuple[str, int], object] = {}
 
@@ -173,14 +181,20 @@ def test_bbox_lands_on_the_text_it_describes(fixtures: Path, renderer) -> None:
     x/y 搞反、旋转没转），平移前后一样多。
     """
     outcome = _parse(fixtures / "layout/table-demo.pdf")
-    chunk = next(c for c in outcome.chunks if c.chunk_type == "text" and len(c.content_text) > 30)
+    chunk = next(
+        c
+        for c in outcome.chunks
+        if c.chunk_type == "text" and len(c.content_text) > 30
+    )
     image = renderer("layout/table-demo.pdf", chunk.page_num)
     bbox = tuple(chunk.bbox[0])
     here = _ink_ratio(image, bbox)
     shifted = (bbox[0] + 0.10, bbox[1], min(1.0, bbox[2] + 0.10), bbox[3])
     there = _ink_ratio(image, shifted)
     assert here > 0.02, f"bbox covers no ink at all ({here:.3f})"
-    assert here > there, f"shifted region has as much ink: here={here:.3f} there={there:.3f}"
+    assert (
+        here > there
+    ), f"shifted region has as much ink: here={here:.3f} there={there:.3f}"
 
 
 def test_bbox_of_a_table_lands_on_the_table(fixtures: Path, renderer) -> None:
@@ -201,15 +215,19 @@ def test_bbox_is_normalized_and_well_formed(fixtures: Path) -> None:
             assert rect[2] > rect[0] and rect[3] > rect[1], rect
 
 
-def test_rotated_page_bbox_matches_the_unrotated_page(fixtures: Path, renderer) -> None:
-    """旋转页与未旋转页上同一段文字的 bbox 应该**不同**（页面转了），
-    但把它映射回用户空间后必须落在同一个物理位置。
+def test_rotated_page_bbox_matches_the_unrotated_page(
+    fixtures: Path, renderer
+) -> None:
+    """旋转页上的 bbox 必须能映射回同一个物理位置。
+
+    旋转页与未旋转页上同一段文字的 bbox 应该**不同**（页面转了），但把它
+    映射回用户空间后必须落在同一个物理位置。
 
     这是"bbox 可映射原页"在旋转页上的形式：前端拿显示空间 bbox 画框，
     后端拿用户空间坐标对原页——两者必须描述同一块地方。
 
-    取**子片**（`chunk_type=text` 且 `parent_id` 为空）而不取父片：父片覆盖整段，
-    子片覆盖"这一句"。这里要验的是句子级定位。
+    取**子片**（`chunk_type=text` 且 `parent_id` 为空）而不取父片：父片覆盖
+    整段，子片覆盖“这一句”。这里要验的是句子级定位。
     """
     outcome = _parse(fixtures / "layout/rotated-demo.pdf")
     text_chunks = [
@@ -286,7 +304,9 @@ def test_continued_table_is_flagged_not_merged(fixtures: Path) -> None:
     table_region = next(r for r in page2.regions if r.table is not None)
     assert table_region.table is not None
     assert table_region.table.continued is True
-    assert any(note.startswith("continued_of:page1") for note in table_region.notes)
+    assert any(
+        note.startswith("continued_of:page1") for note in table_region.notes
+    )
     # 第 2 页那条表切片的 page_num 与 bbox 仍指向第 2 页（没有被搬走）
     chunk = next(
         c for c in outcome.chunks if c.chunk_type == "table" and c.page_num == 2
@@ -316,20 +336,31 @@ GOOD_TRANSCRIPT = """| 类别 | 百分比 |
 | Meals | 24 |
 | Other | 16 |
 
-JSON: {"kind":"bar","axes":{"y":{"unit":"%","min":0,"max":100}},"series":[{"name":"share","unit":"%","points":[{"label":"Transport","value":32},{"label":"Lodging","value":28},{"label":"Meals","value":24},{"label":"Other","value":16}]}],"legend_missing":false}"""
+JSON: {"kind":"bar","axes":{"y":{"unit":"%","min":0,"max":100}},
+"series":[{"name":"share","unit":"%","points":[
+{"label":"Transport","value":32},{"label":"Lodging","value":28},
+{"label":"Meals","value":24},{"label":"Other","value":16}]}],
+"legend_missing":false}"""
 
-BAD_TRANSCRIPT = GOOD_TRANSCRIPT.replace("| Transport | 32 |", "| Transport | 74 |").replace(
-    '"value":32', '"value":74'
-)
+BAD_TRANSCRIPT = GOOD_TRANSCRIPT.replace(
+    "| Transport | 32 |", "| Transport | 74 |"
+).replace('"value":32', '"value":74')
 
 
 def _figure_builder(response: str, path: Path):
-    from api.parse.figure_pipeline import FigurePipelineConfig, make_builder  # noqa: PLC0415
+    from api.parse.figure_pipeline import (  # noqa: PLC0415
+        FigurePipelineConfig,
+        make_builder,
+    )
 
-    return make_builder(_FakeVLM(response), FigurePipelineConfig(), source_path=path)
+    return make_builder(
+        _FakeVLM(response), FigurePipelineConfig(), source_path=path
+    )
 
 
-def test_figure_with_matching_numbers_is_indexed(fixtures: Path, tmp_path: Path) -> None:
+def test_figure_with_matching_numbers_is_indexed(
+    fixtures: Path, tmp_path: Path
+) -> None:
     path = fixtures / "layout/figure-demo.pdf"
     figures_dir = tmp_path / "figures"
     outcome = parse_document(
@@ -349,7 +380,9 @@ def test_figure_with_matching_numbers_is_indexed(fixtures: Path, tmp_path: Path)
     assert outcome.rejected_figures == []
 
 
-def test_figure_with_wrong_number_is_rejected(fixtures: Path, tmp_path: Path) -> None:
+def test_figure_with_wrong_number_is_rejected(
+    fixtures: Path, tmp_path: Path
+) -> None:
     """验收第二条的后半句：数值对不上 → 标失败 → **不入库**。
 
     74 与图的真实值 32 对不上：占比求和不拢（142），而且图里找不到 74 的依据。
@@ -369,10 +402,17 @@ def test_figure_with_wrong_number_is_rejected(fixtures: Path, tmp_path: Path) ->
     assert len(outcome.rejected_figures) == 1
     failure = outcome.rejected_figures[0]
     assert failure.reason.startswith("reconcile:")
-    assert "percent_sum" in failure.reason or "value_not_in_figure" in failure.reason
-    assert not list(figures_dir.glob("*.webp")) if figures_dir.exists() else True
+    assert (
+        "percent_sum" in failure.reason
+        or "value_not_in_figure" in failure.reason
+    )
+    assert (
+        not list(figures_dir.glob("*.webp")) if figures_dir.exists() else True
+    )
     # 图区域里的刻度/标签也不该变成正文切片（它们是脱离上下文的数字碎片）
-    assert not any(c.content_text.strip() in {"100", "50", "0"} for c in outcome.chunks)
+    assert not any(
+        c.content_text.strip() in {"100", "50", "0"} for c in outcome.chunks
+    )
 
 
 def test_figure_without_vlm_is_not_indexed(fixtures: Path) -> None:
@@ -386,16 +426,24 @@ def test_figure_without_vlm_is_not_indexed(fixtures: Path) -> None:
         figure_builder=_figure_builder_without_vlm(path),
     )
     assert [c for c in outcome.chunks if c.chunk_type == "figure"] == []
-    assert any("vlm_unavailable" in failure.reason for failure in outcome.rejected_figures)
+    assert any(
+        "vlm_unavailable" in failure.reason
+        for failure in outcome.rejected_figures
+    )
 
 
 def _figure_builder_without_vlm(path: Path):
-    from api.parse.figure_pipeline import FigurePipelineConfig, make_builder  # noqa: PLC0415
+    from api.parse.figure_pipeline import (  # noqa: PLC0415
+        FigurePipelineConfig,
+        make_builder,
+    )
 
     return make_builder(None, FigurePipelineConfig(), source_path=path)
 
 
-def test_figure_image_meets_the_dpi_floor(fixtures: Path, tmp_path: Path) -> None:
+def test_figure_image_meets_the_dpi_floor(
+    fixtures: Path, tmp_path: Path
+) -> None:
     """§3.4：无损 WebP ≥ 200 DPI。"""
     from PIL import Image  # noqa: PLC0415
 

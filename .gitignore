@@ -22,3 +22,8 @@ logs/
 
 # os
 .DS_Store
+
+# vim swap files may contain .env secrets
+.env.sw?
+.env.swo
+.env.swp

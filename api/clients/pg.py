@@ -1,4 +1,4 @@
-"""PostgreSQL 访问层。
+"""PostgreSQL 访问层。.
 
 PG 是唯一真相（详细设计.md 附录 B），所以这里的职责只有三件：
 连接池、事务边界、探针。业务 SQL 写在各自的仓储模块里，不堆在这。
@@ -10,8 +10,9 @@ PG 是唯一真相（详细设计.md 附录 B），所以这里的职责只有�
 from __future__ import annotations
 
 import time
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from typing import Any, Iterator, Sequence
+from typing import Any
 
 import psycopg
 from psycopg.rows import dict_row
@@ -24,8 +25,11 @@ logger = get_logger("api.pg")
 
 
 def normalize_dsn(dsn: str) -> str:
-    """compose 里用的是 SQLAlchemy 风格 DSN（postgresql+psycopg://），
-    psycopg 自己不认这个前缀，统一在这里剥掉，别让每个调用方各剥一次。"""
+    """剥掉 SQLAlchemy 风格的 DSN 前缀。.
+
+    Compose 里用的是 `postgresql+psycopg://`，psycopg 自己不认这个前缀，
+    统一在这里剥掉，别让每个调用方各剥一次。
+    """
     dsn = dsn.strip()
     for prefix in ("postgresql+psycopg://", "postgres+psycopg://"):
         if dsn.startswith(prefix):
@@ -34,7 +38,7 @@ def normalize_dsn(dsn: str) -> str:
 
 
 def mask_dsn(dsn: str) -> str:
-    """日志里只留 host/db，密码段打成 ***。"""
+    """日志里只留 host/db，密码段打成 ***。."""
     head, _, tail = normalize_dsn(dsn).partition("://")
     if "@" in tail:
         creds, _, hostpart = tail.rpartition("@")
@@ -44,7 +48,7 @@ def mask_dsn(dsn: str) -> str:
 
 
 class PgDatabase:
-    """连接池 + 探针。open/close 由 lifespan 管，不在构造里连库。"""
+    """连接池 + 探针。open/close 由 lifespan 管，不在构造里连库。."""
 
     def __init__(
         self,
@@ -56,6 +60,7 @@ class PgDatabase:
         pool_timeout_s: float = 5.0,
         application_name: str = "ai-rag-api",
     ) -> None:
+        """Initialize the instance."""
         self.dsn = normalize_dsn(dsn)
         self._connect_timeout_s = connect_timeout_s
         self._pool = ConnectionPool(
@@ -74,12 +79,16 @@ class PgDatabase:
     # --- 生命周期 ---
 
     def open(self) -> None:
-        """wait=False：库还没起来时进程也要能启动，
-        让 /healthz 去区分"我起来了但依赖没起来"。"""
+        """打开连接池，但不等待数据库就绪。.
+
+        wait=False：库还没起来时进程也要能启动，
+        让 /healthz 去区分"我起来了但依赖没起来"。
+        """
         self._pool.open(wait=False)
         log_event(logger, "pg_pool_opened", dsn=mask_dsn(self.dsn))
 
     def close(self) -> None:
+        """Run close."""
         self._pool.close()
         log_event(logger, "pg_pool_closed")
 
@@ -87,18 +96,20 @@ class PgDatabase:
 
     @property
     def pool(self) -> ConnectionPool[Any]:
-        """底层连接池。给"一次逻辑动作跨多个短事务"的调用方用（`sync.drain`）。
+        """底层连接池。给"一次逻辑动作跨多个短事务"的调用方用（`sync.drain`）。.
 
         公开它而不是让调用方摸 `_pool`：`drain` 确实需要逐条领任务、各自提交，
-        `connection()` 的"退出即提交"包不住它。与其让每个调用方各抄一份私有访问，
-        不如把这条通道摆到明面上，并在文档里说清它只给这种场景用。
+        `connection()` 的"退出即提交"包不住它。与其让每个调用方各抄一份
+        私有访问，不如把这条通道摆到明面上，并在文档里说清它只给这种场景用。
         """
         return self._pool
 
     @contextmanager
     def connection(self) -> Iterator[psycopg.Connection[Any]]:
-        """一个事务。正常退出提交，异常回滚——不提供 autocommit 入口，
-        免得有人在里面做两步写然后只提交了一半。"""
+        """一个事务：正常退出提交，异常回滚。.
+
+        不提供 autocommit 入口，免得有人在里面做两步写然后只提交了一半。
+        """
         with self._pool.connection() as conn:
             try:
                 yield conn
@@ -110,7 +121,7 @@ class PgDatabase:
 
     @contextmanager
     def session(self) -> Iterator[psycopg.Connection[Any]]:
-        """一条连接，**事务由调用方自己管**。
+        """一条连接，**事务由调用方自己管**。.
 
         只给"一个逻辑任务跨多个事务"的场景用（例如样本扫描：一个文件一个事务，
         整轮共用一个会话级 advisory lock）。`connection()` 的"退出即提交"在这种
@@ -125,7 +136,11 @@ class PgDatabase:
             try:
                 yield conn
             finally:
-                if not conn.closed and conn.info.transaction_status != psycopg.pq.TransactionStatus.IDLE:
+                if (
+                    not conn.closed
+                    and conn.info.transaction_status
+                    != psycopg.pq.TransactionStatus.IDLE
+                ):
                     conn.rollback()
 
     # --- 查询 ---
@@ -133,18 +148,27 @@ class PgDatabase:
     def fetch_one(
         self, sql: str, params: Sequence[Any] | None = None
     ) -> dict[str, Any] | None:
-        with self.connection() as conn, conn.cursor(row_factory=dict_row) as cur:
+        """Run fetch_one."""
+        with (
+            self.connection() as conn,
+            conn.cursor(row_factory=dict_row) as cur,
+        ):
             cur.execute(sql, params)
             return cur.fetchone()
 
     def fetch_all(
         self, sql: str, params: Sequence[Any] | None = None
     ) -> list[dict[str, Any]]:
-        with self.connection() as conn, conn.cursor(row_factory=dict_row) as cur:
+        """Run fetch_all."""
+        with (
+            self.connection() as conn,
+            conn.cursor(row_factory=dict_row) as cur,
+        ):
             cur.execute(sql, params)
             return list(cur.fetchall())
 
     def execute(self, sql: str, params: Sequence[Any] | None = None) -> int:
+        """Run execute."""
         with self.connection() as conn, conn.cursor() as cur:
             cur.execute(sql, params)
             return cur.rowcount
@@ -152,15 +176,18 @@ class PgDatabase:
     # --- 探针 ---
 
     def ping(self, *, timeout_s: float | None = None) -> Probe:
+        """Run ping."""
         timeout_s = timeout_s or self._connect_timeout_s
         started = time.perf_counter()
         try:
-            with self._pool.connection(timeout=timeout_s) as conn:
-                with conn.cursor() as cur:
-                    cur.execute("SELECT 1")
-                    cur.fetchone()
-                    cur.execute("SHOW server_version")
-                    version = cur.fetchone()
+            with (
+                self._pool.connection(timeout=timeout_s) as conn,
+                conn.cursor() as cur,
+            ):
+                cur.execute("SELECT 1")
+                cur.fetchone()
+                cur.execute("SHOW server_version")
+                version = cur.fetchone()
             latency = (time.perf_counter() - started) * 1000
             return Probe(
                 ok=True,

@@ -19,8 +19,8 @@ from api.ingest.jobs import (
     TERMINAL,
     IllegalTransition,
     JobStatus,
-    can_transition,
     _assert_error,
+    can_transition,
     retry_budget_left,
 )
 
@@ -38,7 +38,9 @@ EXPECTED_EDGES = {
 
 def test_allowed_edges_are_exactly_these() -> None:
     actual = {
-        (src.value, dst.value) for src, targets in ALLOWED.items() for dst in targets
+        (src.value, dst.value)
+        for src, targets in ALLOWED.items()
+        for dst in targets
     }
     assert actual == EXPECTED_EDGES
 

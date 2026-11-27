@@ -1,25 +1,26 @@
 #!/usr/bin/env python3
 """App-side PostgreSQL migration runner for ai-rag.
 
-Why not initdb: ``infra/initdb`` only runs on a brand-new data volume, so a schema
-change would never reach an existing dev database. Migrations live in
-``db/migrations`` and are applied here, recorded in ``schema_migrations``.
+Why not initdb: ``infra/initdb`` only runs on a brand-new data volume,
+so a schema change would never reach an existing dev database.
+Migrations live in ``db/migrations`` and are applied here, recorded in
+``schema_migrations``.
 
 Usage (host has no python deps — run inside the api container):
 
-    docker compose exec -T api python scripts/db_migrate.py --status
-    docker compose exec -T api python scripts/db_migrate.py --dry-run
-    docker compose exec -T api python scripts/db_migrate.py
+docker compose exec -T api python scripts/db_migrate.py --status
+docker compose exec -T api python scripts/db_migrate.py --dry-run
+docker compose exec -T api python scripts/db_migrate.py
 
-    # against another database (e.g. a scratch db for testing a fresh install)
-    docker compose exec -T api python scripts/db_migrate.py \
-        --dsn postgresql://ai_rag:***@postgres:5432/ai_rag_migtest
+# against another database (e.g. a scratch db for testing a fresh
+install) docker compose exec -T api python scripts/db_migrate.py
+--dsn postgresql://ai_rag:***@postgres:5432/ai_rag_migtest
 
 Behaviour:
-  * files are applied in lexical order, one file = one transaction
-  * a file already recorded is skipped; if its checksum changed, the run aborts
-    (edit an applied migration = drift; add a new file instead)
-  * a global advisory lock serialises concurrent runs
+* files are applied in lexical order, one file = one transaction
+* a file already recorded is skipped; if its checksum changed, the run aborts
+(edit an applied migration = drift; add a new file instead)
+* a global advisory lock serialises concurrent runs
 """
 
 from __future__ import annotations
@@ -34,15 +35,18 @@ from typing import NoReturn
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "db" / "migrations"
 ADVISORY_LOCK_KEY = 0x61695F726167  # "ai_rag" — stable across runs
-LEDGER_SQL = """
-CREATE TABLE IF NOT EXISTS schema_migrations (
-    version    text        PRIMARY KEY,
-    checksum   text        NOT NULL,
-    applied_at timestamptz NOT NULL DEFAULT now(),
-    elapsed_ms int         NOT NULL DEFAULT 0
-);
-COMMENT ON TABLE schema_migrations IS '已应用的迁移文件（version=文件名，checksum=sha256 前 16 位）';
-"""
+LEDGER_SQL = (
+                 "\n"
+                 "CREATE TABLE IF NOT EXISTS schema_migrations (\n"
+                 "    version    text        PRIMARY KEY,\n"
+                 "    checksum   text        NOT NULL,\n"
+                 "    applied_at timestamptz NOT NULL DEFAULT now(),\n"
+                 "    elapsed_ms int         NOT NULL DEFAULT 0\n"
+                 ");\n"
+                 "COMMENT ON TABLE schema_migrations IS "
+                 "'已应用的迁移文件（version=文件名，checksum=sha256 前 16 "
+                 "位）';\n"
+             )
 
 
 def die(msg: str, code: int = 1) -> NoReturn:
@@ -52,9 +56,13 @@ def die(msg: str, code: int = 1) -> NoReturn:
 
 def normalise_dsn(dsn: str) -> str:
     """Accept SQLAlchemy-style DSNs used by api/worker ($DATABASE_URL)."""
-    for prefix in ("postgresql+psycopg://", "postgresql+psycopg2://", "postgres+psycopg://"):
+    for prefix in (
+        "postgresql+psycopg://",
+        "postgresql+psycopg2://",
+        "postgres+psycopg://",
+    ):
         if dsn.startswith(prefix):
-            return "postgresql://" + dsn[len(prefix):]
+            return "postgresql://" + dsn[len(prefix) :]
     return dsn
 
 
@@ -92,9 +100,12 @@ def connect(dsn: str):
     try:
         import psycopg  # noqa: PLC0415
     except ImportError:
-        die("psycopg is not installed in this interpreter.\n"
+        die(
+            "psycopg is not installed in this interpreter.\n"
             "       Run inside the app container instead:\n"
-            "         docker compose exec -T api python scripts/db_migrate.py", 3)
+            "         docker compose exec -T api python scripts/db_migrate.py",
+            3,
+        )
     try:
         return psycopg.connect(dsn, autocommit=False)
     except Exception as exc:  # noqa: BLE001
@@ -107,12 +118,16 @@ def applied_map(conn, create: bool = True) -> dict[str, str]:
             cur.execute(LEDGER_SQL)
             conn.commit()
         else:
-            cur.execute("SELECT to_regclass('public.schema_migrations') IS NOT NULL")
+            cur.execute(
+                "SELECT to_regclass('public.schema_migrations') IS NOT NULL"
+            )
             if not cur.fetchone()[0]:
                 conn.rollback()
                 return {}
             conn.commit()
-        cur.execute("SELECT version, checksum FROM schema_migrations ORDER BY version")
+        cur.execute(
+            "SELECT version, checksum FROM schema_migrations ORDER BY version"
+        )
         return dict(cur.fetchall())
 
 
@@ -134,16 +149,30 @@ def show_status(conn) -> int:
         print(f"{name:44} {state:10} {cs}")
     extra = sorted(set(applied) - {n for n, _ in files})
     for name in extra:
-        print(f"{name:44} {'MISSING':10} {applied[name]}  (recorded but file is gone)")
-    print(f"\napplied={len(set(applied) & {n for n, _ in files})} pending={sum(1 for n, _ in files if n not in applied)}")
+        print(
+            f"{name:44} {'MISSING':10} {applied[name]}  "
+            "(recorded but file is gone)"
+        )
+    print(
+        f"\napplied={len(set(applied) & {n for n, _ in files})} "
+        f"pending={sum(1 for n, _ in files if n not in applied)}"
+    )
     return 2 if drifted else 0
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="apply db/migrations/*.sql in order")
+    ap = argparse.ArgumentParser(
+        description="apply db/migrations/*.sql in order"
+    )
     ap.add_argument("--dsn", help="postgresql:// DSN (default: $DATABASE_URL)")
-    ap.add_argument("--status", action="store_true", help="show applied/pending, change nothing")
-    ap.add_argument("--dry-run", action="store_true", help="print the plan, change nothing")
+    ap.add_argument(
+        "--status",
+        action="store_true",
+        help="show applied/pending, change nothing",
+    )
+    ap.add_argument(
+        "--dry-run", action="store_true", help="print the plan, change nothing"
+    )
     args = ap.parse_args()
 
     dsn = resolve_dsn(args.dsn)
@@ -161,11 +190,24 @@ def main() -> int:
         if args.dry_run:
             applied = applied_map(conn, create=False)
             pending = [n for n, _ in files if n not in applied]
-            drift = [n for n, t in files if n in applied and applied[n] != checksum(t)]
-            print(f"applied: {len(set(applied) & {n for n, _ in files})} file(s) recorded")
-            print(f"plan   : would apply {len(pending)} file(s) in order -> {', '.join(pending) or '(none)'}")
+            drift = [
+                n
+                for n, t in files
+                if n in applied and applied[n] != checksum(t)
+            ]
+            print(
+                f"applied: {len(set(applied) & {n for n, _ in files})} "
+                "file(s) recorded"
+            )
+            print(
+                f"plan   : would apply {len(pending)} file(s) in order -> "
+                f"{', '.join(pending) or '(none)'}"
+            )
             if drift:
-                print(f"DRIFT  : {', '.join(drift)} changed after being applied -> run would abort")
+                print(
+                    f"DRIFT  : {', '.join(drift)} changed after being "
+                    "applied -> run would abort"
+                )
             print("dry-run: nothing executed (drop --dry-run to apply)")
             return 2 if drift else 0
 
@@ -175,10 +217,17 @@ def main() -> int:
 
         applied = applied_map(conn)
         todo = [(n, t) for n, t in files if n not in applied]
-        drift = [n for n, t in files if n in applied and applied[n] != checksum(t)]
+        drift = [
+            n for n, t in files if n in applied and applied[n] != checksum(t)
+        ]
         if drift:
-            die("already-applied migrations changed on disk: " + ", ".join(drift)
-                + "\n       add a new migration file instead of editing history", 2)
+            die(
+                "already-applied migrations changed on disk: "
+                + ", ".join(drift)
+                + "\n       add a new migration file instead of "
+                "editing history",
+                2,
+            )
         if not todo:
             print("nothing to do: schema is up to date")
             return 0
@@ -186,13 +235,20 @@ def main() -> int:
         for name, text in todo:
             cs = checksum(text)
             started = time.monotonic()
-            print(f"apply  : {name} ({len(text)} bytes, sha {cs}) ...", end="", flush=True)
+            print(
+                f"apply  : {name} ({len(text)} bytes, sha {cs}) ...",
+                end="",
+                flush=True,
+            )
             try:
                 with conn.cursor() as cur:
-                    cur.execute(text)  # no params -> simple protocol, multi-statement OK
+                    cur.execute(
+                        text
+                    )  # no params -> simple protocol, multi-statement OK
                     elapsed = int((time.monotonic() - started) * 1000)
                     cur.execute(
-                        "INSERT INTO schema_migrations (version, checksum, elapsed_ms) VALUES (%s, %s, %s)",
+                        "INSERT INTO schema_migrations (version, checksum,"
+                        " elapsed_ms) VALUES (%s, %s, %s)",
                         (name, cs, elapsed),
                     )
                 conn.commit()

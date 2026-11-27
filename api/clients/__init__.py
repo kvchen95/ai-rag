@@ -1,4 +1,4 @@
-"""外部依赖客户端。"""
+"""外部依赖客户端。."""
 
 from __future__ import annotations
 

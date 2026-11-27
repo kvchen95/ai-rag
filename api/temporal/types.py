@@ -1,3 +1,5 @@
+"""Module."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -16,7 +18,7 @@ TimeRoleType = TimeRole
 
 @dataclass(frozen=True, slots=True)
 class TemporalScope:
-    """结构化时间范围：文档有效时间与答案目标时间分离。"""
+    """结构化时间范围：文档有效时间与答案目标时间分离。."""
 
     question: str
     document_ranges: tuple[TimeRange, ...] = ()
@@ -27,20 +29,25 @@ class TemporalScope:
 
     @property
     def range(self) -> TimeRange | None:
-        """兼容旧调用方：取第一个文档时间范围。"""
+        """兼容旧调用方：取第一个文档时间范围。."""
         return self.document_ranges[0] if self.document_ranges else None
 
     @property
     def target_time(self) -> str | None:
+        """Run target_time."""
         return self.target_times[0] if self.target_times else None
 
     @property
     def has_window(self) -> bool:
+        """Run has_window."""
         return bool(self.document_ranges)
 
     def as_dict(self) -> dict[str, object]:
+        """Run as_dict."""
         return {
-            "document_ranges": [item.as_dict() for item in self.document_ranges],
+            "document_ranges": [
+                item.as_dict() for item in self.document_ranges
+            ],
             "target_times": list(self.target_times),
             "basis": self.basis,
             "confidence": self.confidence,

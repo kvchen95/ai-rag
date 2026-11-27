@@ -1,4 +1,4 @@
-"""改写词表与放行/禁止表（详细设计.md §6.2）。
+"""改写词表与放行/禁止表（详细设计.md §6.2）。.
 
 §6.2 允许三件事：同义词扩展、缩写展开、口语转书面。
 禁止三件事：放宽条件、引入库外概念、改数字。
@@ -69,14 +69,14 @@ COLLOQUIAL: dict[str, str] = {
 # 每条是 (原文, 不许被替换成)。这些不是"没做"，是"明确不做"：做了就是放宽条件。
 # 断言方式见 `validate_tables()` —— 启动时扫一遍，表里混进这类映射直接抛。
 FORBIDDEN: tuple[tuple[str, str], ...] = (
-    ("上限", "标准"),      # "不能超过" → "参考值"
-    ("最高", "一般"),      # 硬线 → 惯例
+    ("上限", "标准"),  # "不能超过" → "参考值"
+    ("最高", "一般"),  # 硬线 → 惯例
     ("不得", "建议"),
     ("禁止", "不推荐"),
     ("必须", "可以"),
-    ("以内", ""),          # 去掉限定词等于放宽范围
+    ("以内", ""),  # 去掉限定词等于放宽范围
     ("以外", ""),
-    ("不含", ""),          # §6.1：否定句不得反转
+    ("不含", ""),  # §6.1：否定句不得反转
     ("不包括", ""),
     ("除了", ""),
 )
@@ -177,23 +177,35 @@ OUT_OF_SCOPE_MARKERS: tuple[str, ...] = (
 
 
 def validate_tables() -> list[str]:
-    """表自检，返回问题列表（空 = 通过）。
+    """表自检，返回问题列表（空 = 通过）。.
 
     为什么要自检而不是只在测试里查：`FORBIDDEN` 是给人看的反面清单，最容易
     在"顺手加个同义词"时被绕过。把它变成启动时的检查，加错的那一次就炸，
     而不是等到线上答案里出现"500 元左右"。
     """
     problems: list[str] = []
-    tables = {"ACRONYMS": ACRONYMS, "SYNONYMS": SYNONYMS, "COLLOQUIAL": COLLOQUIAL}
+    tables = {
+        "ACRONYMS": ACRONYMS,
+        "SYNONYMS": SYNONYMS,
+        "COLLOQUIAL": COLLOQUIAL,
+    }
     for name, table in tables.items():
         for src, dst in table.items():
             for bad_src, bad_dst in FORBIDDEN:
                 if bad_src in src and (not bad_dst or bad_dst in dst):
-                    problems.append(f"{name}: {src!r}→{dst!r} 命中禁止项 {bad_src!r}→{bad_dst!r}")
+                    problems.append(
+                        f"{name}: {src!r}→{dst!r} 命中禁止项 {bad_src!r}→{bad_dst!r}"
+                    )
             if _has_digit(src) or _has_digit(dst):
-                problems.append(f"{name}: {src!r}→{dst!r} 含数字（§6.2 禁止改数字）")
+                problems.append(
+                    f"{name}: {src!r}→{dst!r} 含数字（§6.2 禁止改数字）"
+                )
     # 同一个左值出现在两张表里，谁先匹配取决于实现细节——那是不可解释的行为。
-    for left, right in (("ACRONYMS", "SYNONYMS"), ("ACRONYMS", "COLLOQUIAL"), ("SYNONYMS", "COLLOQUIAL")):
+    for left, right in (
+        ("ACRONYMS", "SYNONYMS"),
+        ("ACRONYMS", "COLLOQUIAL"),
+        ("SYNONYMS", "COLLOQUIAL"),
+    ):
         overlap = set(tables[left]) & set(tables[right])
         if overlap:
             problems.append(f"{left} 与 {right} 左值重复: {sorted(overlap)}")
@@ -201,4 +213,5 @@ def validate_tables() -> list[str]:
 
 
 def _has_digit(text: str) -> bool:
+    """Run _has_digit."""
     return any(ch.isdigit() for ch in text)

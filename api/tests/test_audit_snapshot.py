@@ -10,14 +10,16 @@ from __future__ import annotations
 
 from typing import Any
 
+from api.query import understand
 from api.retrieval.gate import GateDecision
 from api.retrieval.hybrid import Candidate
 from api.retrieval.pipeline import RetrievalSnapshot
 from api.retrieval.rerank import RerankOutcome
-from api.query import understand
 
 
-def _cand(chunk_id: str, score: float | None, *, dense: float = 0.5) -> Candidate:
+def _cand(
+    chunk_id: str, score: float | None, *, dense: float = 0.5
+) -> Candidate:
     return Candidate(
         chunk_id=chunk_id,
         doc_key="policy/travel",
@@ -32,10 +34,14 @@ def _cand(chunk_id: str, score: float | None, *, dense: float = 0.5) -> Candidat
     )
 
 
-def _snapshot(candidates: list[Candidate], *, degraded: bool = False) -> RetrievalSnapshot:
+def _snapshot(
+    candidates: list[Candidate], *, degraded: bool = False
+) -> RetrievalSnapshot:
     return RetrievalSnapshot(
         plan=understand("住宿标准是多少"),
-        decision=GateDecision(verdict="pass", evidence=tuple(candidates), top1=0.62),
+        decision=GateDecision(
+            verdict="pass", evidence=tuple(candidates), top1=0.62
+        ),
         candidates=candidates,
         filter_json={"must": []},
         dense_count=2,
@@ -74,7 +80,10 @@ def _dict_keys_unique_in_source() -> None:
                 if key.value in seen:
                     duplicates.append(key.value)
                 seen.add(key.value)
-    assert not duplicates, f"score_snapshot 里有重复的字典键（后一个会静默覆盖前一个）: {duplicates}"
+    assert not duplicates, (
+        "score_snapshot 里有重复的字典键（后一个会静默覆盖前一个）: "
+        f"{duplicates}"
+    )
 
 
 def test_score_snapshot_source_has_no_duplicate_keys() -> None:
@@ -91,7 +100,9 @@ def test_score_snapshot_keeps_the_rerank_score_distribution() -> None:
 
 
 def test_degraded_snapshot_records_both_scores_and_the_degrade_reason() -> None:
-    snapshot = _snapshot([_cand("ch_a", None), _cand("ch_b", None)], degraded=True)
+    snapshot = _snapshot(
+        [_cand("ch_a", None), _cand("ch_b", None)], degraded=True
+    )
     audit = snapshot.score_snapshot()
     assert audit["rerank_scores"] == [], "降级时没有分数，不能编造"
     assert audit["rerank"]["degraded"] is True

@@ -1,13 +1,13 @@
-"""摄取流水线：一个待转正版本 -> 一批待入库切片（详细设计.md §3.2–§3.6）。
+"""摄取流水线：一个待转正版本 -> 一批待入库切片（详细设计.md §3.2–§3.6）。.
 
 把前面几层串起来，并且**做三件别处做不了的事**：
 
 1. **chunk_id 一次分配、按阅读顺序**。子片叫 `{version_id}#c{page:03d}{n:03d}`，
    表格 `#t{page:03d}{n:03d}`，图 `#f{page:03d}{n:03d}`。顺序稳定意味着重跑
    同一份文件得到同一批编号——比对两次解析结果时才看得出"有没有变"。
-2. **图的转译与对账在这里被拦住**。`FigureBuilder` 返回失败时这张图**不进切片**，
-   记进 `doc.figure_failures` 与 `ParseOutcome.rejected_figures`。这是验收第二条
-   "图转译数值对不上标失败不入库"的落点。
+2. **图的转译与对账在这里被拦住**。`FigureBuilder` 返回失败时这张图**不进
+   切片**，记进 `doc.figure_failures` 与 `ParseOutcome.rejected_figures`。
+   这是验收第二条"图转译数值对不上标失败不入库"的落点。
 3. **六项随行信息一次补齐**。权限来自调用方（`Acl`），日期来自切片文本 +
    文档级兜底，版本号来自 A1 的 `version_id`，页码/坐标/类型来自区域。
 
@@ -17,12 +17,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from api.parse import chunking as ck
 from api.parse.dates import BusinessDate, document_date, find_date, merge_dates
+from api.parse.figures_transcribe import figure_content_text
 from api.parse.model import (
     DocLayout,
     FigureData,
@@ -33,11 +35,10 @@ from api.parse.model import (
 )
 from api.parse.reader import FigureBuilder, ReaderConfig, read_pdf
 from api.parse.tables import table_content_text
-from api.parse.figures_transcribe import figure_content_text
 
 
 def _region_counts(page: PageLayout) -> dict[str, int]:
-    """一页各类区域的条数，用于验收报告。
+    """一页各类区域的条数，用于验收报告。.
 
     页眉页脚**不在** `regions` 里（它们是行不是区域），但报告必须把它们算进来：
     否则"删了 3 行页眉"会在报告里显示 `header_footer: 0`，验收的人在读到
@@ -53,7 +54,7 @@ def _region_counts(page: PageLayout) -> dict[str, int]:
 
 @dataclass(frozen=True, slots=True)
 class PipelineConfig:
-    """切片参数。默认值就是 §3.5 的口径；改它们要同步改验收用例。"""
+    """切片参数。默认值就是 §3.5 的口径；改它们要同步改验收用例。."""
 
     child_min_chars: int = ck.CHILD_MIN_CHARS
     child_max_chars: int = ck.CHILD_MAX_CHARS
@@ -66,20 +67,22 @@ class PipelineConfig:
 
 @dataclass(slots=True)
 class ParseOutcome:
-    """一次解析的完整结果。`chunks` 已通过六项校验。"""
+    """一次解析的完整结果。`chunks` 已通过六项校验。."""
+
     doc: DocLayout
     chunks: list[ck.Chunk] = field(default_factory=list)
     rejected_figures: list[FigureFailure] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
     def counts(self) -> dict[str, int]:
+        """Run counts."""
         tally: dict[str, int] = {}
         for chunk in self.chunks:
             tally[chunk.chunk_type] = tally.get(chunk.chunk_type, 0) + 1
         return tally
 
     def as_report(self) -> dict[str, Any]:
-        """给接口/脚本的摘要（不含正文）。"""
+        """给接口/脚本的摘要（不含正文）。."""
         return {
             "doc_key": self.doc.doc_key,
             "page_count": self.doc.page_count,
@@ -101,8 +104,12 @@ class ParseOutcome:
         }
 
 
-class MissingAcl(ValueError):
-    """调用方没给权限。默认放行会让每份材料都变成"全公司可见"。"""
+class MissingAclError(ValueError):
+    """调用方没给权限。默认放行会让每份材料都变成"全公司可见"。."""
+
+
+# 旧名保留给既有调用方（worker、测试仍按这个名字导入）。
+MissingAcl = MissingAclError
 
 
 def parse_document(
@@ -117,14 +124,16 @@ def parse_document(
     figure_builder: FigureBuilder | None = None,
     figures_dir: Path | None = None,
 ) -> ParseOutcome:
-    """解析一份 PDF 并切成待入库切片。
+    """解析一份 PDF 并切成待入库切片。.
 
-    `acl` 必须显式给出（`Acl()` 的空 ACL 会让所有切片在入库时被六项校验拦下——
-    这是有意的：解析器不知道业务权限，猜一个"公开"比拒绝入库危险得多）。
+    `acl` 必须显式给出（`Acl()` 的空 ACL 会让所有切片在入库时被六项
+    校验拦下——这是有意的：解析器不知道业务权限，猜一个"公开"比拒绝入库
+    危险得多）。
 
-    `figures_dir` 是图文件的落盘根目录。给了才写图：`figure_builder` 交回字节、
-    这里在**算出 chunk_id 之后**写文件并回填 `image_path`。不给就只在内存里过一遍
-    转译与对账（测试与 dry-run 用），此时图切片仍入库、`image_path` 指向未来的路径。
+    `figures_dir` 是图文件的落盘根目录。给了才写图：`figure_builder` 交回
+    字节、这里在**算出 chunk_id 之后**写文件并回填 `image_path`。不给就只在
+    内存里过一遍转译与对账（测试与 dry-run 用），此时图切片仍入库、
+    `image_path` 指向未来的路径。
     """
     return _parse(
         path,
@@ -151,6 +160,7 @@ def _parse(
     figure_builder: FigureBuilder | None,
     figures_dir: Path | None,
 ) -> ParseOutcome:
+    """Run _parse."""
     config = pipeline_config or PipelineConfig()
     doc = read_pdf(
         path,
@@ -160,17 +170,17 @@ def _parse(
         figure_builder=figure_builder,
     )
     if acl.is_empty():
-        raise MissingAcl(
-            "acl must be explicit: an empty ACL denies everyone, which is never intended"
+        raise MissingAclError(
+            "acl must be explicit: an empty ACL denies everyone, "
+            "which is never intended"
         )
-    outcome = _build_chunks(
+    return _build_chunks(
         doc,
         version_id=version_id,
         acl=acl,
         config=config,
         figures_dir=figures_dir,
     )
-    return outcome
 
 
 def _build_chunks(
@@ -181,6 +191,7 @@ def _build_chunks(
     config: PipelineConfig,
     figures_dir: Path | None,
 ) -> ParseOutcome:
+    """Run _build_chunks."""
     fallback_date = document_date(doc.title, [_first_page_text(doc)])
     outcome = ParseOutcome(doc=doc, rejected_figures=list(doc.figure_failures))
     chunks: list[ck.Chunk] = []
@@ -236,6 +247,7 @@ def _build_chunks(
 
 
 def _first_page_text(doc: DocLayout) -> str:
+    """Run _first_page_text."""
     if not doc.pages:
         return ""
     parts = [
@@ -247,7 +259,7 @@ def _first_page_text(doc: DocLayout) -> str:
 
 
 def _region_text(region: Region) -> str:
-    """区域的纯文本：正文取 text，表格取 md，图取转译原文。"""
+    """区域的纯文本：正文取 text，表格取 md，图取转译原文。."""
     if region.kind is RegionKind.TABLE and region.table is not None:
         return region.table.md
     if region.kind is RegionKind.FIGURE and region.figure is not None:
@@ -269,7 +281,7 @@ def _text_chunks(
     config: PipelineConfig,
     index: int,
 ) -> list[ck.Chunk]:
-    """一个正文区域 -> 一个父片 + 若干子片。
+    """一个正文区域 -> 一个父片 + 若干子片。.
 
     父片与子片**都是这个区域的文本**：父片整段（供模型作答），子片是它的切分
     （供检索命中）。子片 `parent_id` 指向父片（附录 A.3）。
@@ -279,7 +291,9 @@ def _text_chunks(
     """
     bbox = region.bbox(page.space)
     line_bboxes = [page.bbox_for(line.rect) for line in region.lines]
-    parent_id = ck.parent_id_for(version_id, page_num=page.page_num, index=index)
+    parent_id = ck.parent_id_for(
+        version_id, page_num=page.page_num, index=index
+    )
 
     out: list[ck.Chunk] = []
     parent_pieces = (
@@ -313,10 +327,17 @@ def _text_chunks(
             )
         )
 
-    # 子片编号一次算齐：编号是确定性短码（文件系统安全），"第几片"只有切分后才知道。
+    # 子片编号一次算齐：编号是确定性短码（文件系统安全），
+    # "第几片"只有切分后才知道。
     child_count = ck.child_piece_count(region)
     child_ids = [
-        ck.chunk_id_for(version_id, page_num=page.page_num, kind="child", index=index, part=part)
+        ck.chunk_id_for(
+            version_id,
+            page_num=page.page_num,
+            kind="child",
+            index=index,
+            part=part,
+        )
         for part in range(child_count)
     ]
     out.extend(
@@ -336,7 +357,7 @@ def _text_chunks(
 
 
 def _region_notes(region: Region) -> tuple[str, ...]:
-    """把"这段文字是从哪来的"传给切片，让下游能区分 OCR 与文字层。
+    """把"这段文字是从哪来的"传给切片，让下游能区分 OCR 与文字层。.
 
     为什么必须传下去：OCR 有错字（实测 `CNY 500` → `CNY 5o0`），而数值校验与
     引用展示都该知道这条证据的来源。只在 `Line.source` 上标记等于没标记——
@@ -361,6 +382,7 @@ def _table_chunk(
     doc_key: str,
     index: int,
 ) -> ck.Chunk:
+    """Run _table_chunk."""
     table = region.table
     assert table is not None
     caption = _caption_for(region, page)
@@ -400,11 +422,12 @@ def _figure_chunk(
     figures_dir: Path | None,
     warnings: list[str],
 ) -> ck.Chunk | None:
-    """图切片：编号先定、图文件后写（文件名与 `image_path` 用同一个编号）。
+    """图切片：编号先定、图文件后写（文件名与 `image_path` 用同一个编号）。.
 
     `image_bytes` 由 `FigureBuilder` 交回（转译与对账都过了才有字节）。没配
-    `figures_dir` 时不写盘但仍给 `image_path`——那条路径是"将来落盘时它会在这里"，
-    入库的版本要等真正的写盘流程跑过才可见（`figures/` 与 PG 由同一个作业写）。
+    `figures_dir` 时不写盘但仍给 `image_path`——那条路径是"将来落盘时它会
+    在这里"，入库的版本要等真正的写盘流程跑过才可见（`figures/` 与 PG
+    由同一个作业写）。
     """
     figure = region.figure
     if figure is None:
@@ -420,7 +443,9 @@ def _figure_chunk(
             (figures_dir / f"{chunk_id}.webp").write_bytes(image_bytes)
         except OSError as exc:
             # 写图失败就不出这条切片：库里有行、盘上没图 = 角标点开是 404。
-            warnings.append(f"page {page.page_num}: figure write failed ({exc})")
+            warnings.append(
+                f"page {page.page_num}: figure write failed ({exc})"
+            )
             return None
     figure = FigureData(
         image_path=image_path,
@@ -459,7 +484,7 @@ def _figure_chunk(
 
 
 def _caption_for(region: Region, page: PageLayout) -> str | None:
-    """图注/表题：区域上方最近的一行以 `Table`/`Figure`/`表`/`图` 开头的文字。
+    """图注/表题：区域上方最近的一行以 `Table`/`Figure`/`表`/`图` 开头的文字。.
 
     只在同页找，且必须在区域上方（图注在下的情况也有，但那种排版在本期样本里
     没有出现，猜它会把正文第一行当图注）。
@@ -484,7 +509,7 @@ def _caption_for(region: Region, page: PageLayout) -> str | None:
 
 
 def _unit_for(region: Region, page: PageLayout) -> str | None:
-    """表题附近的单位说明，如 "单位：元"。"""
+    """表题附近的单位说明，如 "单位：元"。."""
     best: tuple[float, str] | None = None
     for other in page.regions:
         if other is region or other.kind is not RegionKind.TEXT:
@@ -502,7 +527,7 @@ def _unit_for(region: Region, page: PageLayout) -> str | None:
 
 
 def assign_doc_key(chunks: Iterable[ck.Chunk], doc_key: str) -> list[ck.Chunk]:
-    """把 `doc_key` 补上（`_build_chunks` 里由调用方统一填，避免每处都传）。
+    """把 `doc_key` 补上（`_build_chunks` 里由调用方统一填，避免每处都传）。.
 
     单独一个函数而不是在 `_build_chunks` 内部填，是因为 `Chunk` 是 frozen 的
     数据对象、`doc_key` 属于"归属"而不是"内容"——两者分开，重跑同一版本时
@@ -517,6 +542,7 @@ def assign_doc_key(chunks: Iterable[ck.Chunk], doc_key: str) -> list[ck.Chunk]:
 
 __all__ = [
     "MissingAcl",
+    "MissingAclError",
     "ParseOutcome",
     "PipelineConfig",
     "assign_doc_key",

@@ -60,8 +60,18 @@ def doc_key(name: str) -> str:
 
 
 @pytest.fixture(scope="session")
-def b3_pg(migrated: str) -> PgDatabase:
-    database = PgDatabase(migrated, min_size=1, max_size=4, connect_timeout_s=5)
+def b3_pg(request: pytest.FixtureRequest) -> PgDatabase:
+    """B3 专用的真 PG 连接池，迁移由 a3 的 `migrated` 夹具完成。
+
+    通过 fixture 名取值而不是同名形参：形参会遮蔽上面 import 进来的
+    `migrated`（F811），而那个 import 是让本目录也能发现该夹具的。
+    """
+    database = PgDatabase(
+        request.getfixturevalue("migrated"),
+        min_size=1,
+        max_size=4,
+        connect_timeout_s=5,
+    )
     database.open()
     try:
         yield database
@@ -82,12 +92,26 @@ def _cleanup_b3_rows(pool) -> None:
 def _purge(pool) -> None:
     with pool.connection() as connection:
         with connection.cursor() as cur:
-            cur.execute("DELETE FROM vector_drift_log WHERE doc_key LIKE %s", (f"{NS}/%",))
-            cur.execute("DELETE FROM vector_sync_tasks WHERE doc_key LIKE %s", (f"{NS}/%",))
-            cur.execute("DELETE FROM chunks WHERE doc_key LIKE %s", (f"{NS}/%",))
-            cur.execute("DELETE FROM doc_versions WHERE doc_key LIKE %s", (f"{NS}/%",))
-            cur.execute("DELETE FROM ingest_jobs WHERE doc_key LIKE %s", (f"{NS}/%",))
-            cur.execute("DELETE FROM documents WHERE doc_key LIKE %s", (f"{NS}/%",))
+            cur.execute(
+                "DELETE FROM vector_drift_log WHERE doc_key LIKE %s",
+                (f"{NS}/%",),
+            )
+            cur.execute(
+                "DELETE FROM vector_sync_tasks WHERE doc_key LIKE %s",
+                (f"{NS}/%",),
+            )
+            cur.execute(
+                "DELETE FROM chunks WHERE doc_key LIKE %s", (f"{NS}/%",)
+            )
+            cur.execute(
+                "DELETE FROM doc_versions WHERE doc_key LIKE %s", (f"{NS}/%",)
+            )
+            cur.execute(
+                "DELETE FROM ingest_jobs WHERE doc_key LIKE %s", (f"{NS}/%",)
+            )
+            cur.execute(
+                "DELETE FROM documents WHERE doc_key LIKE %s", (f"{NS}/%",)
+            )
         connection.commit()
 
 
@@ -96,7 +120,9 @@ def rerank_reachable() -> str:
     if not RERANK_URL:
         pytest.skip("RERANK_BASE_URL 未设置（集成需要真精排服务）")
     try:
-        resp = httpx.get(f"{RERANK_URL.rstrip('/')}/health", timeout=5, trust_env=False)
+        resp = httpx.get(
+            f"{RERANK_URL.rstrip('/')}/health", timeout=5, trust_env=False
+        )
         # TEI 的 /health 成功时返回空 body 和 200。
         assert resp.status_code < 400
     except Exception as exc:  # noqa: BLE001
@@ -125,7 +151,10 @@ def reranker(rerank_reachable: str) -> Reranker:
 @pytest.fixture
 def query_embedder(embedder) -> QueryEmbedder:  # noqa: ARG001 - 复用它的 skip 判定
     return QueryEmbedder(
-        base_url=EMBEDDING_URL, model=EMBEDDING_MODEL, dim=DENSE_DIM, timeout_s=30
+        base_url=EMBEDDING_URL,
+        model=EMBEDDING_MODEL,
+        dim=DENSE_DIM,
+        timeout_s=30,
     )
 
 
@@ -149,9 +178,9 @@ def publish(
 
     **不直接用 A3 的 `seed_document()`**：它把 `doc_key` 写成 `a3test/<name>`，
     而 B3 的清理只扫 `b3test/%`。混用会留下 200+ 行残留在 `a3test/` 命名空间里，
-    而 `test_filter_parity` 做的是**全库**对拍（它的 WHERE 里没有 doc_key 条件），
-    于是下一轮跑它就会看到一堆陌生切片并全部报红——实测撞过：11 个 parity 用例
-    一起红，原因全在别人的测试数据上。
+    而 `test_filter_parity` 做的是**全库**对拍（它的 WHERE 里没有 doc_key
+    条件），于是下一轮跑它就会看到一堆陌生切片并全部报红——实测撞过：11 个
+    parity 用例一起红，原因全在别人的测试数据上。
 
     所以这里自己写一份最小的建行逻辑，命名空间跟着 `NS`（= `b3test`）走。
     """
@@ -161,7 +190,8 @@ def publish(
     version_id = version_of(name, tag)
     with conn.cursor() as cur:
         cur.execute(
-            "INSERT INTO documents (doc_key, filename, status) VALUES (%s, %s, 'active') "
+            "INSERT INTO documents (doc_key, filename, status) "
+            "VALUES (%s, %s, 'active') "
             "ON CONFLICT (doc_key) DO UPDATE SET status = 'active'",
             (doc_key(name), f"{name}.pdf"),
         )
@@ -210,13 +240,18 @@ def _insert_chunk(
     with conn.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO chunks (chunk_id, doc_key, version_id, chunk_type, parent_id,
-                                page_num, bbox, content_text, effective_date, effective_year,
-                                date_confidence, is_public, allowed_depts, allowed_roles, status)
-            VALUES (%(chunk_id)s, %(doc_key)s, %(version_id)s, %(chunk_type)s, %(parent_id)s,
-                    %(page_num)s, '[[0.1,0.1,0.9,0.2]]'::jsonb, %(content_text)s,
-                    %(effective_date)s, %(effective_year)s, %(date_confidence)s,
-                    %(is_public)s, %(depts)s, %(roles)s, 'pending')
+            INSERT INTO chunks (
+                chunk_id, doc_key, version_id, chunk_type, parent_id, page_num,
+                bbox, content_text, effective_date, effective_year,
+                date_confidence, is_public, allowed_depts, allowed_roles, status
+            )
+            VALUES (
+                %(chunk_id)s, %(doc_key)s, %(version_id)s, %(chunk_type)s,
+                %(parent_id)s, %(page_num)s, '[[0.1,0.1,0.9,0.2]]'::jsonb,
+                %(content_text)s, %(effective_date)s, %(effective_year)s,
+                %(date_confidence)s, %(is_public)s, %(depts)s, %(roles)s,
+                'pending'
+            )
             """,
             {
                 "chunk_id": chunk_id,
@@ -227,7 +262,9 @@ def _insert_chunk(
                 "page_num": page_num,
                 "content_text": content_text,
                 "effective_date": effective_date,
-                "effective_year": effective_date // 10000 if effective_date else None,
+                "effective_year": effective_date // 10000
+                if effective_date
+                else None,
                 "date_confidence": date_confidence,
                 "is_public": is_public,
                 "depts": allowed_depts or [],
@@ -264,7 +301,10 @@ def make_chunk(
 
 
 def unique(name: str) -> str:
-    """同一份代码里多个用例共用一张表，名字必须唯一（否则 chunk_id 主键冲突）。"""
+    """同一份代码里多个用例共用一张表，名字必须唯一。
+
+    不唯一就撞 chunk_id 主键。
+    """
     return f"{name}_{uuid.uuid4().hex[:6]}"
 
 

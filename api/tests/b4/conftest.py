@@ -16,7 +16,8 @@ bbox 与页码来自 `chunks` 表，而不是测试里编的字面量。
 
 from __future__ import annotations
 
-from typing import Any, Iterator
+from collections.abc import Iterator
+from typing import Any
 
 import pytest
 
@@ -61,7 +62,8 @@ FIN = IdentitySnapshot(user_id="u_fin", depts=("fin",), roles=("staff",))
 class ScriptedLlm(LlmClient):
     """按脚本返回的 `LlmClient` 替身。
 
-    两个方法分开配（生成 / 判别）：判别器的返回要与生成的对上才能验"第五道通过"，
+    两个方法分开配（生成 / 判别）：判别器的返回要与生成的对上才能验
+    "第五道通过"，
     所以脚本必须能分别指定。它记录每次调用的 `temperature`——§9.2 的
     `Temperature = 0` 是硬约束，只有记下来才能断言。
     """
@@ -87,17 +89,18 @@ def b4_pg(b3_pg):  # noqa: F811 - 复用 B3 的真 PG（同一份 schema，同�
 
 
 @pytest.fixture(autouse=True)
-def _cleanup_b4_rows(pool) -> "Iterator[None]":
+def _cleanup_b4_rows(pool) -> Iterator[None]:
     """用例前后清掉 `b3test/` 命名空间里**本次留下的行**。
 
-    为什么 B4 必须自己有一份：B3 的 `_cleanup_b3_rows` 只在 `api/tests/b3/` 目录
-    生效（`conftest.py` 的作用域是目录）。B4 复用 `b3test/` 前缀造数，如果不自己清，
-    残留行会被下一次**全库对拍**的用例（`test_filter_parity` 的 WHERE 里没有
-    doc_key 条件）当成陌生数据，于是那些用例一起报红，而报错信息指向别人的代码。
-    实测撞过：跑完 B4 之后库里有 14 个 `b3test/*` 文档。
+    为什么 B4 必须自己有一份：B3 的 `_cleanup_b3_rows` 只在
+    `api/tests/b3/` 目录生效（`conftest.py` 的作用域是目录）。B4 复用
+    `b3test/` 前缀造数，如果不自己清，残留行会被下一次**全库对拍**的用例
+    （`test_filter_parity` 的 WHERE 里没有 doc_key 条件）当成陌生数据，于是
+    那些用例一起报红，而报错信息指向别人的代码。实测撞过：跑完 B4 之后库里
+    有 14 个 `b3test/*` 文档。
 
-    按前缀清而不是按用例名清：`unique()` 生成的名字带随机后缀，用例自己也不知道
-    下次会叫什么；前缀是唯一稳定的分组依据。
+    按前缀清而不是按用例名清：`unique()` 生成的名字带随机后缀，用例自己也
+    不知道下次会叫什么；前缀是唯一稳定的分组依据。
     """
     _purge(pool)
     try:
@@ -109,12 +112,26 @@ def _cleanup_b4_rows(pool) -> "Iterator[None]":
 def _purge(pool) -> None:
     with pool.connection() as connection:
         with connection.cursor() as cur:
-            cur.execute("DELETE FROM vector_drift_log WHERE doc_key LIKE %s", (f"{NS}/%",))
-            cur.execute("DELETE FROM vector_sync_tasks WHERE doc_key LIKE %s", (f"{NS}/%",))
-            cur.execute("DELETE FROM chunks WHERE doc_key LIKE %s", (f"{NS}/%",))
-            cur.execute("DELETE FROM doc_versions WHERE doc_key LIKE %s", (f"{NS}/%",))
-            cur.execute("DELETE FROM ingest_jobs WHERE doc_key LIKE %s", (f"{NS}/%",))
-            cur.execute("DELETE FROM documents WHERE doc_key LIKE %s", (f"{NS}/%",))
+            cur.execute(
+                "DELETE FROM vector_drift_log WHERE doc_key LIKE %s",
+                (f"{NS}/%",),
+            )
+            cur.execute(
+                "DELETE FROM vector_sync_tasks WHERE doc_key LIKE %s",
+                (f"{NS}/%",),
+            )
+            cur.execute(
+                "DELETE FROM chunks WHERE doc_key LIKE %s", (f"{NS}/%",)
+            )
+            cur.execute(
+                "DELETE FROM doc_versions WHERE doc_key LIKE %s", (f"{NS}/%",)
+            )
+            cur.execute(
+                "DELETE FROM ingest_jobs WHERE doc_key LIKE %s", (f"{NS}/%",)
+            )
+            cur.execute(
+                "DELETE FROM documents WHERE doc_key LIKE %s", (f"{NS}/%",)
+            )
             cur.execute("DELETE FROM qa_log WHERE model = %s", ("scripted",))
         connection.commit()
 

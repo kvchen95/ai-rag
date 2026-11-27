@@ -10,21 +10,31 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, Iterator
+from datetime import UTC
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
 from api.clients.base import Probe
 from api.ingest.decide import Outcome, SkipReason
-from api.ingest.scan import ScanInProgress, ScanItem, ScanReport, SamplesRootMissing
+from api.ingest.scan import (
+    SamplesRootMissing,
+    ScanInProgress,
+    ScanItem,
+    ScanReport,
+)
 from api.main import create_app
 from api.tests.conftest import make_settings
 
 
 class _Pg:
-    """只需要 open/close/ping/session：扫描与查询被替身接管后，路由不会真的读库。"""
+    """只需要 open/close/ping/session。
+
+    扫描与查询被替身接管后，路由不会真的读库。
+    """
 
     def open(self) -> None: ...
     def close(self) -> None: ...
@@ -120,7 +130,10 @@ def test_scan_conflict_is_409_with_contract_error_body(
 def test_scan_missing_samples_dir_is_500_and_says_why(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """ "目录不存在"不能伪装成"扫到 0 个文件"：那会让运维以为一切正常。"""
+    """“目录不存在”不能伪装成“扫到 0 个文件”。
+
+    那会让运维以为一切正常。
+    """
 
     def boom(*_a: object, **_kw: object) -> None:
         raise SamplesRootMissing(__import__("pathlib").Path("/nowhere"))
@@ -133,7 +146,9 @@ def test_scan_missing_samples_dir_is_500_and_says_why(
     assert resp.json()["error"]["code"] == "samples_missing"
 
 
-def test_document_accepts_doc_key_with_slashes(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_document_accepts_doc_key_with_slashes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """`policy/travel-cn` 是路径参数里带斜杠的唯一写法：路由必须用 `:path`。"""
     from api.routers import ingest as ingest_router
 
@@ -156,7 +171,9 @@ def test_document_accepts_doc_key_with_slashes(monkeypatch: pytest.MonkeyPatch) 
         }
 
     _patch_doc(monkeypatch, fake_get_document)
-    monkeypatch.setattr(ingest_router, "latest_job_for_doc", lambda _conn, _key: None)
+    monkeypatch.setattr(
+        ingest_router, "latest_job_for_doc", lambda _conn, _key: None
+    )
     with _client() as client:
         resp = client.get("/api/v1/documents/policy/travel-cn")
 
@@ -188,7 +205,7 @@ def test_document_payload_includes_retry_budget(
     """`retry_budget_left` 是"还要等几轮"的唯一来源，接口必须透出它。"""
 
     class _FakeConn:
-        def __enter__(self) -> "_FakeConn":
+        def __enter__(self) -> _FakeConn:
             return self
 
         def __exit__(self, *_: object) -> None:
@@ -219,10 +236,11 @@ def test_document_payload_includes_retry_budget(
             "active_activated_at": None,
         },
     )
-    from api.routers import ingest as ingest_router
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    now = datetime(2026, 11, 24, tzinfo=timezone.utc)
+    from api.routers import ingest as ingest_router
+
+    now = datetime(2026, 11, 24, tzinfo=UTC)
     monkeypatch.setattr(
         ingest_router,
         "latest_job_for_doc",
@@ -252,8 +270,10 @@ def test_document_payload_includes_retry_budget(
     assert body["last_error"] is None
 
 
-def test_last_error_only_from_failed_job(monkeypatch: pytest.MonkeyPatch) -> None:
-    from datetime import datetime, timezone
+def test_last_error_only_from_failed_job(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from datetime import datetime
 
     from api.routers import ingest as ingest_router
 
@@ -273,7 +293,7 @@ def test_last_error_only_from_failed_job(monkeypatch: pytest.MonkeyPatch) -> Non
             "active_activated_at": None,
         },
     )
-    now = datetime(2026, 11, 24, tzinfo=timezone.utc)
+    now = datetime(2026, 11, 24, tzinfo=UTC)
     monkeypatch.setattr(
         ingest_router,
         "latest_job_for_doc",

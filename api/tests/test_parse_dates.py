@@ -32,10 +32,22 @@ CASES = [
     ("本制度自 2025/3/1 起执行。", 20250301, 2025, "explicit", "斜杠分隔"),
     ("实施日期 2025.03.01", 20250301, 2025, "explicit", "点分隔"),
     ("2025年3月1日生效", 20250301, 2025, "explicit", "中文日期"),
-    ("Effective date: 20250301", 20250301, 2025, "explicit", "紧凑格式 + 英文引导词"),
+    (
+        "Effective date: 20250301",
+        20250301,
+        2025,
+        "explicit",
+        "紧凑格式 + 英文引导词",
+    ),
     ("Issued 2025-03-01", 20250301, 2025, "explicit", "英文引导词"),
     # --- 只有年份 → inferred ---
-    ("Travel Expense Policy (CN) - 2025 revision", None, 2025, "inferred", "标题年份"),
+    (
+        "Travel Expense Policy (CN) - 2025 revision",
+        None,
+        2025,
+        "inferred",
+        "标题年份",
+    ),
     ("Leave Policy - 2025", None, 2025, "inferred", "标题年份（无 revision）"),
     ("2025年度差旅办法", None, 2025, "inferred", "年度"),
     # --- 只有年月 → inferred（故意不当 explicit）---
@@ -62,13 +74,24 @@ def test_explicit_requires_a_lead_word() -> None:
     用途：切片级判定。一段正文里出现的任何日期都不该变成"这批切片的生效时间"，
     只有明说"生效日期：…"的才算（目录里的"发布日期"、注释里的"修订于"都要排除）。
     """
-    assert find_date("2025-03-01 我们开了个会", require_lead=True).effective_date is None
-    assert find_date("生效日期 2025-03-01", require_lead=True).effective_date == 20250301
+    assert (
+        find_date("2025-03-01 我们开了个会", require_lead=True).effective_date
+        is None
+    )
+    assert (
+        find_date("生效日期 2025-03-01", require_lead=True).effective_date
+        == 20250301
+    )
 
 
 def test_document_level_date_does_not_require_a_lead_word() -> None:
     """文档级（标题年份）不需要引导词：`- 2025 revision` 就是这份材料的年份。"""
-    assert document_date("Travel Expense Policy (CN) - 2025 revision").effective_year == 2025
+    assert (
+        document_date(
+            "Travel Expense Policy (CN) - 2025 revision"
+        ).effective_year
+        == 2025
+    )
 
 
 def test_business_date_derives_the_year_from_the_date() -> None:
@@ -123,11 +146,14 @@ def test_merge_prefers_the_slice_level_date() -> None:
 
 
 def test_merge_falls_back_to_the_document_year() -> None:
-    assert merge_dates(EMPTY, BusinessDate(None, 2024, "inferred")).effective_year == 2024
+    assert (
+        merge_dates(EMPTY, BusinessDate(None, 2024, "inferred")).effective_year
+        == 2024
+    )
 
 
 def test_merge_does_not_fabricate_a_full_date() -> None:
-    """"切片有年、文档有日"不能拼成完整日期——那是在造事实。"""
+    """“切片有年、文档有日”不能拼成完整日期——那是在造事实。"""
     slice_level = BusinessDate(None, 2025, "inferred")
     doc_level = BusinessDate(20240301, 2024, "explicit")
     merged = merge_dates(slice_level, doc_level)

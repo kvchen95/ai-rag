@@ -1,14 +1,15 @@
-"""Docling 表格结构化增强：把表格转成结构化信息块并写回解析 JSON。"""
+"""Docling 表格结构化增强：把表格转成结构化信息块并写回解析 JSON。."""
 
 from __future__ import annotations
 
-import re
-from typing import Any, Callable, Iterable
+from collections.abc import Callable
+from typing import Any
 
 TableRunner = Callable[[str], list[dict[str, Any]]]
 
 
 def _default_runner(pdf_path: str) -> list[dict[str, Any]]:
+    """Run _default_runner."""
     from docling.datamodel.base_models import InputFormat
     from docling.datamodel.pipeline_options import PdfPipelineOptions
     from docling.document_converter import DocumentConverter, PdfFormatOption
@@ -38,7 +39,10 @@ def _default_runner(pdf_path: str) -> list[dict[str, Any]]:
     return tables
 
 
-def _context_of(blocks: list[dict[str, Any]], index: int, direction: int) -> str:
+def _context_of(
+    blocks: list[dict[str, Any]], index: int, direction: int
+) -> str:
+    """Run _context_of."""
     cursor = index + direction
     while 0 <= cursor < len(blocks):
         if blocks[cursor].get("type") != "table":
@@ -47,8 +51,10 @@ def _context_of(blocks: list[dict[str, Any]], index: int, direction: int) -> str
     return ""
 
 
-def _match_docling(mineru_tables: list[dict[str, Any]], docling_tables: list[dict[str, Any]]) -> list[dict[str, Any] | None]:
-    """按页号和出现顺序匹配；数量不一致时缺的留 None，不编造。"""
+def _match_docling(
+    mineru_tables: list[dict[str, Any]], docling_tables: list[dict[str, Any]]
+) -> list[dict[str, Any] | None]:
+    """按页号和出现顺序匹配；数量不一致时缺的留 None，不编造。."""
     by_page: dict[int | None, list[dict[str, Any]]] = {}
     for table in docling_tables:
         by_page.setdefault(table.get("page_num"), []).append(table)
@@ -66,15 +72,17 @@ def enhance_tables(
     *,
     runner: TableRunner | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """返回 (增强后的 blocks, docling 表格列表)。"""
+    """返回 (增强后的 blocks, docling 表格列表)。."""
     runner = runner or _default_runner
     docling_tables = runner(pdf_path)
     mineru_tables = [block for block in blocks if block.get("type") == "table"]
 
     matched = _match_docling(mineru_tables, docling_tables)
-    table_positions = [i for i, block in enumerate(blocks) if block.get("type") == "table"]
+    table_positions = [
+        i for i, block in enumerate(blocks) if block.get("type") == "table"
+    ]
 
-    for position, docling in zip(table_positions, matched):
+    for position, docling in zip(table_positions, matched, strict=False):
         block = blocks[position]
         page = (block.get("page_idx") or 0) + 1
         before = _context_of(blocks, position, -1)
@@ -103,4 +111,6 @@ def enhance_tables(
     return blocks, docling_tables
 
 
-__all__ = ["enhance_tables", "result_origin_url"] if False else ["enhance_tables"]
+__all__ = (
+    ["enhance_tables", "result_origin_url"] if False else ["enhance_tables"]
+)

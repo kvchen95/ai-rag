@@ -1,4 +1,4 @@
-"""探查：ACL 的 OR 三支能不能被索引覆盖。
+"""探查：ACL 的 OR 三支能不能被索引覆盖。.
 
 问题是 `is_public OR depts && x OR roles && y` 三支 OR，PG 用 BitmapOr 才能合并
 多个索引；但要能走 BitmapOr，三支必须**都是索引条件**。`is_public` 是布尔列，
@@ -29,32 +29,42 @@ DSN = (os.getenv("DATABASE_URL") or "").replace(
     "postgresql+psycopg://", "postgresql://"
 )
 
-QUERY = """
-SELECT chunk_id FROM chunks AS c
-WHERE status = 'active'
-  AND (is_public OR allowed_depts && '{fin,corp}'::text[] OR allowed_roles && '{staff}'::text[])
-ORDER BY chunk_id
-"""
+QUERY = (
+            "\n"
+            "SELECT chunk_id FROM chunks AS c\n"
+            "WHERE status = 'active'\n"
+            "  AND (is_public OR allowed_depts && '{fin,corp}'::text[] OR "
+            "allowed_roles && '{staff}'::text[])\n"
+            "ORDER BY chunk_id\n"
+        )
 
 TRIALS = [
     ("A 现状", []),
     (
         "B +is_public 部分索引",
-        ["CREATE INDEX ix_tmp_pub ON chunks (is_public) WHERE status = 'active'"],
+        [
+            "CREATE INDEX ix_tmp_pub ON chunks (is_public) WHERE status ="
+            " 'active'"
+        ],
     ),
     (
         "C +depts/roles 部分索引（已有，重建为部分索引）",
         [
-            "CREATE INDEX ix_tmp_depts ON chunks USING gin (allowed_depts) WHERE status = 'active'",
-            "CREATE INDEX ix_tmp_roles ON chunks USING gin (allowed_roles) WHERE status = 'active'",
+            "CREATE INDEX ix_tmp_depts ON chunks USING gin (allowed_depts)"
+            " WHERE status = 'active'",
+            "CREATE INDEX ix_tmp_roles ON chunks USING gin (allowed_roles)"
+            " WHERE status = 'active'",
         ],
     ),
     (
         "D B+C 全套",
         [
-            "CREATE INDEX ix_tmp_pub ON chunks (is_public) WHERE status = 'active'",
-            "CREATE INDEX ix_tmp_depts ON chunks USING gin (allowed_depts) WHERE status = 'active'",
-            "CREATE INDEX ix_tmp_roles ON chunks USING gin (allowed_roles) WHERE status = 'active'",
+            "CREATE INDEX ix_tmp_pub ON chunks (is_public) WHERE status ="
+            " 'active'",
+            "CREATE INDEX ix_tmp_depts ON chunks USING gin (allowed_depts)"
+            " WHERE status = 'active'",
+            "CREATE INDEX ix_tmp_roles ON chunks USING gin (allowed_roles)"
+            " WHERE status = 'active'",
         ],
     ),
 ]
@@ -67,7 +77,9 @@ DROPS = [
 
 
 def plan(conn) -> tuple[str, float, str]:
-    row = conn.execute("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) " + QUERY).fetchone()
+    row = conn.execute(
+        "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) " + QUERY
+    ).fetchone()
     doc = row[0][0]
     root = doc["Plan"]
 
@@ -97,7 +109,10 @@ def main() -> int:
                     cur.execute(sql)
                 cur.execute("ANALYZE chunks")
                 kinds, ms, rows = plan(conn)
-                print(f"{name}\n  节点: {kinds}\n  时间: {ms:.2f}ms  plan_rows: {rows}")
+                print(
+                    f"{name}\n  节点: {kinds}\n"
+                    f"  时间: {ms:.2f}ms  plan_rows: {rows}"
+                )
                 for sql in DROPS:
                     cur.execute(sql)
         print("\n临时索引已全部删除")

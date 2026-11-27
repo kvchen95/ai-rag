@@ -1,9 +1,10 @@
-"""复合问独立门控与聚合；不把强子问题的证据借给弱子问题。"""
+"""复合问独立门控与聚合；不把强子问题的证据借给弱子问题。."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any, Sequence
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from api.retrieval.gate import GateDecision
@@ -12,18 +13,23 @@ from api.temporal.decompose import Decomposition, SubQuestion
 
 @dataclass(frozen=True, slots=True)
 class SubQuestionGate:
+    """SubQuestionGate."""
+
     subquestion: SubQuestion
     snapshot: Any
 
     @property
     def passed(self) -> bool:
+        """Run passed."""
         return self.snapshot.verdict in ("pass", "partial")
 
     @property
     def verdict(self) -> str:
+        """Run verdict."""
         return self.snapshot.verdict
 
     def as_dict(self) -> dict[str, Any]:
+        """Run as_dict."""
         return {
             **self.subquestion.as_dict(),
             "verdict": self.verdict,
@@ -31,13 +37,17 @@ class SubQuestionGate:
             "time_scope": self.snapshot.plan.temporal.as_dict()
             if self.snapshot.plan.temporal is not None
             else self.subquestion.temporal.as_dict(),
-            "evidence_ids": [item.chunk_id for item in self.snapshot.decision.evidence],
+            "evidence_ids": [
+                item.chunk_id for item in self.snapshot.decision.evidence
+            ],
             "filter": self.snapshot.filter_json,
         }
 
 
 @dataclass(frozen=True, slots=True)
 class CompoundGateResult:
+    """CompoundGateResult."""
+
     decomposition: Decomposition
     results: tuple[SubQuestionGate, ...]
     verdict: str
@@ -45,8 +55,10 @@ class CompoundGateResult:
     evidence_ids: tuple[str, ...]
 
     @property
-    def decision(self) -> "GateDecision":
+    def decision(self) -> GateDecision:
+        """Run decision."""
         from api.retrieval.gate import GateDecision
+
         """合成门控出口；证据只来自通过子问题，且按 chunk_id 去重。"""
         if self.verdict in ("pass", "partial"):
             evidence: list[Any] = []
@@ -63,16 +75,24 @@ class CompoundGateResult:
                 reason="复合问各子问题独立门控",
             )
         failed = [result for result in self.results if not result.passed]
-        first = failed[0].snapshot.decision if failed else self.results[0].snapshot.decision
+        first = (
+            failed[0].snapshot.decision
+            if failed
+            else self.results[0].snapshot.decision
+        )
         return replace(
             first,
             verdict=self.verdict,  # type: ignore[arg-type]
             evidence=(),
             uncovered=self.uncovered,
-            reason="；".join(f"{item.subquestion.id}: {item.snapshot.decision.reason}" for item in failed),
+            reason="；".join(
+                f"{item.subquestion.id}: {item.snapshot.decision.reason}"
+                for item in failed
+            ),
         )
 
     def as_audit(self) -> dict[str, Any]:
+        """Run as_audit."""
         return {
             "verdict": self.verdict,
             "decomposition": self.decomposition.as_dict(),
@@ -86,11 +106,18 @@ class CompoundGateResult:
         }
 
 
-def aggregate_gates(decomposition: Decomposition, snapshots: Sequence[Any]) -> CompoundGateResult:
-    """聚合规则：全过 pass；有过有不过 partial；无成功按拒答原因收口。"""
+def aggregate_gates(
+    decomposition: Decomposition, snapshots: Sequence[Any]
+) -> CompoundGateResult:
+    """聚合规则：全过 pass；有过有不过 partial；无成功按拒答原因收口。."""
     if len(snapshots) != len(decomposition.subquestions):
         raise ValueError("子问题与门控结果数量不一致，拒绝聚合")
-    results = tuple(SubQuestionGate(sub, snap) for sub, snap in zip(decomposition.subquestions, snapshots))
+    results = tuple(
+        SubQuestionGate(sub, snap)
+        for sub, snap in zip(
+            decomposition.subquestions, snapshots, strict=False
+        )
+    )
     passed = [item for item in results if item.passed]
     uncovered = tuple(
         item.subquestion.question
@@ -114,10 +141,18 @@ def aggregate_gates(decomposition: Decomposition, snapshots: Sequence[Any]) -> C
             for candidate in item.snapshot.decision.evidence
         )
     )
-    return CompoundGateResult(decomposition, results, verdict, uncovered, evidence_ids)
+    return CompoundGateResult(
+        decomposition, results, verdict, uncovered, evidence_ids
+    )
 
 
 aggregate_compound = aggregate_gates
 aggregate = aggregate_gates
 
-__all__ = ["CompoundGateResult", "SubQuestionGate", "aggregate", "aggregate_compound", "aggregate_gates"]
+__all__ = [
+    "CompoundGateResult",
+    "SubQuestionGate",
+    "aggregate",
+    "aggregate_compound",
+    "aggregate_gates",
+]

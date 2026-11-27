@@ -13,11 +13,10 @@
 
 from __future__ import annotations
 
-
 import pytest
 
 from api.ingest.vectors import EmbeddingError, index_version
-from api.tests.a3.conftest import (  # 只有辅助函数需要 import；fixtures 由 conftest 自动发现
+from api.tests.a3.conftest import (  # 只 import 辅助函数；fixtures 自动发现
     DENSE_DIM,
     chunk_rows,
     doc_key,
@@ -46,27 +45,36 @@ def test_point_carries_dense_and_bm25_together(conn, store, embedder) -> None:
 
     points = store.scroll_version(version_id)
     assert len(points) == 2
-    assert {p["payload"]["chunk_id"] for p in points} == set(chunk_rows(conn, version_id))
+    assert {p["payload"]["chunk_id"] for p in points} == set(
+        chunk_rows(conn, version_id)
+    )
 
-    # with_vector=True 才有向量本身：scroll / retrieve 都只取 payload（对账用不着向量）
+    # with_vector=True 才有向量本身：scroll / retrieve 都只取 payload（对账用不
+    # 着向量）
     resp = store._call(
         "POST",
         f"/collections/{store.collection}/points",
-        {"ids": [p["id"] for p in points], "with_vector": True, "with_payload": True},
+        {
+            "ids": [p["id"] for p in points],
+            "with_vector": True,
+            "with_payload": True,
+        },
     )
     for point in resp["result"]:
         vectors = point["vector"]
-        assert set(vectors) == {DENSE_VECTOR, SPARSE_VECTOR}, (
-            f"point must carry both dense and bm25, got {sorted(vectors)}"
-        )
+        assert set(vectors) == {
+            DENSE_VECTOR,
+            SPARSE_VECTOR,
+        }, f"point must carry both dense and bm25, got {sorted(vectors)}"
         assert len(vectors[DENSE_VECTOR]) == DENSE_DIM
-        # bm25 由服务端推理：存的是 indices/values。indices 为空 = 正文没进词法索引，
+        # bm25 由服务端推理：存的是 indices/values。indices 为空 = 正文没进词法
+        # 索引，
         # 那条切片在关键词路上永远召回不到（静默失效）。
         assert vectors[SPARSE_VECTOR]["indices"], "bm25 sparse vector is empty"
 
 
 def test_payload_has_every_filter_field(conn, store, embedder) -> None:
-    """payload 必须带齐过滤字段。少一个，检索侧就是"静默不匹配"。"""
+    """Payload 必须带齐过滤字段。少一个，检索侧就是"静默不匹配"。"""
     version_id = seed_document(
         conn,
         key="payload",
@@ -91,15 +99,27 @@ def test_payload_has_every_filter_field(conn, store, embedder) -> None:
     (point,) = store.scroll_version(version_id)
     payload = point["payload"]
 
-    # `parent_id` 是唯一允许缺席的字段：只有子片才有父片编号，顶层父片本来就是 NULL。
+    # `parent_id` 是唯一允许缺席的字段：只有子片才有父片编号，顶层父片本来就是
+    # NULL。
     # 其余索引字段缺席就是 bug——检索侧不会报错，只会静默不匹配。
     required = {
-        "chunk_id", "doc_key", "version_id", "chunk_type", "status",
-        "is_public", "allowed_depts", "allowed_roles", "effective_year",
-        "effective_date", "date_confidence", "page_num",
+        "chunk_id",
+        "doc_key",
+        "version_id",
+        "chunk_type",
+        "status",
+        "is_public",
+        "allowed_depts",
+        "allowed_roles",
+        "effective_year",
+        "effective_date",
+        "date_confidence",
+        "page_num",
     }
     missing = required - set(payload)
-    assert not missing, f"payload is missing indexed field(s): {sorted(missing)}"
+    assert (
+        not missing
+    ), f"payload is missing indexed field(s): {sorted(missing)}"
     assert "parent_id" not in payload  # 顶层切片没有父片，不该写个 null 进去
 
     assert payload["status"] == "pending"  # 切片是 pending，点也必须写 pending
@@ -124,7 +144,9 @@ def test_child_chunk_writes_parent_id(conn, store, embedder) -> None:
         chunks=[
             {
                 "chunk_id": "ch_a3test_parent_1",
-                "content_text": "第二章 差旅住宿：住宿费按职级限额，总监 800 元。",
+                "content_text": (
+                    "第二章 差旅住宿：住宿费按职级限额，总监 800 元。"
+                ),
                 "parent_id": None,
                 "is_public": True,
             },
@@ -140,7 +162,10 @@ def test_child_chunk_writes_parent_id(conn, store, embedder) -> None:
     index_version(conn, store, embedder, version_id)
     conn.commit()
 
-    payloads = {p["payload"]["chunk_id"]: p["payload"] for p in store.scroll_version(version_id)}
+    payloads = {
+        p["payload"]["chunk_id"]: p["payload"]
+        for p in store.scroll_version(version_id)
+    }
     assert payloads["ch_a3test_parent_1"].get("parent_id") is None
     assert payloads["ch_a3test_child_1"]["parent_id"] == "ch_a3test_parent_1"
 
@@ -161,7 +186,13 @@ def test_chinese_text_is_segmented_before_bm25(conn, store, embedder) -> None:
         conn,
         key="segment",
         version_tag="v1",
-        chunks=[{"chunk_id": "ch_a3test_seg_1", "content_text": text, "is_public": True}],
+        chunks=[
+            {
+                "chunk_id": "ch_a3test_seg_1",
+                "content_text": text,
+                "is_public": True,
+            }
+        ],
     )
     conn.commit()
     index_version(conn, store, embedder, version_id)
@@ -175,8 +206,8 @@ def test_chinese_text_is_segmented_before_bm25(conn, store, embedder) -> None:
     )
     tokens = len(resp["result"][0]["vector"][SPARSE_VECTOR]["indices"])
     assert tokens > 10, (
-        f"chinese text produced only {tokens} bm25 token(s); "
-        "it must be bigram-segmented before indexing (see qdrant_common.bm25_text)"
+        f"chinese text produced only {tokens} bm25 token(s); it must be "
+        "bigram-segmented before indexing (see qdrant_common.bm25_text)"
     )
 
 
@@ -184,9 +215,10 @@ def test_chinese_text_is_segmented_before_bm25(conn, store, embedder) -> None:
 
 
 def test_both_vectors_recall_the_text(conn, store, embedder) -> None:
-    """dense 与 bm25 各自独立都能召回同一条切片。
+    """Dense 与 bm25 各自独立都能召回同一条切片。
 
-    只断言"字段存在"不够：把 bm25 的 text 传空、或把 dense 写成全零，结构断言照样过。
+    只断言“字段存在”不够：把 bm25 的 text 传空、或把 dense 写成全零，
+    结构断言照样过。
     """
     from scripts.qdrant_common import bm25_vector
 
@@ -220,13 +252,22 @@ def test_both_vectors_recall_the_text(conn, store, embedder) -> None:
     dense_hits = store._call(
         "POST",
         f"/collections/{store.collection}/points/query",
-        {"query": query_vec, "using": "dense", "filter": flt, "limit": 5, "with_payload": True},
+        {
+            "query": query_vec,
+            "using": "dense",
+            "filter": flt,
+            "limit": 5,
+            "with_payload": True,
+        },
     )
-    dense_ids = [p["payload"]["chunk_id"] for p in dense_hits["result"]["points"]]
+    dense_ids = [
+        p["payload"]["chunk_id"] for p in dense_hits["result"]["points"]
+    ]
     assert "ch_a3test_recall_1" in dense_ids
 
-    # 稀疏路：靠字面词命中（"年假"只在第二片里出现）。查询侧也必须过 bm25_vector，
-    # 否则两侧 token 空间对不上（实测 top1 命中率从 3/4 掉到 2/4）。
+    # 稀疏路：靠字面词命中（"年假"只在第二片里出现）。查询侧也必须过
+    # bm25_vector，否则两侧 token 空间对不上（实测 top1 命中率从 3/4 掉到
+    # 2/4）。
     bm25_hits = store._call(
         "POST",
         f"/collections/{store.collection}/points/query",
@@ -254,7 +295,9 @@ def test_dense_is_backfilled_into_pg(conn, store, embedder) -> None:
 
     rows = chunk_rows(conn, version_id)
     for chunk_id, row in rows.items():
-        assert row["embedding_dense"] is not None, f"{chunk_id} has no embedding_dense"
+        assert (
+            row["embedding_dense"] is not None
+        ), f"{chunk_id} has no embedding_dense"
     sample = next(iter(rows.values()))["embedding_dense"]
     assert str(sample).count(",") == DENSE_DIM - 1
 
@@ -280,12 +323,16 @@ def test_reindexing_is_idempotent(conn, store, embedder) -> None:
         ("zero-width space", "\u200b"),
         ("zero-width joiner", "\u200d"),
         ("BOM", "\ufeff"),
-        # "   "（纯空格）不放进来：`ck_chunks_text_nonempty` 用 btrim 判定，它在 DB 层
-        # 就已经被拒，压根到不了写入侧（实测 CheckViolation）。真正漏网的是零宽字符
+        # "   "（纯空格）不放进来：`ck_chunks_text_nonempty` 用 btrim 判定，它在
+        #  DB 层
+        # 就已经被拒，压根到不了写入侧（实测 CheckViolation）。真正漏网的是零宽
+        # 字符
         # ——它们 strip 之后仍然存在，能过 CHECK，所以必须由写入侧挡。
     ],
 )
-def test_unsearchable_text_is_skipped_not_fatal(conn, store, embedder, label, text) -> None:
+def test_unsearchable_text_is_skipped_not_fatal(
+    conn, store, embedder, label, text
+) -> None:
     """没有可检索字符的切片跳过并计数，不让整批失败。
 
     DB 的 `ck_chunks_text_nonempty` 只拦 `btrim` 之后为空——零宽字符能过，而它们
@@ -297,8 +344,16 @@ def test_unsearchable_text_is_skipped_not_fatal(conn, store, embedder, label, te
         key=f"blank{label.replace(' ', '')}",
         version_tag="v1",
         chunks=[
-            {"chunk_id": "ch_a3test_blank_1", "content_text": "正常正文", "is_public": True},
-            {"chunk_id": "ch_a3test_blank_2", "content_text": text, "is_public": True},
+            {
+                "chunk_id": "ch_a3test_blank_1",
+                "content_text": "正常正文",
+                "is_public": True,
+            },
+            {
+                "chunk_id": "ch_a3test_blank_2",
+                "content_text": text,
+                "is_public": True,
+            },
         ],
     )
     conn.commit()
@@ -309,11 +364,14 @@ def test_unsearchable_text_is_skipped_not_fatal(conn, store, embedder, label, te
     assert report.points == 1
     assert [c for c, _ in report.skipped] == ["ch_a3test_blank_2"]
     # `ok` 的定义是"每条切片都进了库"。这里故意不是 ok：跳过的那条在大盘上是个
-    # 需要解释的数字（要么解析产出了垃圾，要么正文清洗出了空片），不能算静默成功。
+    # 需要解释的数字（要么解析产出了垃圾，要么正文清洗出了空片），不能算
+    # 静默成功。
     assert not report.ok
 
 
-def test_embedding_dim_mismatch_is_rejected_before_writing(conn, store, embedder) -> None:
+def test_embedding_dim_mismatch_is_rejected_before_writing(
+    conn, store, embedder
+) -> None:
     """维度与配置不一致必须在写前炸掉，不能把坏向量写进库。"""
     from api.ingest.vectors import Embedder as EmbedderCls
 

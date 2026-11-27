@@ -33,7 +33,11 @@ EXTENSIONS = {
     ErrorCode.NOT_FOUND: (404, "未找到该文档", AlertPolicy.NONE),
     ErrorCode.SCAN_IN_PROGRESS: (409, "扫描正在进行中", AlertPolicy.BURST),
     ErrorCode.SAMPLES_MISSING: (500, "稍后重试", AlertPolicy.ALWAYS),
-    ErrorCode.VERSION_CONFLICT: (409, "该版本状态已变更，请刷新后重试", AlertPolicy.BURST),
+    ErrorCode.VERSION_CONFLICT: (
+        409,
+        "该版本状态已变更，请刷新后重试",
+        AlertPolicy.BURST,
+    ),
 }
 
 
@@ -78,7 +82,9 @@ def test_every_error_code_is_registered_in_a_table() -> None:
     都在某张表里"。加码时忘了登记，这里会红并点名是哪个。
     """
     unregistered = set(ErrorCode) - set(EXPECTED) - set(EXTENSIONS)
-    assert not unregistered, f"未登记错误码: {sorted(c.value for c in unregistered)}"
+    assert (
+        not unregistered
+    ), f"未登记错误码: {sorted(c.value for c in unregistered)}"
 
 
 def test_sse_fallback_flag_only_on_streamable_codes() -> None:
@@ -97,7 +103,8 @@ def test_sse_fallback_flag_only_on_streamable_codes() -> None:
 def test_app_error_maps_status_and_hides_detail() -> None:
     def boom() -> None:
         raise AppError(
-            ErrorCode.FORBIDDEN, detail="dept fin not allowed for doc policy/travel-cn"
+            ErrorCode.FORBIDDEN,
+            detail="dept fin not allowed for doc policy/travel-cn",
         )
 
     with _client_with_routes(("/boom", boom)) as client:

@@ -1,8 +1,9 @@
-"""答案侧切分：把草稿拆成"可校验的句子"。
+r"""答案侧切分：把草稿拆成"可校验的句子"。.
 
-§10.1 第二道要求"按 `claims` 逐条看"，§10.1 第五道要求"草稿里同一件事不能出现两个数"。
-两句都隐含同一件事：**校验单位是句子**。而 `claims` 不一定覆盖整段 answer——
-模型完全可能写了五句、只给了两条 claim（那正是第二道要抓的情形之一）。
+§10.1 第二道要求"按 `claims` 逐条看"，§10.1 第五道要求"草稿里同一件事不能
+出现两个数"。两句都隐含同一件事：**校验单位是句子**。而 `claims` 不一定覆盖
+整段 answer——模型完全可能写了五句、只给了两条 claim（那正是第二道要抓的
+情形之一）。
 
 所以这里有两条路，且必须两条都走：
 
@@ -33,21 +34,23 @@ _CITATION = re.compile(r"[\[［]\s*(\d+(?:\s*[,，、]\s*\d+)*)\s*[\]］]")
 
 @dataclass(frozen=True, slots=True)
 class Sentence:
-    """一句可校验的话。"""
+    """一句可校验的话。."""
 
     text: str
     # 这一句里出现的引用编号（去重、保持出现顺序）。
     citations: tuple[int, ...]
-    # 去掉角标后的纯文本：数字与专名校验要在它上面做（`[1]` 里的 1 不是数字证据）。
+    # 去掉角标后的纯文本：数字与专名校验要在它上面做（`[1]` 里的 1 不是数字证
+    # 据）。
     bare: str
 
     @property
     def empty(self) -> bool:
+        """Run empty."""
         return not self.bare.strip()
 
 
 def parse_citations(text: str) -> tuple[int, ...]:
-    """抽出一段文本里的全部角标编号。"""
+    """抽出一段文本里的全部角标编号。."""
     found: list[int] = []
     for match in _CITATION.finditer(text or ""):
         for part in re.split(r"[,，、]", match.group(1)):
@@ -60,11 +63,12 @@ def parse_citations(text: str) -> tuple[int, ...]:
 
 
 def strip_citations(text: str) -> str:
+    """Run strip_citations."""
     return _CITATION.sub("", text or "")
 
 
 def split_sentences(text: str) -> tuple[str, ...]:
-    """按句末标点切句，保留标点，跳过空句。
+    """按句末标点切句，保留标点，跳过空句。.
 
     不用 `re.split` 直接切是因为那样会丢掉标点，而"这一句到底说了什么"在
     报告里要能原样引用给用户看。这里手工扫描，边界后把标点并回前一句。
@@ -95,7 +99,7 @@ def split_sentences(text: str) -> tuple[str, ...]:
 
 
 def to_sentences(text: str) -> tuple[Sentence, ...]:
-    """把一段草稿切成可校验的句子集合。
+    """把一段草稿切成可校验的句子集合。.
 
     模型偶尔会把引用写成“事实句。[6]”。这种独立角标不是一句事实，必须合并回
     上一句，否则事实句没有引用、角标自己又是空句，第二道校验会假红。
@@ -108,7 +112,9 @@ def to_sentences(text: str) -> tuple[Sentence, ...]:
             previous = sentences[-1]
             sentences[-1] = Sentence(
                 text=previous.text + piece,
-                citations=tuple(dict.fromkeys((*previous.citations, *citations))),
+                citations=tuple(
+                    dict.fromkeys((*previous.citations, *citations))
+                ),
                 bare=previous.bare,
             )
             continue
@@ -117,9 +123,9 @@ def to_sentences(text: str) -> tuple[Sentence, ...]:
 
 
 def merge_claim_sentences(
-    answer: str, claims: "tuple[str, ...] | list[str] | None" = None
+    answer: str, claims: tuple[str, ...] | list[str] | None = None
 ) -> tuple[Sentence, ...]:
-    """answer 的句子 ∪ 不与任何句子重合的 claim（见模块头两条路）。
+    """Answer 的句子 ∪ 不与任何句子重合的 claim（见模块头两条路）。.
 
     重合判定用"去掉角标与空白后的子串关系"：claim 是某句的一部分时它已经被那一句
     覆盖了，再单独列一次会让同一个失败被报两遍，而报告条数是给人看的。
@@ -133,13 +139,21 @@ def merge_claim_sentences(
     for claim in claims or ():
         bare = strip_citations(claim).strip()
         if not bare:
-            primary.append(Sentence(text=claim.strip(), citations=parse_citations(claim), bare=""))
+            primary.append(
+                Sentence(
+                    text=claim.strip(),
+                    citations=parse_citations(claim),
+                    bare="",
+                )
+            )
             continue
         needle = bare.replace(" ", "")
         if any(needle in hay or hay in needle for hay in covered):
             continue
         primary.append(
-            Sentence(text=claim.strip(), citations=parse_citations(claim), bare=bare)
+            Sentence(
+                text=claim.strip(), citations=parse_citations(claim), bare=bare
+            )
         )
         covered.append(needle)
     return tuple(primary)

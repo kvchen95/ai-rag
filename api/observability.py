@@ -1,4 +1,4 @@
-"""日志与请求上下文。
+"""日志与请求上下文。.
 
 输出结构化作一行的 JSON：机器能 grep，人也能读。
 请求上下文只放 request_id，业务字段由调用方显式给，不靠拆字符串。
@@ -20,16 +20,20 @@ request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
 
 
 class JsonFormatter(logging.Formatter):
-    """一行一条 JSON，字段固定，附 request_id 与 exc 文本。"""
+    """一行一条 JSON，字段固定，附 request_id 与 exc 文本。."""
 
     def __init__(self, *, service: str, env: str) -> None:
+        """Initialize the instance."""
         super().__init__()
         self.service = service
         self.env = env
 
     def format(self, record: logging.LogRecord) -> str:
+        """Run format."""
         payload: dict[str, Any] = {
-            "ts": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(record.created))
+            "ts": time.strftime(
+                "%Y-%m-%dT%H:%M:%S", time.localtime(record.created)
+            )
             + f".{int(record.msecs):03d}",
             "level": record.levelname,
             "logger": record.name,
@@ -49,7 +53,7 @@ class JsonFormatter(logging.Formatter):
 def configure_logging(
     *, level: str = "INFO", service: str = "ai-rag-api", env: str = "dev"
 ) -> None:
-    """幂等：重复调用只换级别，不叠加 handler（否则一条日志打三遍）。"""
+    """幂等：重复调用只换级别，不叠加 handler（否则一条日志打三遍）。."""
     root = logging.getLogger()
     handler = next(
         (h for h in root.handlers if getattr(h, "_ai_rag_json", False)), None
@@ -62,7 +66,8 @@ def configure_logging(
     else:
         handler.setFormatter(JsonFormatter(service=service, env=env))
     root.setLevel(level.upper())
-    # uvicorn 自带的 access log 是文本行，与我们的 JSON 访问日志重复，关掉避免双写。
+    # uvicorn 自带的 access log 是文本行，与我们的 JSON 访问日志重复，
+    # 关掉避免双写。
     logging.getLogger("uvicorn.access").disabled = True
     logging.getLogger("uvicorn.error").setLevel(level.upper())
     # 出站 HTTP 的每请求日志由我们自己的访问日志覆盖；healthz 每 15 秒探一次
@@ -74,20 +79,31 @@ def configure_logging(
 
 
 def get_logger(name: str) -> logging.Logger:
+    """Run get_logger."""
     return logging.getLogger(name)
 
 
 def log_event(
-    logger: logging.Logger, event: str, /, *, level: int = logging.INFO, **fields: Any
+    logger: logging.Logger,
+    event: str,
+    /,
+    *,
+    level: int = logging.INFO,
+    **fields: Any,
 ) -> None:
-    """结构化打点：event 是稳定字符串，字段随事件走。"""
+    """结构化打点：event 是稳定字符串，字段随事件走。."""
     logger.log(level, event, extra={"fields": fields})
 
 
 def log_exception(
-    logger: logging.Logger, event: str, /, *, level: int = logging.ERROR, **fields: Any
+    logger: logging.Logger,
+    event: str,
+    /,
+    *,
+    level: int = logging.ERROR,
+    **fields: Any,
 ) -> None:
-    """结构化打点 + 当前异常栈。
+    """结构化打点 + 当前异常栈。.
 
     `logger.exception` 不接受 `extra={"fields": ...}`，它的字段会被吞掉——
     需要"错误栈 + 结构化字段"时用这个，别退化成 f-string 拼进消息。
@@ -96,7 +112,10 @@ def log_exception(
 
 
 def extract_request_id(headers: list[tuple[bytes, bytes]]) -> str | None:
-    """从入站请求头取 trace id；支持 X-Request-Id / X-Trace-Id / W3C traceparent。"""
+    """从入站请求头取 trace id。.
+
+    支持 X-Request-Id / X-Trace-Id / W3C traceparent。
+    """
     for raw_key, raw_value in headers:
         key = raw_key.decode("latin-1").lower()
         if key not in _INCOMING_HEADERS:

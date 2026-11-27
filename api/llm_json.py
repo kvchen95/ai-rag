@@ -1,4 +1,4 @@
-"""OpenAI 兼容模型输出里的 JSON 对象提取。"""
+"""OpenAI 兼容模型输出里的 JSON 对象提取。."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any
 
 
 def parse_json_object(content: str) -> dict[str, Any] | None:
-    """从模型文本中提取第一个 JSON 对象；失败返回 None。
+    """从模型文本中提取第一个 JSON 对象；失败返回 None。.
 
     模型可能包代码围栏或前后说明，这里只做宽松定位，不猜测字段。
     """

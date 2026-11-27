@@ -3,11 +3,12 @@
 Counts final failures (after keep-alive pool + bounded retry). Prints latency,
 retry usage, and failure kinds. Never prints the API key.
 """
+
+import collections
 import os
 import time
-import collections
 
-from api.generate.llm import LlmClient, GenerationUnavailable
+from api.generate.llm import GenerationUnavailable, LlmClient
 
 client = LlmClient(
     base_url=os.environ["LLM_BASE_URL"],
@@ -23,7 +24,7 @@ fails = collections.Counter()
 lat = []
 ok = 0
 t0 = time.monotonic()
-for i in range(N):
+for _i in range(N):
     t = time.monotonic()
     try:
         out = client.complete([{"role": "user", "content": "ping"}])
@@ -31,7 +32,13 @@ for i in range(N):
     except GenerationUnavailable as exc:
         fails[f"{str(exc)[:80]}"] += 1
     lat.append(time.monotonic() - t)
-print(f"client=LlmClient(max_attempts={client.max_attempts}) calls={N} ok={ok} final_fail={N-ok} elapsed={time.monotonic()-t0:.1f}s")
-print(f"latency min/median/max = {min(lat):.2f}/{sorted(lat)[N//2]:.2f}/{max(lat):.2f}s")
+print(
+    f"client=LlmClient(max_attempts={client.max_attempts}) calls={N} "
+    f"ok={ok} final_fail={N-ok} elapsed={time.monotonic()-t0:.1f}s"
+)
+print(
+    "latency min/median/max = "
+    f"{min(lat):.2f}/{sorted(lat)[N//2]:.2f}/{max(lat):.2f}s"
+)
 for k, v in fails.most_common():
     print(f"  FINAL-FAIL x{v}: {k}")

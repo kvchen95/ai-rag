@@ -5,6 +5,7 @@ ENV_FILE := $(if $(wildcard .env),.env,.env.example)
 COMPOSE := $(DOCKER) compose --env-file $(ENV_FILE) -f infra/docker-compose.yml
 CORE_SERVICES := postgres qdrant api worker ingest-worker web
 MODEL_SERVICES := embedding rerank
+RUFF ?= uv run --offline --with ruff==0.8.6 ruff
 
 # api 测试镜像（Dockerfile 的 dev stage，装了 pytest）与集成测试用的 PG 地址
 API_DEV_IMAGE := ai-rag-api:dev
@@ -17,7 +18,7 @@ API_TEST_NETWORK ?= ai-rag_default
 API_TEST_DSN ?= postgresql+psycopg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)
 
 .DEFAULT_GOAL := help
-.PHONY: help dev up up-models down logs trace ps build pull config health wait reset qdrant-init psql smoke web-build prints-env parse-one parse-resume test-api test-api-db api-dev-image db-migrate db-status index-rebuild index-rebuild-dry samples scan doc verify-scan-api promote rollback vector-sync reconcile reconcile-dry reclaim reclaim-dry ingest-status verify-a3 verify-a3-api verify-a3-migration test-a3 test-a3-vectors test-a3-flip test-a3-sync samples-layout verify-parse a2-mutation test-a2 test-b4-logic test-b4 verify-b4 b4-mutation promote-all eval eval-trap test pending ingest-once ingest-worker
+.PHONY: help dev up up-models down logs trace ps build pull config health wait reset qdrant-init psql smoke web-build prints-env parse-one parse-resume test-api test-api-db api-dev-image db-migrate db-status index-rebuild index-rebuild-dry samples scan doc verify-scan-api promote rollback vector-sync reconcile reconcile-dry reclaim reclaim-dry ingest-status verify-a3 verify-a3-api verify-a3-migration test-a3 test-a3-vectors test-a3-flip test-a3-sync samples-layout verify-parse a2-mutation test-a2 test-b4-logic test-b4 verify-b4 b4-mutation promote-all eval eval-trap invariants invariants-all lint-google lint-google-all test
 
 help:
 	@echo "ai-rag local dev — targets"
@@ -73,6 +74,10 @@ help:
 	@echo ""
 	@echo "  make test-api    # 跑 api/tests（单元用例；读 PG 的集成用例自动跳过）"
 	@echo "  make test-api-db # 同上，且把宿主 PG 指给集成用例（host.docker.internal）"
+	@echo "  make invariants  # 全仓全量检查工程不变量"
+	@echo "  make invariants-all # 同上，兼容旧命令"
+	@echo "  make lint-google # Google Style 全仓检查"
+	@echo "  make lint-google-all # 同上，兼容旧命令"
 	@echo ""
 	@echo "Using env file: $(ENV_FILE)"
 
@@ -276,6 +281,20 @@ eval:
 # 只看陷阱题（改门控后最快的回归）。
 eval-trap:
 	@$(COMPOSE) exec -T api python eval/run_eval.py --category trap
+
+# 系统级不变量门禁：全仓全量，不做 diff 过滤。
+invariants:
+	@python3 scripts/check_invariants.py --all; a=$$?; \
+	 python3 scripts/check_source_language.py --all; b=$$?; \
+	 exit $$((a || b))
+
+invariants-all: invariants
+
+# Google Python Style profile: full repository, no diff filtering.
+lint-google:
+	@$(RUFF) check . --config ruff.toml
+
+lint-google-all: lint-google
 
 # 后端全量测试（容器内跑，依赖齐全）。
 test:

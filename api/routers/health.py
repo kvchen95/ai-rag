@@ -1,4 +1,4 @@
-"""健康检查。
+"""健康检查。.
 
 `/healthz` 回答"依赖通不通"，且必须能区分是哪一个坏了：
 - 全部通 → 200 status=ok
@@ -28,8 +28,11 @@ logger = get_logger("api.health")
 
 
 def _failed(probe: BaseException) -> Probe:
-    """gather(return_exceptions=True) 兜底：探针自己崩了也要变成一条 check，
-    否则 /healthz 会 500，而 500 恰恰是最不区分故障的那种回答。"""
+    """把崩溃的探针变成一条失败的 check。.
+
+    gather(return_exceptions=True) 兜底：探针自己崩了也要变成一条
+    check，否则 /healthz 会 500，而 500 恰恰是最不区分故障的那种回答。
+    """
     return Probe(
         ok=False,
         latency_ms=0.0,
@@ -39,6 +42,7 @@ def _failed(probe: BaseException) -> Probe:
 
 @router.get("/healthz")
 async def healthz(request: Request) -> JSONResponse:
+    """Run healthz."""
     state = request.app.state
     settings = state.settings
     timeout_s = settings.health_probe_timeout_s
@@ -50,7 +54,9 @@ async def healthz(request: Request) -> JSONResponse:
     )
     checks: dict[str, Any] = {
         "postgres": (
-            _failed(pg_probe) if isinstance(pg_probe, BaseException) else pg_probe
+            _failed(pg_probe)
+            if isinstance(pg_probe, BaseException)
+            else pg_probe
         ).as_dict(),
         "qdrant": (
             _failed(qdrant_probe)
@@ -72,8 +78,9 @@ async def healthz(request: Request) -> JSONResponse:
         body["config"] = settings.public_config()
         # 摄取侧指纹：样本目录、重试上限、扫描锁 key。
         #
-        # 锁 key 也在这里报，是为了让"验证并发 409"的脚本（scripts/verify_scan_api.py）
-        # 不必把数值抄一份——抄了之后改 key 不会红，脚本只会静静失去测并发的能力。
+        # 锁 key 也在这里报，是为了让"验证并发 409"的脚本
+        # （scripts/verify_scan_api.py）不必把数值抄一份——抄了之后改
+        # key 不会红，脚本只会静静失去测并发的能力。
         body["ingest"] = settings.public_ingest_config()
     if not ok:
         log_event(
@@ -87,6 +94,7 @@ async def healthz(request: Request) -> JSONResponse:
 
 @router.get("/livez")
 async def livez(request: Request) -> dict[str, Any]:
+    """Run livez."""
     return {
         "status": "ok",
         "service": request.app.state.settings.service_name,

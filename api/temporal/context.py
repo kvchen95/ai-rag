@@ -1,4 +1,4 @@
-"""把时序事实转成生成层可引用的证据块。
+"""把时序事实转成生成层可引用的证据块。.
 
 图里的值是结构化事实，但仍必须落到原文片段：同一切片的多期事实合并成一条证据，
 避免同一张表出现多个角标。取不到原文的图事实不进入证据包。
@@ -22,11 +22,14 @@ def temporal_evidence(
     *,
     start_n: int,
 ) -> tuple[Evidence, ...]:
+    """Run temporal_evidence."""
     facts = [
         fact
         for metric in query.all_metrics
         for fact in (
-            graph.at(query.subject, metric, query.period_start, query.period_end),
+            graph.at(
+                query.subject, metric, query.period_start, query.period_end
+            ),
             graph.at(query.subject, metric, query.prior_start, query.prior_end),
         )
         if fact is not None
@@ -46,7 +49,8 @@ def temporal_evidence(
         if chunk is None:
             continue
         lines = [
-            f"{item.metric}（{item.period_start} 至 {item.period_end}）：{item.value} {item.unit}"
+            f"{item.metric}（{item.period_start} 至 "
+            f"{item.period_end}）：{item.value} {item.unit}"
             for item in items
         ]
         out.append(
@@ -68,8 +72,10 @@ def temporal_evidence(
     return tuple(replace(item, n=start_n + i) for i, item in enumerate(out))
 
 
-def merge_evidence(pack: EvidencePack, extra: tuple[Evidence, ...]) -> EvidencePack:
-    """把图证据追加到证据包，按已有编号续号；同 chunk 不重复。"""
+def merge_evidence(
+    pack: EvidencePack, extra: tuple[Evidence, ...]
+) -> EvidencePack:
+    """把图证据追加到证据包，按已有编号续号；同 chunk 不重复。."""
     if not extra:
         return pack
     existing = {item.chunk_id for item in pack.items}
@@ -77,7 +83,9 @@ def merge_evidence(pack: EvidencePack, extra: tuple[Evidence, ...]) -> EvidenceP
     if not fresh:
         return pack
     start = len(pack.items) + 1
-    items = pack.items + tuple(replace(item, n=start + i) for i, item in enumerate(fresh))
+    items = pack.items + tuple(
+        replace(item, n=start + i) for i, item in enumerate(fresh)
+    )
     used = pack.used_chars + sum(len(item.text) + 80 + 8 for item in fresh)
     return replace(pack, items=items, used_chars=used, truncated=pack.truncated)
 

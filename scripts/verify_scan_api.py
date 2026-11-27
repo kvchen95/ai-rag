@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
-"""实测扫描接口（真 HTTP、真 PG）。
+"""实测扫描接口（真 HTTP、真 PG）。.
 
 为什么不能只靠 TestClient：
 
 - **409 的并发是跨进程的**。TestClient + 替身只能证明"锁拿不到时抛异常"，
-  证明不了"另一个进程持锁时我这边真的拿不到"。这里起真实 HTTP 请求，并在
-  **另一个 OS 进程**里持 advisory lock 来模拟"另一个扫描进程"。
+证明不了"另一个进程持锁时我这边真的拿不到"。这里起真实 HTTP 请求，并在
+**另一个 OS 进程**里持 advisory lock 来模拟"另一个扫描进程"。
 - **`doc_key` 带斜杠**要过 uvicorn 的路由层，TestClient 也证明不了这一点。
 - **响应的 JSON 形状**要经过真实序列化（datetime、Decimal 之类会在这一步炸）。
 
 用法（宿主侧，psycopg 可选；没有就退回 `docker exec psql` 持锁）：
 
-    python3 scripts/verify_scan_api.py                       # http://127.0.0.1:8000
-    python3 scripts/verify_scan_api.py --base-url http://127.0.0.1:5173/api
-    python3 scripts/verify_scan_api.py --dsn postgresql://...
+python3 scripts/verify_scan_api.py                       # http:
+//127.0.0.1:8000 python3 scripts/verify_scan_api.py --base-url http:
+//127.0.0.1:5173/api python3 scripts/verify_scan_api.py --dsn postgresql:
+//...
 
 退出码 0 = 全部符合预期；非 0 说明契约破了，输出里会写出期望与实际。
 锁 key 从 `/healthz` 的 `ingest.scan_lock_key` 读（只在非生产返回），不抄数值
@@ -55,13 +56,14 @@ def read_lock_key(base_url: str) -> tuple[int | None, str]:
     if key is None:
         return (
             None,
-            "healthz has no ingest.scan_lock_key (APP_ENV=prod? or older build)",
+            "healthz has no ingest.scan_lock_key (APP_ENV=prod? or older"
+            " build)",
         )
     return int(key), "ok"
 
 
 def hold_lock(dsn: str | None, key: int) -> tuple[subprocess.Popen[str], str]:
-    """在独立进程里持锁 60 秒，返回 (进程, 用的方式)。"""
+    """在独立进程里持锁 60 秒，返回 (进程, 用的方式)。."""
     if dsn:
         code = (
             "import psycopg,time\n"
@@ -100,10 +102,16 @@ def hold_lock(dsn: str | None, key: int) -> tuple[subprocess.Popen[str], str]:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="verify /api/v1/ingest/scan contract")
+    ap = argparse.ArgumentParser(
+        description="verify /api/v1/ingest/scan contract"
+    )
     ap.add_argument("--base-url", default="http://127.0.0.1:8000")
-    ap.add_argument("--dsn", default=None, help="PG DSN for holding the scan lock")
-    ap.add_argument("--skip-conflict", action="store_true", help="跳过 409 并发检查")
+    ap.add_argument(
+        "--dsn", default=None, help="PG DSN for holding the scan lock"
+    )
+    ap.add_argument(
+        "--skip-conflict", action="store_true", help="跳过 409 并发检查"
+    )
     args = ap.parse_args()
     base = args.base_url.rstrip("/")
 
@@ -120,7 +128,8 @@ def main() -> int:
 
     print(f"target: {base}\n")
 
-    # --- 1. 扫描：四个计数、失败为 0、doc_key 归一化 ---------------------------
+    # --- 1. 扫描：四个计数、失败为 0、doc_key 归一化
+    # ---------------------------
     status, body = call(base, "/api/v1/ingest/scan", "POST")
     check(
         "POST /api/v1/ingest/scan -> 200",
@@ -134,10 +143,13 @@ def main() -> int:
             required <= set(body),
             f"missing={sorted(required - set(body))}",
         )
+        failures = [
+            i for i in body.get("items", []) if i.get("outcome") == "fail"
+        ]
         check(
             "no file failed",
             body.get("failed") == 0,
-            f"failed={body.get('failed')} {[i for i in body.get('items', []) if i.get('outcome') == 'fail']}",
+            f"failed={body.get('failed')} {failures}",
         )
         docs = {item["doc_key"] for item in body.get("items", [])}
         check(
@@ -150,7 +162,9 @@ def main() -> int:
     status2, body2 = call(base, "/api/v1/ingest/scan", "POST")
     check("second scan -> 200", status2 == 200, f"status={status2}")
     if status2 == 200:
-        counts = {k: body2.get(k) for k in ("added", "changed", "skipped", "failed")}
+        counts = {
+            k: body2.get(k) for k in ("added", "changed", "skipped", "failed")
+        }
         check(
             "rescan adds/changes/fails nothing",
             counts == {**counts, "added": 0, "changed": 0, "failed": 0},
@@ -181,7 +195,11 @@ def main() -> int:
             "latest_job",
             "last_error",
         ):
-            check(f"document payload has {field}", field in doc, f"keys={sorted(doc)}")
+            check(
+                f"document payload has {field}",
+                field in doc,
+                f"keys={sorted(doc)}",
+            )
         check(
             "doc_key echoed verbatim",
             doc.get("doc_key") == "policy/travel-cn",
@@ -190,11 +208,13 @@ def main() -> int:
         job = doc.get("latest_job") or {}
         check(
             "latest_job present with retry accounting",
-            {"job_id", "status", "retry_count", "retry_budget_left"} <= set(job),
+            {"job_id", "status", "retry_count", "retry_budget_left"}
+            <= set(job),
             f"job={job}",
         )
 
-    # --- 4. 404：契约错误体 ----------------------------------------------------
+    # --- 4. 404：契约错误体
+    # ----------------------------------------------------
     status4, err = call(base, "/api/v1/documents/policy/does-not-exist")
     check("unknown doc_key -> 404", status4 == 404, f"status={status4}")
     error = err.get("error") or {}
@@ -204,7 +224,8 @@ def main() -> int:
         f"body={err}",
     )
 
-    # --- 5. 409：另一个进程持锁 ------------------------------------------------
+    # --- 5. 409：另一个进程持锁
+    # ------------------------------------------------
     if args.skip_conflict:
         unverified.append("concurrent scan -> 409 (--skip-conflict)")
     else:
@@ -248,7 +269,8 @@ def main() -> int:
         print(f"FAILED: {len(failures)} check(s): {failures}")
         return 1
     print(
-        "ALL CHECKS PASSED" + (" (with unverified items above)" if unverified else "")
+        "ALL CHECKS PASSED"
+        + (" (with unverified items above)" if unverified else "")
     )
     return 0
 

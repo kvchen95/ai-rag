@@ -1,4 +1,4 @@
-"""Query 理解（详细设计.md §6）。
+"""Query 理解（详细设计.md §6）。.
 
 这一章把"用户随口说的话"变成"一次能执行的检索"。做三件事，顺序不能换：
 
@@ -18,20 +18,22 @@
 4. **否定不反转**（§6.1 边界表）。"不含住宿的报销"里的"住宿"不参与同义扩展：
    `NEGATION_MARKERS` 命中时跳过该位点。
 
-指代消解（§6.1）刻意保守：只有"上一轮恰好命中一个实体"时才替换。多个候选
-→ 触发澄清（`NeedsClarification`）；上一轮是拒答 → 不继承任何实体。宁可查不到
-也不猜，因为猜错的代价是把答案指向另一份文档。
+指代消解（§6.1）刻意保守：只有"上一轮恰好命中一个实体"时才替换。
+多个候选 → 触发澄清（`NeedsClarificationError`）；上一轮是拒答 → 不继承
+任何实体。
+宁可查不到也不猜，因为猜错的代价是把答案指向另一份文档。
 """
 
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Any, Literal, Sequence
+from typing import Any, Literal
 
 from api.observability import get_logger, log_event
-from api.query import lexicon
+from api.resources import lexicon
 from api.temporal import TemporalScope, build_temporal_scope
 from api.time_range import TimeNormalisation, normalise_time
 from api.trace import trace as trace_event
@@ -54,7 +56,7 @@ _OUT_OF_SCOPE = tuple(lexicon.OUT_OF_SCOPE_MARKERS)
 
 @dataclass(frozen=True, slots=True)
 class RewriteStep:
-    """一次替换的留痕。审计要能回答"这句话为什么被改成这样"。"""
+    """一次替换的留痕。审计要能回答"这句话为什么被改成这样"。."""
 
     kind: Literal["acronym", "synonym", "colloquial", "pronoun"]
     source: str
@@ -62,9 +64,11 @@ class RewriteStep:
     position: int
 
     def as_text(self) -> str:
+        """Run as_text."""
         return f"{self.source}→{self.target}"
 
     def as_dict(self) -> dict[str, Any]:
+        """Run as_dict."""
         return {
             "kind": self.kind,
             "from": self.source,
@@ -73,8 +77,8 @@ class RewriteStep:
         }
 
 
-class NeedsClarification(Exception):
-    """指代有多个候选（§6.1"指代不清（多个候选）→ 不替换，触发澄清"）。
+class NeedsClarificationError(Exception):
+    """指代有多个候选（§6.1"指代不清（多个候选）→ 不替换，触发澄清"）。.
 
     抛异常而不是返回一个 `clarify=True` 字段：调用方必须显式处理它，
     否则"忘了判"会表现为"按原句检索"，而原句里带着一个指代词——检索必然跑偏，
@@ -82,6 +86,7 @@ class NeedsClarification(Exception):
     """
 
     def __init__(self, pronoun: str, candidates: Sequence[str]) -> None:
+        """Initialize the instance."""
         self.pronoun = pronoun
         self.candidates = list(candidates)
         super().__init__(f"指代 {pronoun!r} 有多个候选: {self.candidates}")
@@ -89,7 +94,7 @@ class NeedsClarification(Exception):
 
 @dataclass(frozen=True, slots=True)
 class QueryPlan:
-    """§6.4「这一章交给下一步什么」的字段，一个不多一个不少。"""
+    """§6.4「这一章交给下一步什么」的字段，一个不多一个不少。."""
 
     # §6.4 的 `query`：用于检索，不是给用户看的。
     # 名字取 `retrieval_text` 而不是 `query`：字段名要说清它只能用于检索，
@@ -107,10 +112,11 @@ class QueryPlan:
     original: str
     # 覆盖检查用的**全部表面形式**（归一后的写法 + 原文里的写法）。
     #
-    # 实测撞出来的坑：问句"住宿费和交通费分别…"归一后实体是「住宿费限额」，而库里的
-    # 正文写的是"住宿费标准"——拿归一后的词去正文里找，永远找不到，覆盖检查于是
-    # 判定"这一跳没填上缺口"，多跳空转到 Max Hops。所以覆盖检查必须两种写法都试：
-    # 归一后的（命中新语料）+ 原文的（命中旧语料）。
+    # 实测撞出来的坑：问句"住宿费和交通费分别…"归一后实体是「住宿费限额」，
+    # 而库里的正文写的是"住宿费标准"——拿归一后的词去正文里找，永远找不到，
+    # 覆盖检查于是判定"这一跳没填上缺口"，多跳空转到 Max Hops。
+    # 所以覆盖检查必须两种写法都试：归一后的（命中新语料）
+    # + 原文的（命中旧语料）。
     coverage_terms: tuple[str, ...] = ()
     # 超范围的问句不检索（§6.3 边界表）：门控直接用 reject_none 收口。
     out_of_scope: bool = False
@@ -120,7 +126,7 @@ class QueryPlan:
 
     @property
     def entities_or_text(self) -> tuple[str, ...]:
-        """实体为空时退回检索文本里的领域词，供覆盖检查用。
+        """实体为空时退回检索文本里的领域词，供覆盖检查用。.
 
         覆盖检查（"关键实体是否在证据里出现"）拿不到实体就等于跳过检查，
         那正好是"答非所问"漏过去的那条路。
@@ -128,7 +134,7 @@ class QueryPlan:
         return self.entities or (self.retrieval_text,)
 
     def as_audit(self) -> dict[str, Any]:
-        """审计快照。**不含原文**——原文在 `QaLogEntry.question` 里另存一份。"""
+        """审计快照。**不含原文**——原文在 `QaLogEntry.question` 里另存一份。."""
         return {
             "retrieval_text": self.retrieval_text,
             "entities": list(self.entities),
@@ -144,7 +150,7 @@ class QueryPlan:
 
 
 def _is_negated(text: str, start: int) -> bool:
-    """替换位点前 4 个字符内出现否定标记就是否定句（§6.1）。
+    """替换位点前 4 个字符内出现否定标记就是否定句（§6.1）。.
 
     4 个字符是因为中文否定短语最长四个字（"不包括"）。取整句前文会因为
     "不含住宿，但交通费能报多少"把一个正常的同义替换也杀掉。
@@ -154,15 +160,16 @@ def _is_negated(text: str, start: int) -> bool:
 
 
 def rewrite(text: str) -> tuple[str, tuple[RewriteStep, ...]]:
-    """同义 / 缩写 / 口语三类替换。**单趟左到右、最长匹配、幂等**。
+    """同义 / 缩写 / 口语三类替换。**单趟左到右、最长匹配、幂等**。.
 
     为什么必须是单趟而不是"每张表各扫一遍"（实测撞出来的）：逐表替换会级联。
-    `住宿标 → 住宿费限额` 之后，同义表里的 `住宿费 → 住宿费限额` 会命中刚替换进去的
-    结果，产出 `住宿费限额限额`；再跑一遍还会更长。这类错误不会报错，只会让
-    检索串里堆满重复片段，BM25 的 bigram 频率被自己的替换结果污染。
+    `住宿标 → 住宿费限额` 之后，同义表里的 `住宿费 → 住宿费限额` 会命中刚替换进
+    去的结果，产出 `住宿费限额限额`；再跑一遍还会更长。这类错误不会报错，
+    只会让检索串里堆满重复片段，BM25 的 bigram 频率被自己的替换结果污染。
 
-    最长匹配同理：`住宿费标准` 与 `住宿费` 都能命中同一处，先匹配短的会把长词拆成
-    两半（`住宿费限额标准`），而正确的替换只有一个（`住宿费限额`）。
+    最长匹配同理：`住宿费标准` 与 `住宿费` 都能命中同一处，
+    先匹配短的会把长词拆成两半（`住宿费限额标准`），而正确的替换只有一个
+    （`住宿费限额`）。
 
     **幂等守卫**（实测撞出来的第二个缺陷）：输入本来就是正式说法时，长的左值
     （`住宿费限额`）先被守住，但它内部的短左值（`住宿费`）仍会被匹配到——
@@ -222,7 +229,7 @@ def rewrite(text: str) -> tuple[str, tuple[RewriteStep, ...]]:
 
 
 def _join_without_overlap(out: list[str], target: str) -> str:
-    """把 `target` 接到已输出文本后面，但去掉与末尾重复的部分。
+    """把 `target` 接到已输出文本后面，但去掉与末尾重复的部分。.
 
     实测撞出来的第三个缺陷：`报销能报多少` 里 `能报多少 → 报销额度`，直接接上去
     得到 `报销报销额度`。这不报错，但检索串里"报销"的 bigram 频率被自己翻倍，
@@ -238,8 +245,10 @@ def _join_without_overlap(out: list[str], target: str) -> str:
     return target
 
 
-def _inside_target(text: str, pos: int, key: str, targets: Sequence[str]) -> bool:
-    """`text[pos:]` 是否以"某个正式说法"开头、且 `key` 只是它的前缀？
+def _inside_target(
+    text: str, pos: int, key: str, targets: Sequence[str]
+) -> bool:
+    """`text[pos:]` 是否以"某个正式说法"开头、且 `key` 只是它的前缀？.
 
     `住宿费限额` 里的 `住宿费`：命中，且从 pos 起是 `住宿费限额` 的开头，
     而 `住宿费限额` 本身就是某条规则的目标词 → 跳过替换。反过来
@@ -257,7 +266,7 @@ def _inside_target(text: str, pos: int, key: str, targets: Sequence[str]) -> boo
 
 
 def extract_entities(text: str) -> tuple[str, ...]:
-    """领域词抽取。按出现位置排序、去重，供澄清与覆盖检查。
+    """领域词抽取。按出现位置排序、去重，供澄清与覆盖检查。.
 
     为什么不用分词器：分词结果带词典版本，换一版就是另一组实体，覆盖检查会跟着
     漂移。这里的实体集合只来自固定词表，同一段问句永远抽出同一组实体。
@@ -279,7 +288,7 @@ def extract_entities(text: str) -> tuple[str, ...]:
 
 
 def detect_mode(text: str) -> tuple[Mode, tuple[str, ...]]:
-    """单跳/多跳预判（§6.3）。返回 (模式, 命中的标记)。
+    """单跳/多跳预判（§6.3）。返回 (模式, 命中的标记)。.
 
     判定不看问句长短，看"答案能不能在一份文档的一段话里找齐"——这句话在代码里
     的落地只能是词表标记，因为"要不要跨文档"在检索前不可能知道。所以这里的结论
@@ -290,7 +299,7 @@ def detect_mode(text: str) -> tuple[Mode, tuple[str, ...]]:
 
 
 def is_out_of_scope(text: str) -> str | None:
-    """超范围的问句直接拒答、不检索（§6.3 边界表）。返回命中的标记或 None。"""
+    """超范围的问句直接拒答、不检索（§6.3 边界表）。返回命中的标记或 None。."""
     for marker in _OUT_OF_SCOPE:
         if marker in text:
             return marker
@@ -300,26 +309,30 @@ def is_out_of_scope(text: str) -> str | None:
 def resolve_pronoun(
     text: str, previous_entities: Sequence[str] | None
 ) -> tuple[str, RewriteStep | None]:
-    """指代消解（§6.1）。保守到几乎不动手。
+    """指代消解（§6.1）。保守到几乎不动手。.
 
     三种情形：
     - 没有指代词 → 原样返回；
     - 有指代词、上一轮恰好一个实体 → 替换（唯一的机会）；
-    - 有指代词、上一轮零个或多个候选 → 抛 `NeedsClarification`，不猜。
+    - 有指代词、上一轮零个或多个候选 → 抛 `NeedsClarificationError`，不猜。
 
-    "上一轮是拒答"由调用方表达成 `previous_entities=None`：拒答后不该继承任何实体
-    （§6.1 边界表），而"没传"和"传了空"在语义上是同一件事，所以两者都走"零候选"。
+    "上一轮是拒答"由调用方表达成 `previous_entities=None`：
+    拒答后不该继承任何实体（§6.1 边界表），而"没传"和"传了空"在语义上是同一件
+    事，所以两者都走"零候选"。
     """
     match = _PRONOUNS.search(text)
     if match is None:
         return text, None
     candidates = [item for item in (previous_entities or ()) if item]
     if len(candidates) != 1:
-        raise NeedsClarification(match.group(0), candidates)
+        raise NeedsClarificationError(match.group(0), candidates)
     target = candidates[0]
     replaced = text[: match.start()] + target + text[match.end() :]
     return replaced, RewriteStep(
-        kind="pronoun", source=match.group(0), target=target, position=match.start()
+        kind="pronoun",
+        source=match.group(0),
+        target=target,
+        position=match.start(),
     )
 
 
@@ -331,7 +344,7 @@ def understand(
     now: date | None = None,
     fiscal_start_month: int = 1,
 ) -> QueryPlan:
-    """一句问话 → 一次可执行的检索（§6 的出口）。
+    """一句问话 → 一次可执行的检索（§6 的出口）。.
 
     `previous_entities` 是多轮的唯一入口：传上一轮 `QueryPlan.entities`。
     不传就是单轮，指代词会触发澄清而不是被猜。
@@ -373,11 +386,13 @@ def understand(
     # 4. 实体与跳数。
     entities = extract_entities(rewritten)
     # 原文里抽到的实体也要留在覆盖检查里：归一后的写法未必出现在库里（见
-    # `QueryPlan.coverage_terms` 的说明）。顺序是"归一后的在前"——它能命中新语料，
-    # 而原文写法是兜底。
+    # `QueryPlan.coverage_terms` 的说明）。顺序是"归一后的在前"——它能命中新语
+    # 料，而原文写法是兜底。
     original_entities = extract_entities(operated)
     coverage_terms = tuple(
-        dict.fromkeys([*entities, *original_entities, *(s.source for s in steps)])
+        dict.fromkeys(
+            [*entities, *original_entities, *(s.source for s in steps)]
+        )
     )
     if not entities:
         entities = extract_entities(operated)
@@ -411,14 +426,15 @@ def understand(
         has_time_window=plan.time.has_window,
         out_of_scope=plan.out_of_scope,
     )
-    # 本地链路文件里留完整口径（含 retrieval_text / 时间窗），日志里刻意不打原文。
+    # 本地链路文件里留完整口径（含 retrieval_text / 时间窗），
+    # 日志里刻意不打原文。
     trace_event("query.understood", question=original, **plan.as_audit())
     return plan
 
 
 __all__ = [
     "Mode",
-    "NeedsClarification",
+    "NeedsClarificationError",
     "QueryPlan",
     "RewriteStep",
     "detect_mode",
@@ -428,3 +444,6 @@ __all__ = [
     "rewrite",
     "understand",
 ]
+
+# Backwards-compatible alias (N818: exception names use Error suffix).
+NeedsClarification = NeedsClarificationError

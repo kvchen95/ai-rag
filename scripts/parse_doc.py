@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""单文件解析 CLI：当前只提供 single，不提供批量入口。"""
+"""单文件解析 CLI：当前只提供 single，不提供批量入口。."""
 
 from __future__ import annotations
 

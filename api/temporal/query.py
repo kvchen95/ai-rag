@@ -1,4 +1,4 @@
-"""把开放问句收敛成时序图查询。
+"""把开放问句收敛成时序图查询。.
 
 只从已入库事实里取主体/指标/期间；识别不到就返回 None，让原检索链路继续。
 这里不做投资分析，也不生成答案。
@@ -26,6 +26,8 @@ _ALIASES = {
 
 @dataclass(frozen=True, slots=True)
 class FactQuery:
+    """FactQuery."""
+
     subject: str
     metric: str
     period_start: str
@@ -36,9 +38,11 @@ class FactQuery:
 
     @property
     def all_metrics(self) -> tuple[str, ...]:
+        """Run all_metrics."""
         return self.metrics or ((self.metric,) if self.metric else ())
 
     def as_dict(self) -> dict[str, object]:
+        """Run as_dict."""
         return {
             "subject": self.subject,
             "metric": self.metric,
@@ -51,10 +55,12 @@ class FactQuery:
 
 
 def _prior(start: str, end: str) -> tuple[str, str]:
+    """Run _prior."""
     return str(int(start[:4]) - 1) + start[4:], str(int(end[:4]) - 1) + end[4:]
 
 
 def _previous_quarter(start: str) -> tuple[str, str]:
+    """Run _previous_quarter."""
     from datetime import date
 
     current = date.fromisoformat(start)
@@ -65,24 +71,39 @@ def _previous_quarter(start: str) -> tuple[str, str]:
     else:
         year = current.year
         q -= 1
-    starts = {1: (1, 1, 3, 31), 2: (4, 1, 6, 30), 3: (7, 1, 9, 30), 4: (10, 1, 12, 31)}
+    starts = {
+        1: (1, 1, 3, 31),
+        2: (4, 1, 6, 30),
+        3: (7, 1, 9, 30),
+        4: (10, 1, 12, 31),
+    }
     sm, sd, em, ed = starts[q]
     return f"{year:04d}-{sm:02d}-{sd:02d}", f"{year:04d}-{em:02d}-{ed:02d}"
 
 
 def _subject(question: str, graph: TemporalKnowledgeGraph) -> str | None:
+    """Run _subject."""
     candidates = sorted(
-        {fact.subject for fact in graph.facts if fact.subject and fact.subject in question},
+        {
+            fact.subject
+            for fact in graph.facts
+            if fact.subject and fact.subject in question
+        },
         key=len,
         reverse=True,
     )
     return candidates[0] if candidates else None
 
 
-def _metrics(question: str, graph: TemporalKnowledgeGraph, subject: str) -> tuple[str, ...]:
+def _metrics(
+    question: str, graph: TemporalKnowledgeGraph, subject: str
+) -> tuple[str, ...]:
+    """Run _metrics."""
     names = {fact.metric for fact in graph.facts if fact.subject == subject}
     matched: list[str] = []
-    for alias, canonical in sorted(_ALIASES.items(), key=lambda item: len(item[0]), reverse=True):
+    for alias, canonical in sorted(
+        _ALIASES.items(), key=lambda item: len(item[0]), reverse=True
+    ):
         if alias not in question:
             continue
         for name in names:
@@ -97,6 +118,7 @@ def _metrics(question: str, graph: TemporalKnowledgeGraph, subject: str) -> tupl
 def resolve_fact_query(
     question: str, graph: TemporalKnowledgeGraph, scope: TemporalScope | None
 ) -> FactQuery | None:
+    """Run resolve_fact_query."""
     subject = _subject(question, graph)
     if subject is None:
         return None
@@ -119,7 +141,10 @@ def resolve_fact_query(
 
     prior_start, prior_end = (
         _previous_quarter(start)
-        if any(marker in question for marker in ("上一季度", "上季度", "环比", "较上一季"))
+        if any(
+            marker in question
+            for marker in ("上一季度", "上季度", "环比", "较上一季")
+        )
         else _prior(start, end)
     )
     has_any = any(

@@ -13,7 +13,9 @@ NOW = date(2026, 3, 15)
 
 def _range(question: str, **kwargs: object):
     result = normalise_time(question, now=NOW, **kwargs)  # type: ignore[arg-type]
-    assert result.range is not None, f"{question!r} 应解析出时间窗，实际 note={result.note}"
+    assert (
+        result.range is not None
+    ), f"{question!r} 应解析出时间窗，实际 note={result.note}"
     return result.range
 
 
@@ -53,13 +55,17 @@ def test_chinese_and_english_quarter() -> None:
 
 
 def test_year_range_is_unparsed_not_single_year() -> None:
-    result = normalise_time("东方证券对中芯国际2025-2027年归母净利润的预测", now=NOW)
+    result = normalise_time(
+        "东方证券对中芯国际2025-2027年归母净利润的预测", now=NOW
+    )
     assert result.range is None
     assert "未限定时间" in (result.note or "")
     assert "2025-2027年" in (result.note or "")
 
 
-@pytest.mark.parametrize("question", ["去年", "今年", "上个月", "最近", "最新版本"])
+@pytest.mark.parametrize(
+    "question", ["去年", "今年", "上个月", "最近", "最新版本"]
+)
 def test_relative_and_vague_time_is_unparsed(question: str) -> None:
     result = normalise_time(question, now=NOW)
     assert result.range is None
@@ -86,7 +92,9 @@ def test_invalid_calendar_date_is_unparsed() -> None:
     assert "无法换算" in (result.note or "")
 
 
-@pytest.mark.parametrize("question", ["前三年内的规定", "十二个月以内", "三个月的试用期是多久"])
+@pytest.mark.parametrize(
+    "question", ["前三年内的规定", "十二个月以内", "三个月的试用期是多久"]
+)
 def test_non_month_expressions_do_not_produce_a_window(question: str) -> None:
     assert normalise_time(question, now=NOW).range is None
 

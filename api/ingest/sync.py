@@ -1,17 +1,18 @@
-"""向量库副本的状态同步、重试与漂移账（详细设计.md §4.2）。
+"""向量库副本的状态同步、重试与漂移账（详细设计.md §4.2）。.
 
 三件事，各自只有一个入口：
 
     upsert_desired()   翻牌/回滚/回收事务里写"向量库该是什么样"（同事务，不丢）
-    drain()            消费就绪的期望状态：改 payload.status / 删点，失败退避重试
+    drain()            消费就绪的期望状态：改 payload.status / 删点，
+                       失败退避重试
     record_drift()     重试耗尽或对账发现不一致时留痕，让漂移被数出来
 
 为什么是"期望状态"而不是"任务流水"
 ----------------------------------
 
-翻牌是幂等的（同一版本短时间内可能被翻来翻去），任务流水会引入"两条相反指令谁先
-谁后"的问题；期望状态永远只有一句"它现在应该是 X"，重放天然幂等。`vector_sync_tasks`
-一个版本一行（迁移 003 里有完整说明）。
+翻牌是幂等的（同一版本短时间内可能被翻来翻去），任务流水会引入"两条相反指令
+谁先谁后"的问题；期望状态永远只有一句"它现在应该是 X"，重放天然幂等。
+`vector_sync_tasks` 一个版本一行（迁移 003 里有完整说明）。
 
 为什么用租约（lease）而不是把行锁住做完 HTTP
 --------------------------------------------
@@ -53,7 +54,8 @@ from api.observability import get_logger, log_event, log_exception
 logger = get_logger("api.ingest.sync")
 
 # 租约时长：抢到任务后这段时间内别的 worker 不会重领。
-# 一次按版本改 payload 是毫秒级，60s 足够覆盖一次 Qdrant 抖动；崩了也只是等 60s。
+# 一次按版本改 payload 是毫秒级，60s 足够覆盖一次 Qdrant 抖动；崩了也只是
+# 等 60s。
 LEASE_SECONDS = 60
 
 
@@ -68,22 +70,26 @@ SET doc_key      = EXCLUDED.doc_key,
     -- 期望变了就重置重试计数与失败态：上一轮的失败是"上一件事"的失败，
     -- 不该让一次新的翻牌继承它、一上来就没额度。
     status       = CASE
-                     WHEN vector_sync_tasks.desired_status IS DISTINCT FROM EXCLUDED.desired_status
+                     WHEN vector_sync_tasks.desired_status
+                          IS DISTINCT FROM EXCLUDED.desired_status
                        THEN 'pending'
                      ELSE vector_sync_tasks.status
                    END,
     attempts     = CASE
-                     WHEN vector_sync_tasks.desired_status IS DISTINCT FROM EXCLUDED.desired_status
+                     WHEN vector_sync_tasks.desired_status
+                          IS DISTINCT FROM EXCLUDED.desired_status
                        THEN 0
                      ELSE vector_sync_tasks.attempts
                    END,
     next_attempt_at = CASE
-                     WHEN vector_sync_tasks.desired_status IS DISTINCT FROM EXCLUDED.desired_status
+                     WHEN vector_sync_tasks.desired_status
+                          IS DISTINCT FROM EXCLUDED.desired_status
                        THEN now()
                      ELSE vector_sync_tasks.next_attempt_at
                    END,
     last_error   = CASE
-                     WHEN vector_sync_tasks.desired_status IS DISTINCT FROM EXCLUDED.desired_status
+                     WHEN vector_sync_tasks.desired_status
+                          IS DISTINCT FROM EXCLUDED.desired_status
                        THEN NULL
                      ELSE vector_sync_tasks.last_error
                    END,
@@ -95,7 +101,7 @@ RETURNING version_id, desired_status, status
 def upsert_desired(
     conn: Connection[Any], *, doc_key: str, version_id: str, desired_status: str
 ) -> dict[str, Any]:
-    """写一条期望状态。**必须与造成它的状态变更在同一个事务里**（见模块说明）。
+    """写一条期望状态。**必须与造成它的状态变更在同一个事务里**（见模块说明）。.
 
     幂等：同一版本重复写同一个 desired 不会重置重试计数，也不会把已达成的 done
     打回 pending——否则每小时的对账会把已经同步好的版本反复重推。
@@ -105,7 +111,11 @@ def upsert_desired(
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             UPSERT_DESIRED_SQL,
-            {"version_id": version_id, "doc_key": doc_key, "desired": desired_status},
+            {
+                "version_id": version_id,
+                "doc_key": doc_key,
+                "desired": desired_status,
+            },
         )
         row = cur.fetchone()
     if row is None:  # pragma: no cover - RETURNING 一定有一行
@@ -136,11 +146,13 @@ def record_drift(
     qdrant_value: str | None = None,
     dedupe_key: str | None = None,
 ) -> int | None:
-    """记一条漂移。同一处未修复的漂移只留一行（`uq_vector_drift_open_dedupe`）。
+    """记一条漂移。同一处未修复的漂移只留一行（`uq_vector_drift_open_dedupe`）。.
 
     返回新插入的行 id；`None` 表示这条已经记过且尚未修复（去重命中）。
     """
-    key = dedupe_key or f"{kind}:{doc_key}:{chunk_id or '-'}:{version_id or '-'}"
+    key = (
+        dedupe_key or f"{kind}:{doc_key}:{chunk_id or '-'}:{version_id or '-'}"
+    )
     with conn.cursor() as cur:
         cur.execute(
             INSERT_DRIFT_SQL,
@@ -170,12 +182,16 @@ WHERE dedupe_key = %s AND NOT fixed
 
 
 def mark_drift_fixed(conn: Connection[Any], dedupe_key: str) -> int:
+    """Run mark_drift_fixed."""
     with conn.cursor() as cur:
         cur.execute(MARK_DRIFT_FIXED_SQL, (dedupe_key,))
         return cur.rowcount
 
 
-def mark_drift_fix_failed(conn: Connection[Any], dedupe_key: str, error: str) -> None:
+def mark_drift_fix_failed(
+    conn: Connection[Any], dedupe_key: str, error: str
+) -> None:
+    """Run mark_drift_fix_failed."""
     with conn.cursor() as cur:
         cur.execute(MARK_DRIFT_FAILED_SQL, (error[:500], dedupe_key))
 
@@ -201,8 +217,10 @@ RETURNING t.version_id, t.doc_key, t.desired_status, t.attempts
 """
 
 
-def claim_due(conn: Connection[Any], *, lease_s: int = LEASE_SECONDS) -> dict[str, Any] | None:
-    """领一条到期的期望状态（租约式，见模块说明）。没有则返回 None。"""
+def claim_due(
+    conn: Connection[Any], *, lease_s: int = LEASE_SECONDS
+) -> dict[str, Any] | None:
+    """领一条到期的期望状态（租约式，见模块说明）。没有则返回 None。."""
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(CLAIM_SQL, {"lease": lease_s})
         return cur.fetchone()
@@ -217,7 +235,8 @@ WHERE version_id = %s
 
 MARK_FAILED_SQL = """
 UPDATE vector_sync_tasks
-SET status = CASE WHEN attempts >= %(max_attempts)s THEN 'failed' ELSE 'pending' END,
+SET status = CASE WHEN attempts >= %(max_attempts)s THEN 'failed'
+                  ELSE 'pending' END,
     last_error = %(error)s,
     next_attempt_at = now() + make_interval(secs => %(backoff)s),
     updated_at = now()
@@ -227,6 +246,7 @@ RETURNING status, attempts
 
 
 def mark_done(conn: Connection[Any], version_id: str) -> None:
+    """Run mark_done."""
     with conn.cursor() as cur:
         cur.execute(MARK_DONE_SQL, (version_id,))
 
@@ -239,13 +259,15 @@ def mark_failed(
     max_attempts: int,
     backoff_s: float,
 ) -> tuple[str, int]:
-    """记一次失败：还有额度就退回 pending 并退避，用完就 failed。
+    """记一次失败：还有额度就退回 pending 并退避，用完就 failed。.
 
     `backoff_s` 是**这一次**要等多久（调用方按 attempts 算指数退避），不是基数——
     把公式留在调用方，这里只负责落库。
     """
     if not error or not error.strip():
-        raise ValueError("a failed vector sync must carry a non-empty error message")
+        raise ValueError(
+            "a failed vector sync must carry a non-empty error message"
+        )
     with conn.cursor() as cur:
         cur.execute(
             MARK_FAILED_SQL,
@@ -258,12 +280,14 @@ def mark_failed(
         )
         row = cur.fetchone()
     if row is None:  # pragma: no cover
-        raise RuntimeError(f"vector_sync_tasks {version_id} disappeared while marking failure")
+        raise RuntimeError(
+            f"vector_sync_tasks {version_id} disappeared while marking failure"
+        )
     return str(row[0]), int(row[1])
 
 
 def backoff_for(attempts: int, base_s: float) -> float:
-    """第 `attempts` 次失败后的等待：base * 2^(attempts-1)，封顶 8×base。"""
+    """第 `attempts` 次失败后的等待：base * 2^(attempts-1)，封顶 8×base。."""
     exponent = max(0, attempts - 1)
     return base_s * (2 ** min(exponent, 3))
 
@@ -277,6 +301,8 @@ SELECT status, count(*) AS n FROM chunks WHERE version_id = %s GROUP BY status
 
 @dataclass(slots=True)
 class SyncOutcome:
+    """SyncOutcome."""
+
     version_id: str
     doc_key: str
     desired: str
@@ -287,9 +313,13 @@ class SyncOutcome:
 
 
 def apply_desired(
-    conn: Connection[Any], store: QdrantVectorStore, *, version_id: str, desired: str
+    conn: Connection[Any],
+    store: QdrantVectorStore,
+    *,
+    version_id: str,
+    desired: str,
 ) -> None:
-    """把一条期望状态推到 Qdrant。失败抛异常（由 drain 记进重试）。"""
+    """把一条期望状态推到 Qdrant。失败抛异常（由 drain 记进重试）。."""
     if desired == "purged":
         store.delete_version_points(version_id)
         return
@@ -297,16 +327,22 @@ def apply_desired(
 
 
 def verify_desired(
-    conn: Connection[Any], store: QdrantVectorStore, *, version_id: str, desired: str
+    conn: Connection[Any],
+    store: QdrantVectorStore,
+    *,
+    version_id: str,
+    desired: str,
 ) -> tuple[bool, str]:
-    """回读校验：Qdrant 的实际分布必须与 PG 里该版本切片的分布一致。
+    """回读校验：Qdrant 的实际分布必须与 PG 里该版本切片的分布一致。.
 
-    这是"同步成功"的定义——只看 HTTP 状态码会把"filter 写错、一条都没匹配"当成成功
-    （实测：filter 不匹配任何点时 Qdrant 照样返回 completed）。
+    这是"同步成功"的定义——只看 HTTP 状态码会把"filter 写错、一条都没匹配"
+    当成成功（实测：filter 不匹配任何点时 Qdrant 照样返回 completed）。
 
     比较的是**两边的状态分布**，不是"有没有点"：
-      - 该版本的点总数必须等于 PG 切片总数（除 purged）：少了就是丢了点，多了就是脏点。
-      - `status=desired` 的点数必须等于 PG 里对应状态的切片数：这才证明 payload 真的改对了。
+      - 该版本的点总数必须等于 PG 切片总数（除 purged）：少了就是丢了点，
+        多了就是脏点。
+      - `status=desired` 的点数必须等于 PG 里对应状态的切片数：这才证明
+        payload 真的改对了。
     """
     with conn.cursor() as cur:
         cur.execute(PG_CHUNK_STATUS_COUNTS_SQL, (version_id,))
@@ -315,7 +351,10 @@ def verify_desired(
 
     if desired == "purged":
         actual = store.count_version(version_id)
-        return actual == 0, f"pg_chunks={pg_total} qdrant_points={actual} (expect 0)"
+        return (
+            actual == 0,
+            f"pg_chunks={pg_total} qdrant_points={actual} (expect 0)",
+        )
 
     actual_total = store.count_version(version_id)
     if actual_total != pg_total:
@@ -325,16 +364,19 @@ def verify_desired(
     actual_on_desired = store.count_version(version_id, status=desired)
     if actual_on_desired != expected_on_desired:
         return False, (
-            f"status={desired}: pg={expected_on_desired} qdrant={actual_on_desired} "
-            f"(pg_dist={pg_counts})"
+            f"status={desired}: pg={expected_on_desired} "
+            f"qdrant={actual_on_desired} (pg_dist={pg_counts})"
         )
     return True, f"points={actual_total} status={desired}:{actual_on_desired}"
 
 
 # ---------------------------------------------------------------------- drain
 
+
 @dataclass(slots=True)
 class DrainReport:
+    """DrainReport."""
+
     processed: int = 0
     done: int = 0
     retried: int = 0
@@ -343,9 +385,11 @@ class DrainReport:
 
     @property
     def ok(self) -> bool:
+        """Run ok."""
         return self.failed == 0
 
     def as_dict(self) -> dict[str, Any]:
+        """Run as_dict."""
         return {
             "processed": self.processed,
             "done": self.done,
@@ -374,9 +418,10 @@ def drain(
     backoff_s: float = 1.0,
     limit: int = 200,
 ) -> DrainReport:
-    """把到期的期望状态全部推给 Qdrant（直到没有到期任务或达到 limit）。
+    """把到期的期望状态全部推给 Qdrant（直到没有到期任务或达到 limit）。.
 
-    每一条任务三个短事务：**领（提交）→ 应用 + 校验 → 回写**。见模块说明里的租约。
+    每一条任务三个短事务：**领（提交）→ 应用 + 校验 → 回写**。
+    见模块说明里的租约。
     `apply_desired` / `verify_desired` 只要一条连接（PG 读 + Qdrant 调用），
     所以它们各自开一个短事务，绝不把 HTTP 请求包在持锁事务里。
     """
@@ -402,7 +447,9 @@ def drain(
 
         try:
             with pool.connection() as conn:
-                apply_desired(conn, store, version_id=version_id, desired=desired)
+                apply_desired(
+                    conn, store, version_id=version_id, desired=desired
+                )
             with pool.connection() as conn:
                 ok, detail = verify_desired(
                     conn, store, version_id=version_id, desired=desired
@@ -412,7 +459,12 @@ def drain(
             if not ok:
                 raise VectorStoreError(f"verification failed: {detail}")
         except Exception as exc:  # noqa: BLE001 - 任何失败都要落进重试或漂移账
-            log_exception(logger, "vector_sync_failed", version_id=version_id, desired=desired)
+            log_exception(
+                logger,
+                "vector_sync_failed",
+                version_id=version_id,
+                desired=desired,
+            )
             with pool.connection() as conn:
                 status, attempts_after = mark_failed(
                     conn,
@@ -464,7 +516,7 @@ def drain(
 
 
 def pending_count(conn: Connection[Any], *, doc_key: str | None = None) -> int:
-    """还有多少条没同步完（验收"没有沉默漂移"的直接指标）。"""
+    """还有多少条没同步完（验收"没有沉默漂移"的直接指标）。."""
     with conn.cursor() as cur:
         cur.execute(
             "SELECT count(*) FROM vector_sync_tasks WHERE status <> 'done' "
@@ -476,14 +528,23 @@ def pending_count(conn: Connection[Any], *, doc_key: str | None = None) -> int:
 
 
 def task_for(conn: Connection[Any], version_id: str) -> dict[str, Any] | None:
+    """Run task_for."""
     with conn.cursor(row_factory=dict_row) as cur:
-        cur.execute("SELECT * FROM vector_sync_tasks WHERE version_id = %s", (version_id,))
+        cur.execute(
+            "SELECT * FROM vector_sync_tasks WHERE version_id = %s",
+            (version_id,),
+        )
         return cur.fetchone()
 
 
 def _short_error(prefix: str, exc: BaseException) -> str:
+    """Run _short_error."""
     detail = str(exc).strip().replace("\n", " ")
-    text = f"{prefix}: {type(exc).__name__}: {detail}" if detail else f"{prefix}: {type(exc).__name__}"
+    text = (
+        f"{prefix}: {type(exc).__name__}: {detail}"
+        if detail
+        else f"{prefix}: {type(exc).__name__}"
+    )
     return text[:500]
 
 

@@ -1,4 +1,4 @@
-"""多跳编排（详细设计.md §8.3）。
+"""多跳编排（详细设计.md §8.3）。.
 
 多跳不是"多查几次"，是"带着已查实的事实去查下一件事"。所以这个模块的核心不是
 循环，而是**黑板**：一张只放确定事实的表。
@@ -24,8 +24,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Callable, Literal, Sequence
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from typing import Any, Literal
 
 from api.observability import get_logger, log_event
 
@@ -36,15 +37,16 @@ StopReason = Literal["fulfilled", "max_hops", "broken", "empty", "conflict"]
 
 @dataclass(frozen=True, slots=True)
 class Fact:
-    """黑板条目：一条确定事实。字段与 §8.3 一一对应，不多不少。"""
+    """黑板条目：一条确定事实。字段与 §8.3 一一对应，不多不少。."""
 
-    claim: str          # 一句原文摘录（不是模型转述）
+    claim: str  # 一句原文摘录（不是模型转述）
     chunk_id: str
     page_num: int
-    hop: int            # 第几跳查到的（1-based）
+    hop: int  # 第几跳查到的（1-based）
     doc_key: str = ""
 
     def as_dict(self) -> dict[str, Any]:
+        """Run as_dict."""
         return {
             "claim": self.claim,
             "chunk_id": self.chunk_id,
@@ -56,7 +58,7 @@ class Fact:
 
 @dataclass(frozen=True, slots=True)
 class HopOutcome:
-    """一跳的结果。`gap` 是本跳开始时缺什么（也是拆子问题的依据）。"""
+    """一跳的结果。`gap` 是本跳开始时缺什么（也是拆子问题的依据）。."""
 
     hop: int
     sub_question: str
@@ -67,6 +69,7 @@ class HopOutcome:
     note: str = ""
 
     def as_dict(self) -> dict[str, Any]:
+        """Run as_dict."""
         return {
             "hop": self.hop,
             "sub_question": self.sub_question,
@@ -80,7 +83,7 @@ class HopOutcome:
 
 @dataclass(frozen=True, slots=True)
 class MultiHopResult:
-    """多跳的最终产物。`facts` 就是交给生成层的"已查实部分"。"""
+    """多跳的最终产物。`facts` 就是交给生成层的"已查实部分"。."""
 
     facts: tuple[Fact, ...]
     hops: tuple[HopOutcome, ...]
@@ -91,13 +94,16 @@ class MultiHopResult:
 
     @property
     def hop_count(self) -> int:
+        """Run hop_count."""
         return len(self.hops)
 
     @property
     def fulfilled(self) -> bool:
+        """Run fulfilled."""
         return self.stop == "fulfilled" and not self.uncovered
 
     def as_audit(self) -> dict[str, Any]:
+        """Run as_audit."""
         return {
             "stop": self.stop,
             "hops": self.hop_count,
@@ -109,18 +115,19 @@ class MultiHopResult:
 
 
 class Blackboard:
-    """只放确定事实的黑板（§8.3）。
+    """只放确定事实的黑板（§8.3）。.
 
     `add` 的唯一入口要求整条事实齐全，而不是先建一条后补字段：分数先落地再被
     "顺手"塞进来，是这类黑板最常见的腐化方式。
     """
 
     def __init__(self) -> None:
+        """Initialize the instance."""
         self._facts: list[Fact] = []
         self._chunk_ids: set[str] = set()
 
     def add(self, fact: Fact) -> bool:
-        """加一条事实。同一 chunk 只说一次（返回 False 表示已在黑板上）。
+        """加一条事实。同一 chunk 只说一次（返回 False 表示已在黑板上）。.
 
         为什么按 chunk_id 去重而不是按 claim 文本：同一条原文换个引用方式还是
         同一条事实，按文本去重会让"同一句被引两次"变成两条，覆盖检查于是以为
@@ -133,22 +140,27 @@ class Blackboard:
         return True
 
     def extend(self, facts: Sequence[Fact]) -> int:
+        """Run extend."""
         return sum(1 for fact in facts if self.add(fact))
 
     @property
     def facts(self) -> tuple[Fact, ...]:
+        """Run facts."""
         return tuple(self._facts)
 
     def chunk_ids(self) -> tuple[str, ...]:
+        """Run chunk_ids."""
         return tuple(fact.chunk_id for fact in self._facts)
 
     def __len__(self) -> int:
+        """Return the number of items."""
         return len(self._facts)
 
 
 # 一跳的动作签名：给它"这一跳要查什么"，返回 HopOutcome。
-# 做成回调而不是内联检索：多跳的**编排**（停止条件、断链、黑板）与**每一跳怎么查**
-# 是两件事，前者要能在没有 Qdrant/PG 的情况下被穷举测试，后者需要真服务。
+# 做成回调而不是内联检索：多跳的**编排**（停止条件、断链、黑板）与**每一跳
+# 怎么查**是两件事，前者要能在没有 Qdrant/PG 的情况下被穷举测试，后者需要真
+# 服务。
 HopRunner = Callable[[int, str, str], HopOutcome]
 # 缺口检测：给黑板当前状态，返回还缺什么（空 tuple = 齐了）。
 GapProbe = Callable[[Blackboard], Sequence[str]]
@@ -164,7 +176,7 @@ def run_multihop(
     sub_questioner: SubQuestioner,
     initial_gap: Sequence[str] = (),
 ) -> MultiHopResult:
-    """跑多跳，返回事实与停止原因（§8.3）。
+    """跑多跳，返回事实与停止原因（§8.3）。.
 
     每跳都是"先判缺口 → 拆子问题 → 查 → 过阈判定 → 写黑板"这五步，顺序不能变：
     先查再判缺口会让这一跳查到的东西与缺口无关（那正是"多查几次"而不是多跳）。
@@ -240,12 +252,12 @@ def run_multihop(
 
 
 def _conflict(outcome: HopOutcome, board: Blackboard) -> str | None:
-    """本跳查到的切片是否与黑板上已有事实"冲突"。
+    """本跳查到的切片是否与黑板上已有事实"冲突"。.
 
     可机械判定的冲突只有一种：**本跳的切片与黑板里某条事实是同一个 chunk 但摘录
     不同**——同一段原文被读成两句不一样的话，说明有一侧是转述而非摘录。
-    语义级矛盾（"500 元" vs "800 元"）属于生成后的 §10 第五道校验，不在这一层猜；
-    在这里做文本相似度判定只会引入一个必须调参的阈值。
+    语义级矛盾（"500 元" vs "800 元"）属于生成后的 §10 第五道校验，不在这一
+    层猜；在这里做文本相似度判定只会引入一个必须调参的阈值。
 
     返回冲突的 chunk_id，无冲突返回 None。
     """

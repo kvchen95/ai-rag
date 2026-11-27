@@ -1,4 +1,4 @@
-"""摄取（A1）：样本扫描、判重、ingest_jobs 队列。
+"""摄取（A1）：样本扫描、判重、ingest_jobs 队列。.
 
 分成三块，各自只管一件事：
 
@@ -30,8 +30,8 @@ from api.ingest.jobs import (
 )
 from api.ingest.scan import (
     ScanInProgress,
-    ScanReport,
     ScanItem,
+    ScanReport,
     scan_samples,
 )
 

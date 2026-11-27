@@ -8,8 +8,9 @@
 - 多跳有五个停止原因。
 
 拿真服务跑这些组合，要么造不出（比如让精排刚好 799ms 返回），要么得改服务端。
-所以这里的做法是：**纯逻辑穷举在这里，真服务的行为在 `test_b3_integration.py`**。
-两层缺一不可——只有前者会漏掉"API 形状不对"，只有后者会漏掉边界组合。
+所以这里的做法是：**纯逻辑穷举在这里，真服务的行为在
+`test_b3_integration.py`**。两层缺一不可——只有前者会漏掉"API 形状不对"，
+只有后者会漏掉边界组合。
 """
 
 from __future__ import annotations
@@ -102,8 +103,11 @@ def test_rrf_k_matches_qdrant_native_constant() -> None:
 
 
 def test_rrf_uses_ranks_not_scores() -> None:
-    """分数不可比：稠密是 0..1 余弦，BM25 无上界（实测同一句查询 13.29）。
-    融合只看位置，所以把分数换成数量级完全不同的一组，结果必须不变。"""
+    """融合只看名次，不看分数。
+
+    分数不可比：稠密是 0..1 余弦，BM25 无上界（实测同一句查询 13.29）。
+    所以把分数换成数量级完全不同的一组，结果必须不变。
+    """
     dense_a = [("x", 0.9), ("y", 0.8)]
     sparse_a = [("y", 12.0), ("z", 3.0)]
     dense_b = [("x", 0.09), ("y", 0.08)]
@@ -133,7 +137,11 @@ def test_missing_route_gets_top_k_plus_one() -> None:
 def test_tie_breaks_by_dense_rank() -> None:
     """§7.2 边界表："两路名次和相同，语义名次靠前者优先"。"""
     # a: dense 1 / sparse 3；b: dense 3 / sparse 1 → 名次和相同，a 该在前
-    fused = rrf_fuse([("a", 0.9), ("m1", 0.8), ("b", 0.7)], [("b", 9.0), ("m2", 8.0), ("a", 7.0)], top_k=30)
+    fused = rrf_fuse(
+        [("a", 0.9), ("m1", 0.8), ("b", 0.7)],
+        [("b", 9.0), ("m2", 8.0), ("a", 7.0)],
+        top_k=30,
+    )
     assert fused[0].chunk_id == "a"
 
 
@@ -167,13 +175,19 @@ def test_third_child_of_same_parent_is_dropped() -> None:
 
 def test_parent_rows_are_not_affected() -> None:
     """父片（parent_id 为空）不参与这条规则——规则说的是"同父片的子片"。"""
-    items = [cand("p1", score=0.9), cand("p2", score=0.8), cand("p3", score=0.7)]
+    items = [
+        cand("p1", score=0.9),
+        cand("p2", score=0.8),
+        cand("p3", score=0.7),
+    ]
     kept, dropped = dedupe_parent_children(items, keep=2)
     assert len(kept) == 3 and not dropped
 
 
 def test_keep_zero_disables_dedup_explicitly() -> None:
-    items = [cand(f"c{i}", score=1.0 - i / 10, parent_id="p1") for i in range(3)]
+    items = [
+        cand(f"c{i}", score=1.0 - i / 10, parent_id="p1") for i in range(3)
+    ]
     kept, dropped = dedupe_parent_children(items, keep=0)
     assert not kept and len(dropped) == 3
 
@@ -187,7 +201,9 @@ def test_negative_keep_is_rejected() -> None:
 # --- 预精排候选清洗 ---------------------------------------------------------
 
 
-def _chunk_text(chunk_id: str, text: str, *, chunk_type: str = "text") -> ChunkText:
+def _chunk_text(
+    chunk_id: str, text: str, *, chunk_type: str = "text"
+) -> ChunkText:
     return ChunkText(
         chunk_id=chunk_id,
         doc_key="reports/yu-shu",
@@ -206,9 +222,13 @@ def test_header_only_candidates_are_dropped_before_rerank() -> None:
         cand("table", score=None, doc_key="reports/yu-shu"),
     ]
     texts = {
-        "header": _chunk_text("header", "宇树科技股份有限公司2026年第三季度报告"),
+        "header": _chunk_text(
+            "header", "宇树科技股份有限公司2026年第三季度报告"
+        ),
         "sentence": _chunk_text("sentence", "本报告期营业收入同比增长69.93%。"),
-        "table": _chunk_text("table", "营业收入 665,044,497.90", chunk_type="table"),
+        "table": _chunk_text(
+            "table", "营业收入 665,044,497.90", chunk_type="table"
+        ),
     }
     kept, dropped = drop_header_only_candidates(items, texts)
     assert [item.chunk_id for item in kept] == ["sentence", "table"]
@@ -216,8 +236,13 @@ def test_header_only_candidates_are_dropped_before_rerank() -> None:
 
 
 def test_repeated_boilerplate_across_three_pages_is_dropped() -> None:
-    text = "宇树科技股份有限公司2026年第三季度报告 单位：元 币种：人民币 未经审计"
-    items = [cand(f"h{i}", score=None, page_num=i, doc_key="reports/yu-shu") for i in (1, 2, 3)]
+    text = (
+        "宇树科技股份有限公司2026年第三季度报告 单位：元 币种：人民币 未经审计"
+    )
+    items = [
+        cand(f"h{i}", score=None, page_num=i, doc_key="reports/yu-shu")
+        for i in (1, 2, 3)
+    ]
     texts = {item.chunk_id: _chunk_text(item.chunk_id, text) for item in items}
     kept, dropped = drop_repeated_boilerplate(items, texts, min_pages=3)
     assert kept == []
@@ -225,8 +250,13 @@ def test_repeated_boilerplate_across_three_pages_is_dropped() -> None:
 
 
 def test_repeated_text_on_two_pages_is_preserved() -> None:
-    text = "宇树科技股份有限公司2026年第三季度报告 单位：元 币种：人民币 未经审计"
-    items = [cand("h1", score=None, page_num=1), cand("h2", score=None, page_num=2)]
+    text = (
+        "宇树科技股份有限公司2026年第三季度报告 单位：元 币种：人民币 未经审计"
+    )
+    items = [
+        cand("h1", score=None, page_num=1),
+        cand("h2", score=None, page_num=2),
+    ]
     texts = {item.chunk_id: _chunk_text(item.chunk_id, text) for item in items}
     kept, dropped = drop_repeated_boilerplate(items, texts, min_pages=3)
     assert [item.chunk_id for item in kept] == ["h1", "h2"]
@@ -235,7 +265,9 @@ def test_repeated_text_on_two_pages_is_preserved() -> None:
 
 def test_identical_candidate_text_keeps_only_first() -> None:
     items = [cand("a", score=None), cand("b", score=None)]
-    texts = {item.chunk_id: _chunk_text(item.chunk_id, "相同正文") for item in items}
+    texts = {
+        item.chunk_id: _chunk_text(item.chunk_id, "相同正文") for item in items
+    }
     kept, dropped = dedupe_candidate_texts(items, texts)
     assert [item.chunk_id for item in kept] == ["a"]
     assert dropped == ["b"]
@@ -271,14 +303,20 @@ class FakeReranker:
 
         self.calls.append(list(texts))
         if self.delay_s:
-            # 服务端"需要" delay_s 才返回：给的时间不够就超时抛错，够就正常返回。
+            # 服务端“需要” delay_s 才返回：给的时间不够就超时抛错，够就正常
+            # 返回。
             # 这才是超时的定义（"没在给的时间里返回"），拿"睡满 timeout"演会把
             # 每一批都演成超时，测出来的其实是"必超时"而不是"预算共享"。
             if self.delay_s > timeout_s:
                 time.sleep(max(timeout_s, 0.0))
-                raise RerankTimeout(f"scripted timeout after {timeout_s*1000:.0f}ms")
+                raise RerankTimeout(
+                    f"scripted timeout after {timeout_s*1000:.0f}ms"
+                )
             time.sleep(self.delay_s)
-        if self.fail_on_call is not None and len(self.calls) - 1 >= self.fail_on_call:
+        if (
+            self.fail_on_call is not None
+            and len(self.calls) - 1 >= self.fail_on_call
+        ):
             raise RerankUnavailable("scripted failure")
         return [self.scores.get(text[:20], 0.5) for text in texts]
 
@@ -348,8 +386,10 @@ def test_rerank_input_unchanged_when_no_clip_configured() -> None:
 
 
 def test_unscored_candidates_never_get_a_zero_filled_score() -> None:
-    """降级时不能给候选填 0 分：0 分会让门控判成"无相关"，
-    而真相是"我们没打分"。填 0 等于伪造一个结论。"""
+    """降级时不能给候选填 0 分。
+
+    0 分会让门控判成“无相关”，而真相是“我们没打分”。填 0 等于伪造结论。
+    """
     items = [cand(f"c{i}", score=None, fused_rank=i + 1) for i in range(4)]
     outcome = rerank_candidates(
         FakeReranker(fail_on_call=0),
@@ -365,7 +405,9 @@ def test_unscored_candidates_never_get_a_zero_filled_score() -> None:
     assert all(item.rerank_score is None for item in outcome.ordered)
 
 
-def test_rerank_unavailable_degrades_to_fused_order_and_records_reason() -> None:
+def test_rerank_unavailable_degrades_to_fused_order_and_records_reason() -> (
+    None
+):
     items = [cand(f"c{i}", score=None, fused_rank=i + 1) for i in range(4)]
     outcome = rerank_candidates(
         FakeReranker(fail_on_call=0),
@@ -382,16 +424,23 @@ def test_rerank_unavailable_degrades_to_fused_order_and_records_reason() -> None
     assert outcome.fallback == "fused_rank"
     assert [item.chunk_id for item in outcome.ordered] == ["c0", "c1", "c2"]
     audit = outcome.as_audit()
-    assert audit["degraded"] is True and audit["degrade"] == "rerank_unavailable"
+    assert (
+        audit["degraded"] is True and audit["degrade"] == "rerank_unavailable"
+    )
 
 
 def test_partial_failure_keeps_scored_batches_and_marks_partial() -> None:
-    """部分失败：已打分的照用，未打分的按融合名次垫后，原因必须是 `rerank_partial`。
+    """部分失败时已打分的照用，原因必须是 `rerank_partial`。
+
+    未打分的按融合名次垫后。
 
     把这种情况记成 `rerank_unavailable` 会让运维以为"精排整个挂了"，
     而实际上是"候选太多、第二批超时"——两者的处理完全不同。
     """
-    items = [cand(f"c{i}", score=None, fused_rank=i + 1) for i in range(TEI_MAX_BATCH + 5)]
+    items = [
+        cand(f"c{i}", score=None, fused_rank=i + 1)
+        for i in range(TEI_MAX_BATCH + 5)
+    ]
     texts = _texts_for(items)
     scores = {texts[f"c{i}"]: 0.9 - i * 0.01 for i in range(TEI_MAX_BATCH)}
     outcome = rerank_candidates(
@@ -417,9 +466,9 @@ def test_timeout_and_unavailable_are_distinguishable() -> None:
     实测撞过：`httpx.ReadTimeout` 被统一包成 `RerankUnavailable`，于是"预算 1ms"
     与"精排挂了"在审计里是同一个 `degrade`，事后根本不知道该调预算还是看容器。
     """
-    assert issubclass(RerankTimeout, RerankUnavailable), (
-        "超时是不可用的特例，所以继承；但两者的 reason 必须分开"
-    )
+    assert issubclass(
+        RerankTimeout, RerankUnavailable
+    ), "超时是不可用的特例，所以继承；但两者的 reason 必须分开"
     assert RerankTimeout is not RerankUnavailable
 
 
@@ -440,12 +489,15 @@ def test_budget_expiry_is_reported_as_timeout_not_unavailable() -> None:
 
 
 def test_budget_is_shared_across_batches_not_per_batch() -> None:
-    """deadline 是整段精排共享的：两批各 800ms 会变成 1600ms，预算就没有意义了。
+    """Deadline 是整段精排共享的：两批各 800ms 会变成 1600ms，预算就没有意义了。
 
     替身在"给定超时"之后抛 `RerankUnavailable`（`delay_s` 模拟服务端慢）。
     两批各用掉全部预算 → 总耗时约等于一个预算，而不是两个。
     """
-    items = [cand(f"c{i}", score=None, fused_rank=i + 1) for i in range(TEI_MAX_BATCH + 5)]
+    items = [
+        cand(f"c{i}", score=None, fused_rank=i + 1)
+        for i in range(TEI_MAX_BATCH + 5)
+    ]
     outcome = rerank_candidates(
         FakeReranker(delay_s=0.08),
         "q",
@@ -464,7 +516,10 @@ def test_budget_is_shared_across_batches_not_per_batch() -> None:
 
 def test_budget_expiry_degrades_and_does_not_start_another_batch() -> None:
     """预算用完就降级，不再发起下一批：发起出去的那一批只能超时白等。"""
-    items = [cand(f"c{i}", score=None, fused_rank=i + 1) for i in range(TEI_MAX_BATCH * 3)]
+    items = [
+        cand(f"c{i}", score=None, fused_rank=i + 1)
+        for i in range(TEI_MAX_BATCH * 3)
+    ]
     reranker = FakeReranker(delay_s=0.1)
     outcome = rerank_candidates(
         reranker,
@@ -477,7 +532,9 @@ def test_budget_expiry_degrades_and_does_not_start_another_batch() -> None:
         candidates_max=50,
     )
     assert outcome.degraded is True
-    assert len(reranker.calls) <= 2, f"预算已用完，不该再发第 3 批（实发 {len(reranker.calls)} 批）"
+    assert (
+        len(reranker.calls) <= 2
+    ), f"预算已用完，不该再发第 3 批（实发 {len(reranker.calls)} 批）"
 
 
 def test_candidates_are_capped_before_batching() -> None:
@@ -500,9 +557,18 @@ def test_candidates_are_capped_before_batching() -> None:
 def test_empty_candidates_do_not_call_the_model() -> None:
     reranker = FakeReranker()
     outcome = rerank_candidates(
-        reranker, "q", [], {}, budget_ms=800, top_n_min=2, top_n_max=8, candidates_max=50
+        reranker,
+        "q",
+        [],
+        {},
+        budget_ms=800,
+        top_n_min=2,
+        top_n_max=8,
+        candidates_max=50,
     )
-    assert reranker.calls == [] and outcome.ordered == [] and not outcome.degraded
+    assert (
+        reranker.calls == [] and outcome.ordered == [] and not outcome.degraded
+    )
 
 
 # --- 两路同 filter（§7.1）----------------------------------------------------
@@ -558,7 +624,9 @@ def test_dense_route_is_not_tokenised() -> None:
     from api.retrieval.hybrid import build_batch_body
 
     user = IdentitySnapshot(user_id="u1")
-    body, _ = build_batch_body("住宿费标准", [0.5] * 8, build_filter(user), top_k=30)
+    body, _ = build_batch_body(
+        "住宿费标准", [0.5] * 8, build_filter(user), top_k=30
+    )
     dense_query = body["searches"][0]["query"]
     assert isinstance(dense_query, list) and len(dense_query) == 8
 
@@ -569,7 +637,12 @@ def test_empty_query_is_rejected_before_calling_qdrant() -> None:
     from api.retrieval.hybrid import build_batch_body
 
     with pytest.raises(ValueError, match="不能为空"):
-        build_batch_body("  ", [0.1] * 8, build_filter(IdentitySnapshot(user_id="u1")), top_k=30)
+        build_batch_body(
+            "  ",
+            [0.1] * 8,
+            build_filter(IdentitySnapshot(user_id="u1")),
+            top_k=30,
+        )
 
 
 # --- 版本兜底（§7.4）---------------------------------------------------------
@@ -578,9 +651,9 @@ def test_empty_query_is_rejected_before_calling_qdrant() -> None:
 class _FakePg:
     """只回答 `active_version_map` 那一条 SQL 的替身。
 
-    用它而不是真 PG：`drop_stale` 的判据是**纯逻辑**（"候选的版本 == 该文档的生效
-    版本"），把它绑在真库上会让"去掉版本兜底"这个变异只能在集成测试里被发现，
-    而集成测试在 CI 里通常被 skip —— 那样的判据等于没有。
+    用它而不是真 PG：`drop_stale` 的判据是**纯逻辑**（“候选的版本 == 该
+    文档的生效版本”），把它绑在真库上会让“去掉版本兜底”这个变异只能在集成
+    测试里被发现，而集成测试在 CI 里通常被 skip —— 那样的判据等于没有。
     """
 
     def __init__(self, mapping: dict[str, str]) -> None:
@@ -604,8 +677,16 @@ def test_drop_stale_keeps_only_the_active_version() -> None:
     kept, dropped = drop_stale(
         pg,
         [
-            {"chunk_id": "ch_new", "doc_key": "policy/a", "version_id": "policy/a#v2"},
-            {"chunk_id": "ch_old", "doc_key": "policy/a", "version_id": "policy/a#v1"},
+            {
+                "chunk_id": "ch_new",
+                "doc_key": "policy/a",
+                "version_id": "policy/a#v2",
+            },
+            {
+                "chunk_id": "ch_old",
+                "doc_key": "policy/a",
+                "version_id": "policy/a#v1",
+            },
         ],
     )
     assert [item["chunk_id"] for item in kept] == ["ch_new"]
@@ -613,7 +694,9 @@ def test_drop_stale_keeps_only_the_active_version() -> None:
     assert dropped[0]["expected_version_id"] == "policy/a#v2"
 
 
-def test_drop_stale_is_fail_closed_for_documents_without_active_version() -> None:
+def test_drop_stale_is_fail_closed_for_documents_without_active_version() -> (
+    None
+):
     """查不到生效版本 → 该文档的候选全丢（Fail-Closed）。
 
     少召回会落进低置信门控；多召回会把已废止条款送进答案，两者代价不对等。
@@ -622,7 +705,14 @@ def test_drop_stale_is_fail_closed_for_documents_without_active_version() -> Non
 
     pg = _FakePg({})  # 一个生效版本都没有
     kept, dropped = drop_stale(
-        pg, [{"chunk_id": "ch_x", "doc_key": "policy/ghost", "version_id": "policy/ghost#v1"}]
+        pg,
+        [
+            {
+                "chunk_id": "ch_x",
+                "doc_key": "policy/ghost",
+                "version_id": "policy/ghost#v1",
+            }
+        ],
     )
     assert not kept
     assert dropped and dropped[0]["expected_version_id"] is None
@@ -636,9 +726,21 @@ def test_drop_stale_queries_each_document_once() -> None:
     drop_stale(
         pg,
         [
-            {"chunk_id": "c1", "doc_key": "policy/a", "version_id": "policy/a#v1"},
-            {"chunk_id": "c2", "doc_key": "policy/a", "version_id": "policy/a#v1"},
-            {"chunk_id": "c3", "doc_key": "policy/b", "version_id": "policy/b#v1"},
+            {
+                "chunk_id": "c1",
+                "doc_key": "policy/a",
+                "version_id": "policy/a#v1",
+            },
+            {
+                "chunk_id": "c2",
+                "doc_key": "policy/a",
+                "version_id": "policy/a#v1",
+            },
+            {
+                "chunk_id": "c3",
+                "doc_key": "policy/b",
+                "version_id": "policy/b#v1",
+            },
         ],
     )
     assert len(pg.calls) == 1
@@ -649,15 +751,29 @@ def test_drop_stale_queries_each_document_once() -> None:
 
 
 def test_verdict_enum_is_exactly_five_states() -> None:
-    """§8.4 五态。少一态意味着某个分支没法表达；多一态意味着有人加了没写文档的出口。"""
-    assert set(VERDICTS) == {"pass", "clarify", "reject_none", "reject_low", "partial"}
+    """§8.4 五态。
+
+    少一态意味着某个分支没法表达；多一态意味着有人加了没写文档的出口。
+    """
+    assert set(VERDICTS) == {
+        "pass",
+        "clarify",
+        "reject_none",
+        "reject_low",
+        "partial",
+    }
 
 
 def test_fused_score_is_never_used_as_the_gate_score() -> None:
     """融合分不进门槛判定：k=1 时第一名恒为 1.0，拿它比 0.20 等于门控不存在。"""
     item = Candidate(
-        chunk_id="a", doc_key="d", version_id="v", chunk_type="text", page_num=1,
-        fused_score=1.0, rerank_score=None,
+        chunk_id="a",
+        doc_key="d",
+        version_id="v",
+        chunk_type="text",
+        page_num=1,
+        fused_score=1.0,
+        rerank_score=None,
     )
     assert effective_score(item) == 0.0
     assert decide([item], cfg=CFG).verdict == "reject_none"
@@ -666,7 +782,10 @@ def test_fused_score_is_never_used_as_the_gate_score() -> None:
 def test_below_reject_none_is_hard_reject() -> None:
     decision = decide([cand("a", score=0.19)], cfg=CFG)
     assert decision.verdict == "reject_none"
-    assert decision.reject_code is not None and decision.reject_code.value == "no_evidence"
+    assert (
+        decision.reject_code is not None
+        and decision.reject_code.value == "no_evidence"
+    )
 
 
 def test_between_thresholds_is_low_confidence_with_suspects() -> None:
@@ -676,12 +795,21 @@ def test_between_thresholds_is_low_confidence_with_suspects() -> None:
     ]
     decision = decide(items, cfg=CFG)
     assert decision.verdict == "reject_low"
-    assert decision.reject_code is not None and decision.reject_code.value == "low_confidence"
-    assert [doc.doc_key for doc in decision.suspected_docs] == ["policy/x", "policy/y"]
+    assert (
+        decision.reject_code is not None
+        and decision.reject_code.value == "low_confidence"
+    )
+    assert [doc.doc_key for doc in decision.suspected_docs] == [
+        "policy/x",
+        "policy/y",
+    ]
 
 
 def test_suspected_docs_are_capped() -> None:
-    items = [cand(f"c{i}", score=0.3 - i * 0.01, doc_key=f"policy/{i}") for i in range(5)]
+    items = [
+        cand(f"c{i}", score=0.3 - i * 0.01, doc_key=f"policy/{i}")
+        for i in range(5)
+    ]
     decision = decide(items, cfg=CFG)
     assert len(decision.suspected_docs) == CFG.suspected_docs_max
 
@@ -699,8 +827,14 @@ def test_bm25_strength_never_overrides_the_gate() -> None:
     谁把门控改成"看最大值"，这条会立刻红。
     """
     item = Candidate(
-        chunk_id="a", doc_key="d", version_id="v", chunk_type="text", page_num=1,
-        sparse_score=999.0, dense_score=0.99, rerank_score=0.19,
+        chunk_id="a",
+        doc_key="d",
+        version_id="v",
+        chunk_type="text",
+        page_num=1,
+        sparse_score=999.0,
+        dense_score=0.99,
+        rerank_score=0.19,
     )
     assert decide([item], cfg=CFG).verdict == "reject_none"
 
@@ -731,12 +865,15 @@ def test_borderline_band_checks_entity_presence() -> None:
 def test_borderline_band_passes_when_entity_is_present() -> None:
     items = [cand("a", score=0.39), cand("b", score=0.38, page_num=2)]
     decision = decide(
-        items, cfg=CFG, entities=("住宿费",), texts={"a": "住宿费限额 500 元", "b": "x"}
+        items,
+        cfg=CFG,
+        entities=("住宿费",),
+        texts={"a": "住宿费限额 500 元", "b": "x"},
     )
     assert decision.verdict == "pass"
 
 
-def test_multi_entity_with_one_paragraph_is_rejected_even_when_scored_high() -> None:
+def test_multi_entity_one_paragraph_rejected_despite_high_score() -> None:
     """§8.1 边界表："最高分高但只有一条证据 → 多实体问题拒答"。"""
     decision = decide([cand("a", score=0.85)], cfg=CFG, multi_entity=True)
     assert decision.verdict == "reject_low"
@@ -749,21 +886,34 @@ def test_single_fact_with_one_evidence_passes() -> None:
 
 def test_two_documents_with_close_scores_trigger_clarify() -> None:
     """§8.2："候选来自两份以上文档且分数接近（差小于 0.05）"→ 澄清。"""
-    items = [cand("a", score=0.62, doc_key="policy/x"), cand("b", score=0.60, doc_key="policy/y")]
-    decision = decide(items, cfg=CFG, doc_names={"policy/x": "X 办法", "policy/y": "Y 办法"})
+    items = [
+        cand("a", score=0.62, doc_key="policy/x"),
+        cand("b", score=0.60, doc_key="policy/y"),
+    ]
+    decision = decide(
+        items, cfg=CFG, doc_names={"policy/x": "X 办法", "policy/y": "Y 办法"}
+    )
     assert decision.verdict == "clarify"
-    assert {opt.doc_key for opt in decision.clarify_options} == {"policy/x", "policy/y"}
+    assert {opt.doc_key for opt in decision.clarify_options} == {
+        "policy/x",
+        "policy/y",
+    }
 
 
 def test_two_documents_with_clear_winner_both_pass_through() -> None:
-    items = [cand("a", score=0.72, doc_key="policy/x"), cand("b", score=0.45, doc_key="policy/y")]
+    items = [
+        cand("a", score=0.72, doc_key="policy/x"),
+        cand("b", score=0.45, doc_key="policy/y"),
+    ]
     assert decide(items, cfg=CFG).verdict == "pass"
 
 
 def test_clarify_options_come_from_evidence_only() -> None:
     """§8.2："选项不是凭空编的，只能从检索到的事实里取"。"""
     items = [cand("a", score=0.6, doc_key="policy/x", page_num=47)]
-    options = decorate_clarify_options(items, doc_names={"policy/x": "差旅管理办法"}, max_options=4)
+    options = decorate_clarify_options(
+        items, doc_names={"policy/x": "差旅管理办法"}, max_options=4
+    )
     assert len(options) == 1
     assert options[0].doc_key == "policy/x"
     assert "差旅管理办法" in options[0].label and "47" in options[0].label
@@ -780,7 +930,10 @@ def test_clarify_options_are_capped_and_deduped_by_document() -> None:
 
 def test_partial_wins_over_clarify() -> None:
     """已经查到一部分时再问"你要哪个"是本末倒置（§8.3）：先把已查实的给出去。"""
-    items = [cand("a", score=0.62, doc_key="policy/x"), cand("b", score=0.61, doc_key="policy/y")]
+    items = [
+        cand("a", score=0.62, doc_key="policy/x"),
+        cand("b", score=0.61, doc_key="policy/y"),
+    ]
     decision = decide(items, cfg=CFG, uncovered=("交通费",))
     assert decision.verdict == "partial"
     assert decision.uncovered == ("交通费",)
@@ -789,8 +942,13 @@ def test_partial_wins_over_clarify() -> None:
 
 def test_degraded_rerank_cannot_be_clarified() -> None:
     """降级时分数不可用 → 不拿"分数接近"去问用户（那个判断本身没有依据）。"""
-    items = [cand("a", score=0.62, doc_key="policy/x"), cand("b", score=0.61, doc_key="policy/y")]
-    decision = decide(items, cfg=CFG, degraded=True, degrade_reason="rerank_timeout")
+    items = [
+        cand("a", score=0.62, doc_key="policy/x"),
+        cand("b", score=0.61, doc_key="policy/y"),
+    ]
+    decision = decide(
+        items, cfg=CFG, degraded=True, degrade_reason="rerank_timeout"
+    )
     assert decision.verdict == "pass"
     assert decision.degraded is True
 
@@ -803,8 +961,13 @@ def test_empty_candidates_is_reject_none() -> None:
 def test_gate_config_rejects_inverted_thresholds() -> None:
     with pytest.raises(ValueError, match="reject_none"):
         GateConfig(
-            reject_none=0.5, reject_low=0.4, borderline_low=0.38, borderline_high=0.42,
-            clarify_score_delta=0.05, clarify_options_max=4, suspected_docs_max=3,
+            reject_none=0.5,
+            reject_low=0.4,
+            borderline_low=0.38,
+            borderline_high=0.42,
+            clarify_score_delta=0.05,
+            clarify_options_max=4,
+            suspected_docs_max=3,
             evidence_min_paras=2,
         )
 
@@ -829,7 +992,13 @@ def test_max_hops_is_respected() -> None:
 
     def runner(hop: int, sub: str, gap: str) -> HopOutcome:
         calls.append(hop)
-        return HopOutcome(hop=hop, sub_question=sub, gap=gap, passed=True, facts=(_fact(f"c{hop}", hop),))
+        return HopOutcome(
+            hop=hop,
+            sub_question=sub,
+            gap=gap,
+            passed=True,
+            facts=(_fact(f"c{hop}", hop),),
+        )
 
     result = run_multihop(
         max_hops=3,
@@ -849,7 +1018,13 @@ def test_stops_early_when_gap_is_filled() -> None:
 
     def runner(hop: int, sub: str, gap: str) -> HopOutcome:
         calls.append(hop)
-        return HopOutcome(hop=hop, sub_question=sub, gap=gap, passed=True, facts=(_fact(f"c{hop}", hop),))
+        return HopOutcome(
+            hop=hop,
+            sub_question=sub,
+            gap=gap,
+            passed=True,
+            facts=(_fact(f"c{hop}", hop),),
+        )
 
     result = run_multihop(
         max_hops=3,
@@ -884,7 +1059,13 @@ def test_broken_later_hop_keeps_earlier_facts() -> None:
     def runner(hop: int, sub: str, gap: str) -> HopOutcome:
         if hop == 2:
             return HopOutcome(hop=hop, sub_question=sub, gap=gap, passed=False)
-        return HopOutcome(hop=hop, sub_question=sub, gap=gap, passed=True, facts=(_fact(f"c{hop}", hop),))
+        return HopOutcome(
+            hop=hop,
+            sub_question=sub,
+            gap=gap,
+            passed=True,
+            facts=(_fact(f"c{hop}", hop),),
+        )
 
     result = run_multihop(
         max_hops=3,
@@ -900,12 +1081,19 @@ def test_broken_later_hop_keeps_earlier_facts() -> None:
 
 
 def test_conflicting_reading_of_the_same_chunk_stops_the_loop() -> None:
-    """§8.3 边界表："子问题与已查实事实冲突 → 停止，输出冲突说明，不强行统一"。"""
+    """§8.3 边界表：子问题与已查实事实冲突时停止。
+
+    输出冲突说明，不强行统一。
+    """
 
     def runner(hop: int, sub: str, gap: str) -> HopOutcome:
         claim = "500 元" if hop == 1 else "800 元"
         return HopOutcome(
-            hop=hop, sub_question=sub, gap=gap, passed=True, facts=(_fact("same", hop, claim),)
+            hop=hop,
+            sub_question=sub,
+            gap=gap,
+            passed=True,
+            facts=(_fact("same", hop, claim),),
         )
 
     result = run_multihop(
@@ -930,7 +1118,10 @@ def test_each_hop_must_pass_its_own_threshold() -> None:
         seen.append(hop)
         passed = hop == 1
         return HopOutcome(
-            hop=hop, sub_question=sub, gap=gap, passed=passed,
+            hop=hop,
+            sub_question=sub,
+            gap=gap,
+            passed=passed,
             top1=0.7 if passed else 0.05,
             facts=(_fact(f"c{hop}", hop),) if passed else (),
         )
@@ -962,6 +1153,6 @@ def test_mentioned_doc_keys_finds_explicit_company_name() -> None:
         "pdf_reports/han-wu-ji-26-ban-nian-bao": "寒武纪26半年报.pdf",
         "pdf_reports/zhang-xin-ke-ji-26-ban-nian-bao": "长鑫科技26半年报.pdf",
     }
-    assert mentioned_doc_keys("寒武纪 2026 年上半年营业收入是多少？", names) == (
-        "pdf_reports/han-wu-ji-26-ban-nian-bao",
-    )
+    assert mentioned_doc_keys(
+        "寒武纪 2026 年上半年营业收入是多少？", names
+    ) == ("pdf_reports/han-wu-ji-26-ban-nian-bao",)

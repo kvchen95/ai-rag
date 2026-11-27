@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ai-rag worker：把"期望状态"持续推给 Qdrant（详细设计.md §4.2）。
+"""ai-rag worker：把"期望状态"持续推给 Qdrant（详细设计.md §4.2）。.
 
 为什么必须有这个进程
 --------------------
@@ -22,7 +22,8 @@ PG 的事务边界不被网络抖动绑住。代价是：**必须有东西去消
 循环的两件事
 ------------
 
-1. **drain**：消费到期的期望状态（改 payload.status / 删点），失败按 §4.2 重试三次；
+1. **drain**：消费到期的期望状态（改 payload.status / 删点），失败按 §4.2 重试三
+次；
 2. **对账**（默认每 10 轮做一次）：修复漏网的漂移。对账比 drain 贵（要滚动整个
    集合），所以不是每轮都做；但"漂移没人数才可怕"（§4.2），所以也不能不做。
 
@@ -32,21 +33,26 @@ PG 的事务边界不被网络抖动绑住。代价是：**必须有东西去消
 
 from __future__ import annotations
 
+import contextlib
 import signal
 import sys
 import time
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+# 按脚本路径启动（python worker/xxx.py）时也能导入 api 包。
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from api.clients.pg import PgDatabase  # noqa: E402
-from api.config import get_settings  # noqa: E402
-from api.ingest.reconcile import reconcile  # noqa: E402
-from api.ingest.sync import drain  # noqa: E402
-from api.ingest.vectors import QdrantVectorStore  # noqa: E402
-from api.observability import configure_logging, get_logger, log_event, log_exception  # noqa: E402
+from api.clients.pg import PgDatabase
+from api.config import get_settings
+from api.ingest.reconcile import reconcile
+from api.ingest.sync import drain
+from api.ingest.vectors import QdrantVectorStore
+from api.observability import (
+    configure_logging,
+    get_logger,
+    log_event,
+    log_exception,
+)
 
 logger = get_logger("worker.vector_sync")
 
@@ -54,8 +60,11 @@ STOP = False
 
 
 def _handle_stop(signum: int, _frame: object) -> None:
+    """收到 SIGTERM/SIGINT 后置停止标志，跑完本轮再退。."""
     global STOP
-    logger.info("received signal %s, shutting down after the current round", signum)
+    logger.info(
+        "received signal %s, shutting down after the current round", signum
+    )
     STOP = True
 
 
@@ -68,7 +77,10 @@ def _tick(
     reconcile_every: int,
     round_no: int,
 ) -> None:
-    report = drain(pg.pool, store, max_attempts=sync_max_attempts, backoff_s=backoff_s)
+    """跑一轮：drain 期望状态，按需对账。."""
+    report = drain(
+        pg.pool, store, max_attempts=sync_max_attempts, backoff_s=backoff_s
+    )
     if report.processed:
         log_event(
             logger,
@@ -81,7 +93,12 @@ def _tick(
         )
         if report.failed:
             # failed 已经进了漂移账（sync.record_drift），这里只是把水位打出来。
-            log_event(logger, "vector_sync_exhausted", round=round_no, failed=report.failed)
+            log_event(
+                logger,
+                "vector_sync_exhausted",
+                round=round_no,
+                failed=report.failed,
+            )
 
     if reconcile_every and round_no % reconcile_every == 0:
         # 对账要一条连接做 PG 侧读取（Qdrant 调用也在里面），用短事务。
@@ -96,7 +113,8 @@ def _tick(
                 healed=len(rec.healed),
                 remaining=len(rec.remaining),
             )
-        # 未修完的差异是"需要人看"的信号，用 ERROR 级别打出来（对账已写进漂移账）。
+        # 未修完的差异是"需要人看"的信号，用 ERROR 级别打出来
+        # （对账已写进漂移账）。
         if rec.remaining:
             log_event(
                 logger,
@@ -109,9 +127,12 @@ def _tick(
 
 
 def main() -> int:
+    """入口：起常驻循环，按间隔 drain + 对账。."""
     settings = get_settings()
     configure_logging(
-        level=settings.log_level, service=f"{settings.service_name}-worker", env=settings.app_env
+        level=settings.log_level,
+        service=f"{settings.service_name}-worker",
+        env=settings.app_env,
     )
 
     signal.signal(signal.SIGTERM, _handle_stop)
@@ -165,8 +186,11 @@ def main() -> int:
                     round_no=round_no,
                 )
             except Exception:  # noqa: BLE001 - 单轮失败不该把 worker 弄死
-                # Qdrant 抖一下 -> 容器重启 -> 仍然抖 -> 重启风暴。所以记录后继续。
-                log_exception(logger, "vector_sync_round_failed", round=round_no)
+                # Qdrant 抖一下 -> 容器重启 -> 仍然抖 -> 重启风暴。
+                # 所以记录后继续，不退出。
+                log_exception(
+                    logger, "vector_sync_round_failed", round=round_no
+                )
 
             # 分段 sleep：收到 SIGTERM 时最多等 1 秒就退出，而不是等满整个间隔。
             slept = 0.0
@@ -176,10 +200,8 @@ def main() -> int:
     finally:
         store.close()
         pg.close()
-        try:
+        with contextlib.suppress(OSError):
             ready.unlink(missing_ok=True)
-        except OSError:
-            pass
         log_event(logger, "vector_sync_worker_stopped", rounds=round_no)
     return 0
 

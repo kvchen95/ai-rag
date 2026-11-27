@@ -1,7 +1,8 @@
-"""MinerU 官方云 API 客户端：本地文件走签名上传（单文件也走 batch 接口）。
+"""MinerU 官方云 API 客户端：本地文件走签名上传（单文件也走 batch 接口）。.
 
-官方 `/api/v4/extract/task` 只收公网 URL；本地 PDF 必须先申请上传链接、PUT 字节，
-再用 `batch_id` 轮询结果。接口字段按 https://mineru.net/apiManage/docs 落地。
+官方 `/api/v4/extract/task` 只收公网 URL；本地 PDF 必须先申请上传
+链接、PUT 字节，再用 `batch_id` 轮询结果。接口字段按
+https://mineru.net/apiManage/docs 落地。
 """
 
 from __future__ import annotations
@@ -18,24 +19,29 @@ from urllib.parse import urlsplit
 
 
 class MineruError(RuntimeError):
-    """MinerU 请求失败或返回无法解释的状态。"""
+    """MinerU 请求失败或返回无法解释的状态。."""
 
 
 def result_origin_url(url: str) -> str:
-    """MinerU CDN TLS 失败时，回退到 OSS 源站（实测源站可下载）。
+    """MinerU CDN TLS 失败时，回退到 OSS 源站（实测源站可下载）。.
 
     只改 host，不改 path/query；用户可通过 `MINERU_RESULT_ORIGIN_HOST` 覆盖。
     """
     from urllib.parse import urlsplit, urlunsplit
 
     parsed = urlsplit(url)
-    host = os.environ.get("MINERU_RESULT_ORIGIN_HOST", "mineru.oss-cn-shanghai.aliyuncs.com")
+    host = os.environ.get(
+        "MINERU_RESULT_ORIGIN_HOST", "mineru.oss-cn-shanghai.aliyuncs.com"
+    )
     if parsed.hostname != "cdn-mineru.openxlab.org.cn":
         return url
-    return urlunsplit((parsed.scheme, host, parsed.path, parsed.query, parsed.fragment))
+    return urlunsplit(
+        (parsed.scheme, host, parsed.path, parsed.query, parsed.fragment)
+    )
 
 
 class MineruClient:
+    """MineruClient."""
     def __init__(
         self,
         base_url: str,
@@ -45,6 +51,7 @@ class MineruClient:
         poll_interval_s: float = 3.0,
         poll_timeout_s: float = 900.0,
     ) -> None:
+        """Initialize the instance."""
         if not token:
             raise ValueError("MINERU_API_KEY 不能为空")
         self.base_url = base_url.rstrip("/")
@@ -54,15 +61,20 @@ class MineruClient:
         self.poll_timeout_s = poll_timeout_s
 
     def close(self) -> None:
-        return None
+        """Release resources; requests are one-shot so nothing is held."""
 
-    def __enter__(self) -> "MineruClient":
+    def __enter__(self) -> MineruClient:
+        """Enter the context manager."""
         return self
 
     def __exit__(self, *_exc: object) -> None:
+        """Exit the context manager."""
         self.close()
 
-    def _api(self, path: str, *, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _api(
+        self, path: str, *, payload: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Run _api."""
         data = None if payload is None else json.dumps(payload).encode("utf-8")
         headers = {
             "Authorization": f"Bearer {self.token}",
@@ -77,12 +89,13 @@ class MineruClient:
             method="POST" if data is not None else "GET",
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout_s) as response:
+            with urllib.request.urlopen(
+                request, timeout=self.timeout_s
+            ) as response:
                 body = response.read()
         except urllib.error.HTTPError as exc:  # pragma: no cover - 真服务端错误
-            raise MineruError(
-                f"MinerU HTTP {exc.code}: {exc.read()[:300].decode('utf-8', 'replace')}"
-            ) from exc
+            detail = exc.read()[:300].decode("utf-8", "replace")
+            raise MineruError(f"MinerU HTTP {exc.code}: {detail}") from exc
         except urllib.error.URLError as exc:  # pragma: no cover - 网络不可达
             raise MineruError(f"MinerU 网络错误：{exc.reason}") from exc
         try:
@@ -97,6 +110,7 @@ class MineruClient:
         return parsed
 
     def submit_local(self, path: Path, data_id: str) -> str:
+        """Run submit_local."""
         response = self._api(
             "/file-urls/batch",
             payload={
@@ -110,12 +124,14 @@ class MineruClient:
         batch_id = data.get("batch_id")
         urls = data.get("file_urls") or []
         if not batch_id or len(urls) != 1:
-            raise MineruError("申请上传链接失败：batch_id 或 file_urls 形状不对")
+            raise MineruError(
+                "申请上传链接失败：batch_id 或 file_urls 形状不对"
+            )
         self._put_binary(urls[0], path.read_bytes())
         return str(batch_id)
 
     def _put_binary(self, url: str, data: bytes) -> None:
-        """签名上传：不能让标准库自动补 Content-Type，所以用 http.client 手写 PUT。"""
+        """签名上传：手写 PUT，避免标准库自动补 Content-Type。."""
         parsed = urlsplit(url)
         target = parsed.path or "/"
         if parsed.query:
@@ -140,6 +156,7 @@ class MineruClient:
             conn.close()
 
     def wait_result(self, batch_id: str) -> str:
+        """Run wait_result."""
         deadline = time.monotonic() + self.poll_timeout_s
         while True:
             response = self._api(f"/extract-results/batch/{batch_id}")
@@ -164,8 +181,11 @@ class MineruClient:
             time.sleep(self.poll_interval_s)
 
     def _get_bytes(self, url: str) -> bytes:
+        """Run _get_bytes."""
         try:
-            with urllib.request.urlopen(url, timeout=self.timeout_s) as response:
+            with urllib.request.urlopen(
+                url, timeout=self.timeout_s
+            ) as response:
                 return response.read()
         except urllib.error.HTTPError as exc:  # pragma: no cover
             raise MineruError(f"下载解析结果失败：HTTP {exc.code}") from exc
@@ -173,6 +193,7 @@ class MineruClient:
             raise MineruError(f"下载解析结果失败：{exc.reason}") from exc
 
     def download(self, url: str) -> bytes:
+        """Run download."""
         try:
             return self._get_bytes(url)
         except MineruError:
@@ -182,6 +203,7 @@ class MineruClient:
             return self._get_bytes(fallback)
 
     def parse_local(self, path: Path, data_id: str) -> dict[str, Any]:
+        """Run parse_local."""
         batch_id = self.submit_local(path, data_id)
         zip_url = self.wait_result(batch_id)
         return {"batch_id": batch_id, "zip_bytes": self.download(zip_url)}

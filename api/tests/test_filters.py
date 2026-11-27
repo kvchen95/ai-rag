@@ -26,10 +26,10 @@ from api.filters import (
     P_EFFECTIVE_DATE,
     P_EFFECTIVE_YEAR,
     P_IS_PUBLIC,
-    P_ROLES,
-    P_STATUS,
     P_REPORT_PERIOD_END,
     P_REPORT_PERIOD_START,
+    P_ROLES,
+    P_STATUS,
     PgSource,
     RetrievalFilter,
     build_filter,
@@ -43,7 +43,9 @@ MULTI = IdentitySnapshot(
 )
 NO_DEPTS = IdentitySnapshot(user_id="u_new")
 ADMIN = IdentitySnapshot(user_id="u_admin", depts=(), roles=(), admin=True)
-MARCH = TimeRange(20260301, 20260331, "month", "三月", "assumed_year", inferred=True)
+MARCH = TimeRange(
+    20260301, 20260331, "month", "三月", "assumed_year", inferred=True
+)
 YEAR_2026 = TimeRange(20260101, 20261231, "year", "2026年", "explicit")
 
 
@@ -97,21 +99,26 @@ def test_acl_group_has_public_depts_roles_for_normal_user() -> None:
 def test_public_branch_is_always_present() -> None:
     """§5.2：无部门的人只能看公开文档，所以 public 这一支永远在。"""
     for identity in (USER, MULTI, NO_DEPTS):
-        assert BRANCH_PUBLIC in RetrievalFilter(identity=identity).acl_branches()
+        assert (
+            BRANCH_PUBLIC in RetrievalFilter(identity=identity).acl_branches()
+        )
 
 
 def test_no_depts_and_no_roles_yields_public_only() -> None:
     flt = RetrievalFilter(identity=NO_DEPTS)
     assert flt.acl_branches() == (BRANCH_PUBLIC,)
     assert _conditions(flt)["__should__"] == [P_IS_PUBLIC]
-    # 关键：不生成空的 MatchAny(any=[])——那要靠别人未成文的实现细节才对，而"省略"
+    # 关键：不生成空的
+    # MatchAny(any=[])——那要靠别人未成文的实现细节才对，而"省略"
     # 不需要任何人承诺什么。
     assert P_DEPTS not in _conditions(flt)
 
 
 def test_multi_depts_all_go_into_one_any() -> None:
-    """多部门是"任一命中"，所以是一个 MatchAny 装两个值，不是两条 AND 条件。
-    写成两条 AND 会让跨部门的人一条都命中不了（§5.2 点名要避免的坑）。"""
+    """多部门是“任一命中”：一个 MatchAny 装两个值，不是两条 AND 条件。
+
+    写成两条 AND 会让跨部门的人一条都命中不了（§5.2 点名要避免的坑）。
+    """
     conds = _conditions(RetrievalFilter(identity=MULTI))
     match = conds[P_DEPTS]
     assert sorted(match.any) == ["corp", "fin"]  # type: ignore[union-attr]
@@ -125,19 +132,28 @@ def test_depts_only_without_roles_omits_roles_branch() -> None:
 
 
 def test_admin_drops_the_whole_acl_group() -> None:
-    """§5.2 边界表：管理员跳过部门与角色。是"整条去掉"，不是"放宽成 public or 全部"——
-    后者会让 is_public 与 ACL 的语义纠缠在一起，日后无法单独调整。"""
+    """§5.2 边界表：管理员跳过部门与角色。
+
+    是“整条去掉”，不是“放宽成 public or 全部”——后者会让 is_public 与
+    ACL 的语义纠缠在一起，日后无法单独调整。
+    """
     flt = RetrievalFilter(identity=ADMIN)
     conds = _conditions(flt)
     assert flt.acl_branches() == ()
     assert "__should__" not in conds
-    assert P_IS_PUBLIC not in conds and P_DEPTS not in conds and P_ROLES not in conds
+    assert (
+        P_IS_PUBLIC not in conds
+        and P_DEPTS not in conds
+        and P_ROLES not in conds
+    )
     # 但 status=active 仍在：管理员也要看生效版本（版本兜底另算，§7.4）。
     assert P_STATUS in conds
 
 
 def test_admin_marks_audit_flag() -> None:
-    assert RetrievalFilter(identity=ADMIN).describe()["audit_flags"] == ["admin_access"]
+    assert RetrievalFilter(identity=ADMIN).describe()["audit_flags"] == [
+        "admin_access"
+    ]
 
 
 # --- 时间条件 ---------------------------------------------------------------
@@ -150,7 +166,10 @@ def test_no_time_word_adds_no_time_condition() -> None:
 
 
 def test_time_window_adds_inclusive_range_and_explicit_only() -> None:
-    """§5.2：只认显式时间。少 date_confidence 那一半，推断出来的日期也会被召回。"""
+    """§5.2：只认显式时间。
+
+    少 date_confidence 那一半，推断出来的日期也会被召回。
+    """
     conds = _conditions(RetrievalFilter(identity=USER, time_range=MARCH))
     assert conds[P_EFFECTIVE_DATE] == (20260301, 20260331)
     assert conds[P_DATE_CONFIDENCE].value == "explicit"  # type: ignore[union-attr]
@@ -167,7 +186,8 @@ def test_year_window_uses_effective_year_and_allows_inferred_dates() -> None:
 # --- scope ------------------------------------------------------------------
 
 
-# --- report period 三层过滤 ------------------------------------------------------
+# --- report period 三层过滤
+# ------------------------------------------------------
 
 
 def _time_branches(flt: RetrievalFilter) -> list[object]:
@@ -175,7 +195,8 @@ def _time_branches(flt: RetrievalFilter) -> list[object]:
     temporal = [
         item
         for item in qdrant_filter.must
-        if hasattr(item, "should") and not any(
+        if hasattr(item, "should")
+        and not any(
             getattr(sub, "key", None) == P_IS_PUBLIC for sub in item.should
         )
     ]
@@ -205,11 +226,15 @@ def _condition_value(condition: object) -> object:
     raise AssertionError("condition has neither range nor match nor is_null")
 
 
-Q3_REPORT = TimeRange(20260701, 20260930, "quarter", "2026 Q3", "explicit", use_report_period=True)
+Q3_REPORT = TimeRange(
+    20260701, 20260930, "quarter", "2026 Q3", "explicit", use_report_period=True
+)
 
 
 def test_report_period_filter_uses_three_temporal_branches() -> None:
-    branches = _time_branches(RetrievalFilter(identity=ADMIN, time_range=Q3_REPORT))
+    branches = _time_branches(
+        RetrievalFilter(identity=ADMIN, time_range=Q3_REPORT)
+    )
     assert len(branches) == 3
     exact = _branch_conditions(branches[0])
     assert exact[P_REPORT_PERIOD_START] == (20260701, 20260930)
@@ -219,7 +244,7 @@ def test_report_period_filter_uses_three_temporal_branches() -> None:
         assert conditions[P_REPORT_PERIOD_START] == ("is_null", True)
         assert conditions[P_REPORT_PERIOD_END] == ("is_null", True)
     fallback_date = _branch_conditions(branches[1])
-    assert P_EFFECTIVE_DATE in fallback_date or P_PUBLICATION_DATE in fallback_date
+    assert P_EFFECTIVE_DATE in fallback_date
     fallback_year = _branch_conditions(branches[2])
     assert P_EFFECTIVE_YEAR in fallback_year
 
@@ -232,8 +257,10 @@ def test_scope_adds_doc_key_any() -> None:
 
 
 def test_empty_scope_is_treated_as_no_scope() -> None:
-    """空 scope 的语义是"不限定文档"（附录 C.1）。拼成恒假条件会让一次请求拼错
-    表现为"库里没有"，而不是"请求有问题"。"""
+    """空 scope 的语义是“不限定文档”（附录 C.1）。
+
+    拼成恒假条件会让一次请求拼错表现为“库里没有”，而不是“请求有问题”。
+    """
     flt = RetrievalFilter(identity=USER, doc_keys=())
     assert flt.doc_keys is None
     assert P_DOC_KEY not in _conditions(flt)
@@ -248,8 +275,10 @@ def test_scope_is_deduped_and_blank_stripped() -> None:
 
 
 def test_pg_where_on_view_omits_status() -> None:
-    """视图已经把"双 active"写进 WHERE，而且视图里没有 status 列。
-    实测撞过：多加一条 `c.status = 'active'` 直接报 column does not exist。"""
+    """视图已经把“双 active”写进 WHERE，而且视图里没有 status 列。
+
+    实测撞过：多加一条 `c.status = 'active'` 直接报 column does not exist。
+    """
     where, params = RetrievalFilter(identity=USER).pg_where()
     assert "status" not in where
     # 参数里只剩 ACL 的部门与角色，没有状态值。
@@ -259,13 +288,18 @@ def test_pg_where_on_view_omits_status() -> None:
 
 def test_pg_where_on_chunks_table_adds_status() -> None:
     """反方向：直连原表时状态必须自己写，否则待转正/已下线的切片都会进来。"""
-    where, params = RetrievalFilter(identity=USER).pg_where(source=PgSource.CHUNKS)
+    where, params = RetrievalFilter(identity=USER).pg_where(
+        source=PgSource.CHUNKS
+    )
     assert "status = %s" in where
     assert params[0] == ACTIVE_STATUS
 
 
 def test_pg_where_uses_intersection_not_containment() -> None:
-    """`&&` 是"有交集"。写成 `<@`（被包含）会让多部门的人漏召回——§5.2 明确点名的坑。"""
+    """`&&` 是"有交集"。
+
+    写成 `<@`（被包含）会让多部门的人漏召回——§5.2 明确点名的坑。
+    """
     where, params = RetrievalFilter(identity=MULTI).pg_where()
     assert "allowed_depts && %s::text[]" in where
     assert "allowed_roles && %s::text[]" in where
@@ -295,8 +329,12 @@ def test_pg_where_time_clause_uses_between_and_explicit() -> None:
     assert "explicit" in params
 
 
-def test_pg_where_year_clause_uses_effective_year_without_confidence_gate() -> None:
-    where, params = RetrievalFilter(identity=USER, time_range=YEAR_2026).pg_where()
+def test_pg_where_year_clause_uses_effective_year_without_confidence_gate() -> (
+    None
+):
+    where, params = RetrievalFilter(
+        identity=USER, time_range=YEAR_2026
+    ).pg_where()
     assert "effective_year BETWEEN %s AND %s" in where
     assert "effective_date" not in where
     assert "date_confidence" not in where
@@ -311,7 +349,9 @@ def test_pg_where_params_are_all_placeholders() -> None:
 
 
 def test_pg_where_alias_is_applied_to_every_column() -> None:
-    where, _ = RetrievalFilter(identity=USER, time_range=MARCH).pg_where("chunks")
+    where, _ = RetrievalFilter(identity=USER, time_range=MARCH).pg_where(
+        "chunks"
+    )
     for column in (
         "is_public",
         "allowed_depts",
@@ -329,7 +369,13 @@ def test_pg_where_alias_is_applied_to_every_column() -> None:
 
 @pytest.mark.parametrize(
     "identity",
-    [USER, MULTI, NO_DEPTS, ADMIN, IdentitySnapshot(user_id="u_r", roles=("staff",))],
+    [
+        USER,
+        MULTI,
+        NO_DEPTS,
+        ADMIN,
+        IdentitySnapshot(user_id="u_r", roles=("staff",)),
+    ],
 )
 def test_both_renderings_agree_on_which_branches_are_active(
     identity: IdentitySnapshot,
@@ -372,7 +418,9 @@ def test_describe_is_json_ready_and_has_no_secrets() -> None:
     assert payload["admin"] is False
 
 
-def test_build_filter_logs_without_raising(caplog: pytest.LogCaptureFixture) -> None:
+def test_build_filter_logs_without_raising(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     built = build_filter(USER, time_range=MARCH, doc_keys=["policy/a"])
     assert built.time_range is MARCH
     assert built.doc_keys == ("policy/a",)

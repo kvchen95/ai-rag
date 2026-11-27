@@ -40,8 +40,12 @@ def migrated(pg_dsn: str) -> str:
     )
     assert proc.returncode == 0, f"db_migrate.py failed: {proc.stderr[-800:]}"
     with psycopg.connect(normalize_dsn(pg_dsn)) as conn:
-        exists = conn.execute("SELECT to_regclass('public.qa_log')").fetchone()[0]
-    assert exists is not None, "qa_log 不存在：迁移没建出来，后面的审计断言无意义"
+        exists = conn.execute("SELECT to_regclass('public.qa_log')").fetchone()[
+            0
+        ]
+    assert (
+        exists is not None
+    ), "qa_log 不存在：迁移没建出来，后面的审计断言无意义"
     return pg_dsn
 
 
@@ -59,7 +63,9 @@ def db(migrated: str):
 def _cleanup(pg_dsn: str):
     yield
     with psycopg.connect(normalize_dsn(pg_dsn), autocommit=True) as conn:
-        conn.execute("DELETE FROM qa_log WHERE user_id LIKE %s", (TEST_USER + "%",))
+        conn.execute(
+            "DELETE FROM qa_log WHERE user_id LIKE %s", (TEST_USER + "%",)
+        )
 
 
 def _entry(**overrides: object) -> QaLogEntry:
@@ -108,7 +114,8 @@ def test_admin_flag_is_recorded(db: PgDatabase) -> None:
     result = AuditWriter(db).record(_entry(is_admin=True, user_depts=[]))
     assert result.ok
     row = db.fetch_one(
-        "SELECT is_admin, user_depts FROM qa_log WHERE id = %s", (result.audit_id,)
+        "SELECT is_admin, user_depts FROM qa_log WHERE id = %s",
+        (result.audit_id,),
     )
     assert row == {"is_admin": True, "user_depts": []}
 
@@ -128,35 +135,57 @@ def test_reject_row_keeps_reason_code(db: PgDatabase) -> None:
         "SELECT gate1_verdict, reject_reason FROM qa_log WHERE id = %s",
         (result.audit_id,),
     )
-    assert row == {"gate1_verdict": "reject_low", "reject_reason": "low_confidence"}
+    assert row == {
+        "gate1_verdict": "reject_low",
+        "reject_reason": "low_confidence",
+    }
 
 
 # 这些是 db/migrations/001_init.sql 里真实存在的单列 CHECK。
 _BAD_ROWS = {
-    "unknown_gate1": "INSERT INTO qa_log (user_id, question, gate1_verdict, latency_ms) "
-    "VALUES ('u_b1_test', 'q', 'maybe', 1)",
-    "unknown_gate2": "INSERT INTO qa_log (user_id, question, gate1_verdict, gate2_verdict, latency_ms) "
-    "VALUES ('u_b1_test', 'q', 'pass', 'perhaps', 1)",
-    "negative_latency": "INSERT INTO qa_log (user_id, question, gate1_verdict, latency_ms) "
-    "VALUES ('u_b1_test', 'q', 'pass', -1)",
-    "negative_hops": "INSERT INTO qa_log (user_id, question, gate1_verdict, hop_count, latency_ms) "
-    "VALUES ('u_b1_test', 'q', 'pass', -1, 1)",
-    "missing_question": "INSERT INTO qa_log (user_id, question, gate1_verdict, latency_ms) "
-    "VALUES ('u_b1_test', NULL, 'pass', 1)",
+    "unknown_gate1": (
+        "INSERT INTO qa_log (user_id, question, gate1_verdict, latency_ms) "
+        "VALUES ('u_b1_test', 'q', 'maybe', 1)"
+    ),
+    "unknown_gate2": (
+        "INSERT INTO qa_log "
+        "(user_id, question, gate1_verdict, gate2_verdict, latency_ms) "
+        "VALUES ('u_b1_test', 'q', 'pass', 'perhaps', 1)"
+    ),
+    "negative_latency": (
+        "INSERT INTO qa_log (user_id, question, gate1_verdict, latency_ms) "
+        "VALUES ('u_b1_test', 'q', 'pass', -1)"
+    ),
+    "negative_hops": (
+        "INSERT INTO qa_log "
+        "(user_id, question, gate1_verdict, hop_count, latency_ms) "
+        "VALUES ('u_b1_test', 'q', 'pass', -1, 1)"
+    ),
+    "missing_question": (
+        "INSERT INTO qa_log (user_id, question, gate1_verdict, latency_ms) "
+        "VALUES ('u_b1_test', NULL, 'pass', 1)"
+    ),
 }
 
 
 @pytest.mark.parametrize("case", list(_BAD_ROWS))
 def test_database_rejects_bad_rows(pg_dsn: str, case: str) -> None:
-    with psycopg.connect(normalize_dsn(pg_dsn), autocommit=True) as conn:
-        with pytest.raises(psycopg.errors.IntegrityError):
-            conn.execute(_BAD_ROWS[case])
+    with (
+        psycopg.connect(normalize_dsn(pg_dsn), autocommit=True) as conn,
+        pytest.raises(psycopg.errors.IntegrityError),
+    ):
+        conn.execute(_BAD_ROWS[case])
 
 
 def test_audit_failure_is_reported_not_raised() -> None:
-    """审计写不进去时：调用方拿到 ok=False，业务结果不被改写，但日志里必须有 ERROR。"""
+    """审计写不进去时调用方拿到 ok=False，业务结果不被改写。
+
+    但日志里必须有 ERROR。
+    """
     broken = PgDatabase(
-        "postgresql://nobody@127.0.0.1:1/none", connect_timeout_s=1, pool_timeout_s=0.5
+        "postgresql://nobody@127.0.0.1:1/none",
+        connect_timeout_s=1,
+        pool_timeout_s=0.5,
     )
     result = AuditWriter(broken).record(_entry())
     assert result.ok is False
@@ -170,12 +199,16 @@ def test_purge_expired_keeps_recent_rows(db: PgDatabase) -> None:
     assert old.ok and fresh.ok
     assert old.audit_id is not None
     db.execute(
-        "UPDATE qa_log SET created_at = now() - interval '400 days' WHERE id = %s",
+        "UPDATE qa_log SET created_at = now() - interval '400 days' "
+        "WHERE id = %s",
         (old.audit_id,),
     )
 
     assert writer.purge_expired() >= 1
-    assert db.fetch_one("SELECT id FROM qa_log WHERE id = %s", (old.audit_id,)) is None
+    assert (
+        db.fetch_one("SELECT id FROM qa_log WHERE id = %s", (old.audit_id,))
+        is None
+    )
     assert (
         db.fetch_one("SELECT id FROM qa_log WHERE id = %s", (fresh.audit_id,))
         is not None

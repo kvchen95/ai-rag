@@ -1,16 +1,22 @@
 """LLM 网关 resilience 回归：共享 keep-alive 连接池 + 有界重试。
 
-根因（2026-11-24 实测）：LlmClient.complete 每次调用都 `with httpx.Client(...)`，
+根因（2026-11-24 实测）：LlmClient.complete 每次调用都
+`with httpx.Client(...)`，
 每次问答都做一次全新 TCP+TLS 握手；第三方 SLB 在握手阶段随机回 SSL EOF，
 23% 的握手失败 → model_timeout → 陷阱题被误判为"泄漏"（RL1 13/15）。
 """
+
 from __future__ import annotations
 
 import httpx
 import pytest
 
 from api.generate import llm as llm_mod
-from api.generate.llm import GenerationRejected, GenerationUnavailable, LlmClient
+from api.generate.llm import (
+    GenerationRejected,
+    GenerationUnavailable,
+    LlmClient,
+)
 
 
 class _FakeResponse:
@@ -42,18 +48,41 @@ class _ScriptedClient:
         self.is_closed = True
 
 
-_OK = _FakeResponse(200, {"choices": [{"message": {"content": '{"status":"unknown","answer":"","citations":[]}'}}]})
+_OK = _FakeResponse(
+    200,
+    {
+        "choices": [
+            {
+                "message": {
+                    "content": '{"status":"unknown","answer":"","citations":[]}'
+                }
+            }
+        ]
+    },
+)
 
 
 def _client(**kw) -> LlmClient:
-    return LlmClient(base_url="https://gw.example/v1", model="m", api_key="k",
-                     retry_backoff_s=0.0, retry_budget_s=10.0, **kw)
+    return LlmClient(
+        base_url="https://gw.example/v1",
+        model="m",
+        api_key="k",
+        retry_backoff_s=0.0,
+        retry_budget_s=10.0,
+        **kw,
+    )
 
 
 def test_retries_transient_ssl_eof_then_succeeds(monkeypatch):
     fake = _ScriptedClient(
-        httpx.ConnectError("[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol"),
-        httpx.ConnectError("[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol"),
+        httpx.ConnectError(
+            "[SSL: UNEXPECTED_EOF_WHILE_READING] "
+            "EOF occurred in violation of protocol"
+        ),
+        httpx.ConnectError(
+            "[SSL: UNEXPECTED_EOF_WHILE_READING] "
+            "EOF occurred in violation of protocol"
+        ),
         _OK,
     )
     monkeypatch.setattr(llm_mod, "_shared_client", lambda *a, **k: fake)

@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
-"""实测 A2 摄取链路：真 PDF -> 解析 -> 切片 -> 写入真 PG（待转正）。
+"""实测 A2 摄取链路：真 PDF -> 解析 -> 切片 -> 写入真 PG（待转正）。.
 
 为什么需要一个**真写库**的脚本（而不是只靠 pytest 的集成用例）：
 
 - 集成用例验的是"每层行为"，但"这些东西到底能不能落进 `chunks` 表"是另一件事：
-  `bbox` 是 jsonb、`allowed_depts` 是 text[]、`table_cells` 是 jsonb 数组，
-  任何一处形状不对都会被 PG 拒——而那正是"字段缺失被校验拦截"这条验收的下游。
+`bbox` 是 jsonb、`allowed_depts` 是 text[]、`table_cells` 是 jsonb 数组，
+任何一处形状不对都会被 PG 拒——而那正是"字段缺失被校验拦截"这条验收的下游。
 - 它跑**真实样本目录**（`samples/` 下的三份制度文件），不给测试专用夹具开后门。
-  这样"链在路上能跑"这句话才有依据。
+这样"链在路上能跑"这句话才有依据。
 
 做四件事：
 
 1. 扫 `samples/` 找非 `layout/` 的三份制度样本，按 `version_id_for` 算出
-   `version_id`（与 A1 一致，不自己拼）。
+`version_id`（与 A1 一致，不自己拼）。
 2. 解析 + 切片，逐条 `require_complete()`。
-3. 写 `chunks`（`status='pending'`，附 `ingest_jobs` 的版本归属），**在同一事务里**，
-   失败整体回滚。
+3. 写 `chunks`（`status='pending'`，附 `ingest_jobs` 的版本归属），**在同一事务
+里**，
+失败整体回滚。
 4. 读回并逐项断言：条数、六项随行信息、bbox 能算出原页像素坐标、表格三表示一致。
 
 清理：脚本自己写的行在结束时删掉（`--keep` 可保留以便人工检查）。它**不动**
@@ -23,9 +24,10 @@
 
 用法：
 
-    python scripts/verify_parse_pipeline.py                       # 用 .env 的 DATABASE_URL
-    python scripts/verify_parse_pipeline.py --dsn postgresql://...
-    python scripts/verify_parse_pipeline.py --keep                # 保留写入的行
+python scripts/verify_parse_pipeline.py                       # 用 .env 的
+DATABASE_URL python scripts/verify_parse_pipeline.py --dsn postgresql:
+//... python scripts/verify_parse_pipeline.py --keep                #
+保留写入的行
 """
 
 from __future__ import annotations
@@ -41,14 +43,15 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from api.parse.chunking import Acl, IncompleteChunk  # noqa: E402
 from api.parse.geometry import to_pixels  # noqa: E402
+from api.parse.model import expand_to_matrix  # noqa: E402
 from api.parse.pipeline import parse_document  # noqa: E402
 from api.parse.tables import cells_from_html, parse_md  # noqa: E402
-from api.parse.model import expand_to_matrix  # noqa: E402
 
 DOC_PREFIX = "verify-parse/"
 # 三份制度样本（纯正文，验六项随行信息与 bbox）+ 一份带表格的版面样本。
-# 为什么必须带上表格样本：`_check_stored_tables` 只在**真的写了一张表**时才有东西
-# 可对；只跑三份正文样本，"表格三表示入库后仍一致"这条会以"no table chunks"空过。
+# 为什么必须带上表格样本：`_check_stored_tables` 只在**真的写了一张表**时
+# 才有东西可对；只跑三份正文样本，"表格三表示入库后仍一致"这条会以
+# "no table chunks" 空过。
 SAMPLES = (
     "policy/travel-cn.pdf",
     "policy/expense-cn.pdf",
@@ -82,34 +85,51 @@ def normalize_dsn(dsn: str) -> str:
 
 
 def version_id_for(doc_key: str, path: Path) -> str:
-    """与 A1 同源：`fingerprint.version_id_for(doc_key, sha256(bytes))`。"""
-    from api.ingest.fingerprint import file_hash, version_id_for as build  # noqa: PLC0415
+    """与 A1 同源：`fingerprint.version_id_for(doc_key, sha256(bytes))`。."""
+    from api.ingest.fingerprint import file_hash  # noqa: PLC0415
+    from api.ingest.fingerprint import version_id_for as build
 
     return build(doc_key, file_hash(path))
 
 
-INSERT_SQL = """
-INSERT INTO chunks (
-    chunk_id, doc_key, version_id, chunk_type, parent_id, page_num, bbox,
-    image_path, content_text, table_html, table_md, table_cells, notes,
-    effective_date, effective_year,
-    date_confidence, is_public, allowed_depts, allowed_roles, token_count, status
-) VALUES (
-    %(chunk_id)s, %(doc_key)s, %(version_id)s, %(chunk_type)s, %(parent_id)s,
-    %(page_num)s, %(bbox)s::jsonb, %(image_path)s, %(content_text)s,
-    %(table_html)s, %(table_md)s, %(table_cells)s::jsonb, %(notes)s,
-    %(effective_date)s, %(effective_year)s,
-    %(date_confidence)s, %(is_public)s, %(allowed_depts)s, %(allowed_roles)s,
-    %(token_count)s, 'pending'
-)
-"""
+INSERT_SQL = (
+                 "\n"
+                 "INSERT INTO chunks (\n"
+                 "    chunk_id, doc_key, version_id, chunk_type, parent_id, "
+                 "page_num, bbox,\n"
+                 "    image_path, content_text, table_html, table_md, "
+                 "table_cells, notes,\n"
+                 "    effective_date, effective_year,\n"
+                 "    date_confidence, is_public, allowed_depts, "
+                 "allowed_roles, token_count, status\n"
+                 ") VALUES (\n"
+                 "    %(chunk_id)s, %(doc_key)s, %(version_id)s, "
+                 "%(chunk_type)s, %(parent_id)s,\n"
+                 "    %(page_num)s, %(bbox)s::jsonb, %(image_path)s, "
+                 "%(content_text)s,\n"
+                 "    %(table_html)s, %(table_md)s, %(table_cells)s::jsonb, "
+                 "%(notes)s,\n"
+                 "    %(effective_date)s, %(effective_year)s,\n"
+                 "    %(date_confidence)s, %(is_public)s, %(allowed_depts)s, "
+                 "%(allowed_roles)s,\n"
+                 "    %(token_count)s, 'pending'\n"
+                 ")\n"
+             )
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="verify the A2 parse pipeline against real PG")
+    ap = argparse.ArgumentParser(
+        description="verify the A2 parse pipeline against real PG"
+    )
     ap.add_argument("--dsn", help="postgresql:// DSN (default: $DATABASE_URL)")
-    ap.add_argument("--keep", action="store_true", help="keep the rows written by this script")
-    ap.add_argument("--samples", default=str(REPO_ROOT / "samples"), help="samples root")
+    ap.add_argument(
+        "--keep",
+        action="store_true",
+        help="keep the rows written by this script",
+    )
+    ap.add_argument(
+        "--samples", default=str(REPO_ROOT / "samples"), help="samples root"
+    )
     args = ap.parse_args()
 
     import psycopg  # noqa: PLC0415
@@ -120,7 +140,9 @@ def main() -> int:
     print(f"samples: {samples_root}")
 
     written_ids: list[str] = []
-    acl = Acl(is_public=False, allowed_depts=("fin", "hr"), allowed_roles=("staff",))
+    acl = Acl(
+        is_public=False, allowed_depts=("fin", "hr"), allowed_roles=("staff",)
+    )
 
     with psycopg.connect(dsn, autocommit=False) as conn:
         # --- 前置：三份样本必须存在 ---
@@ -140,24 +162,36 @@ def main() -> int:
         print("\n[2] 解析与切片（每片必须带齐六项随行信息）")
         all_chunks = []
         for path, doc_key, version_id in prepared:
-            outcome = parse_document(path, doc_key=doc_key, version_id=version_id, acl=acl)
+            outcome = parse_document(
+                path, doc_key=doc_key, version_id=version_id, acl=acl
+            )
             counts = outcome.counts()
             check(
                 len(outcome.chunks) > 0,
                 f"{path.name}: {len(outcome.chunks)} chunk(s) {counts}",
             )
-            incomplete = [c.chunk_id for c in outcome.chunks if c.missing_fields()]
-            check(not incomplete, f"{path.name}: every chunk carries the six fields")
-            table_chunks = [c for c in outcome.chunks if c.chunk_type == "table"]
+            incomplete = [
+                c.chunk_id for c in outcome.chunks if c.missing_fields()
+            ]
+            check(
+                not incomplete,
+                f"{path.name}: every chunk carries the six fields",
+            )
+            table_chunks = [
+                c for c in outcome.chunks if c.chunk_type == "table"
+            ]
             for chunk in table_chunks:
                 check(
                     _table_three_ways_agree(chunk),
-                    f"{path.name}: table {chunk.chunk_id} three representations agree",
+                    f"{path.name}: table {chunk.chunk_id} "
+                    "three representations agree",
                 )
             all_chunks.extend(outcome.chunks)
 
             # 写入：先把版本行准备好（chunks 有复合外键到 doc_versions）
-            _ensure_version(conn, doc_key=doc_key, version_id=version_id, path=path)
+            _ensure_version(
+                conn, doc_key=doc_key, version_id=version_id, path=path
+            )
             for chunk in outcome.chunks:
                 row = chunk.as_row()
                 conn.execute(
@@ -165,7 +199,8 @@ def main() -> int:
                     {
                         **row,
                         "bbox": json.dumps(row["bbox"], ensure_ascii=False),
-                        # table_cells 是 jsonb：psycopg 不会把 list[dict] 自动转成 jsonb
+                        # table_cells 是 jsonb：psycopg 不会把 list[dict] 自动转
+                        # 成 jsonb
                         # （会给 int[]/record 之类），必须显式序列化。
                         "table_cells": (
                             json.dumps(row["table_cells"], ensure_ascii=False)
@@ -181,10 +216,14 @@ def main() -> int:
         print("\n[3] 读回校验")
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT count(*) FROM chunks WHERE chunk_id = ANY(%s)", (written_ids,)
+                "SELECT count(*) FROM chunks WHERE chunk_id = ANY(%s)",
+                (written_ids,),
             )
             stored = cur.fetchone()[0]
-        check(stored == len(written_ids), f"{stored}/{len(written_ids)} chunk(s) readable")
+        check(
+            stored == len(written_ids),
+            f"{stored}/{len(written_ids)} chunk(s) readable",
+        )
 
         with conn.cursor() as cur:
             cur.execute(
@@ -201,11 +240,15 @@ def main() -> int:
                 (written_ids,),
             )
             complete = cur.fetchone()[0]
-        check(complete == len(written_ids), f"{complete}/{len(written_ids)} rows satisfy the six fields in SQL")
+        check(
+            complete == len(written_ids),
+            f"{complete}/{len(written_ids)} rows satisfy the six fields in SQL",
+        )
 
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT count(*) FROM chunks WHERE chunk_id = ANY(%s) AND status <> 'pending'",
+                "SELECT count(*) FROM chunks WHERE chunk_id = ANY(%s) AND"
+                " status <> 'pending'",
                 (written_ids,),
             )
             not_pending = cur.fetchone()[0]
@@ -214,14 +257,18 @@ def main() -> int:
         # bbox 能算出原页像素坐标（"可映射原页"的数值形式）
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT chunk_id, page_num, bbox FROM chunks WHERE chunk_id = ANY(%s) LIMIT 5",
+                "SELECT chunk_id, page_num, bbox FROM chunks WHERE chunk_id ="
+                " ANY(%s) LIMIT 5",
                 (written_ids,),
             )
             rows = cur.fetchall()
         pixel_ok = True
-        for chunk_id, page_num, bbox in rows:
+        for chunk_id, _page_num, bbox in rows:
             rect = to_pixels(bbox[0], 1654, 2339)  # A4 @200 DPI
-            if not (0 <= rect[0] < rect[2] <= 1654 and 0 <= rect[1] < rect[3] <= 2339):
+            if not (
+                0 <= rect[0] < rect[2] <= 1654
+                and 0 <= rect[1] < rect[3] <= 2339
+            ):
                 pixel_ok = False
                 print(f"         bad pixel rect for {chunk_id}: {rect}")
         check(pixel_ok, "bbox maps to in-page pixel rectangles at 200 DPI")
@@ -241,25 +288,37 @@ def main() -> int:
             print(f"\n[5] --keep: 保留 {len(written_ids)} 行（记得手动清理）")
         else:
             print("\n[5] 清理")
-            conn.execute("DELETE FROM chunks WHERE chunk_id = ANY(%s)", (written_ids,))
             conn.execute(
-                "DELETE FROM doc_versions WHERE version_id LIKE %s", (DOC_PREFIX + "%",)
+                "DELETE FROM chunks WHERE chunk_id = ANY(%s)", (written_ids,)
             )
-            conn.execute("DELETE FROM documents WHERE doc_key LIKE %s", (DOC_PREFIX + "%",))
+            conn.execute(
+                "DELETE FROM doc_versions WHERE version_id LIKE %s",
+                (DOC_PREFIX + "%",),
+            )
+            conn.execute(
+                "DELETE FROM documents WHERE doc_key LIKE %s",
+                (DOC_PREFIX + "%",),
+            )
             conn.commit()
-            check(True, f"cleaned {len(written_ids)} chunk(s) and their version rows")
+            check(
+                True,
+                f"cleaned {len(written_ids)} chunk(s) and their version rows",
+            )
 
     return report()
 
 
-def _check_layout_fixtures(conn, samples_root: Path, written_ids: list[str]) -> None:
-    """版面能力的真实断言：合并单元格保真、OCR 兜底真能出片、页眉页脚真被剔除。
+def _check_layout_fixtures(
+    conn, samples_root: Path, written_ids: list[str]
+) -> None:
+    """版面能力的真实断言：合并单元格保真、OCR 兜底真能出片、页眉页脚真被剔除。.
 
     为什么放在验收脚本里而不是只放 pytest：这三件事都容易"看起来实现了"——
     合并单元格的 `col_span` 可能被写死成 1、OCR 可能跑了但被图区域扣光、
     页眉页脚可能一条都没删而报告照样打 `PASS 14/14`。这里直接读真实产物。
 
-    `conn` / `written_ids` 传进来是为了**把 OCR 切片真写进库再读回**：`source:ocr`
+    `conn` / `written_ids` 传进来是为了**把 OCR 切片真写进库再读回**：
+    `source:ocr`
     只在内存 `Chunk.notes` 上时，入库后 `notes` 列不存在（001 没有这列），下游
     看不出这条证据是识别出来的。内存断言测不出这件事。
     """
@@ -296,17 +355,30 @@ def _check_layout_fixtures(conn, samples_root: Path, written_ids: list[str]) -> 
             version_id=DOC_PREFIX + "merged#abcdef123456",
             acl=Acl(is_public=True),
         )
-        table_chunks = [chunk for chunk in outcome.chunks if chunk.chunk_type == "table"]
-        check(len(table_chunks) == 1, f"merged table -> {len(table_chunks)} table chunk(s)")
+        table_chunks = [
+            chunk for chunk in outcome.chunks if chunk.chunk_type == "table"
+        ]
+        check(
+            len(table_chunks) == 1,
+            f"merged table -> {len(table_chunks)} table chunk(s)",
+        )
         if table_chunks:
             chunk = table_chunks[0]
-            spans = {int(cell["col_span"]) for cell in (chunk.table_cells or [])}
-            check(3 in spans, f"merged header keeps col_span=3 (spans seen: {sorted(spans)})")
+            spans = {
+                int(cell["col_span"]) for cell in (chunk.table_cells or [])
+            }
+            check(
+                3 in spans,
+                f"merged header keeps col_span=3 (spans seen: {sorted(spans)})",
+            )
             check(
                 'colspan="3"' in (chunk.table_html or ""),
                 "merged header renders as colspan=3 in table_html",
             )
-            check(_table_three_ways_agree(chunk), "merged table three representations agree")
+            check(
+                _table_three_ways_agree(chunk),
+                "merged table three representations agree",
+            )
 
     # --- 页眉页脚：真被剔除且报告如实计数 ---
     header = layout_root / "header-demo.pdf"
@@ -318,11 +390,22 @@ def _check_layout_fixtures(conn, samples_root: Path, written_ids: list[str]) -> 
             acl=Acl(is_public=True),
         )
         report = outcome.as_report()
-        dropped = sum(page["regions"]["header_footer_lines"] for page in report["pages"])
-        check(dropped > 0, f"header/footer lines were dropped ({dropped} across pages)")
+        dropped = sum(
+            page["regions"]["header_footer_lines"] for page in report["pages"]
+        )
+        check(
+            dropped > 0,
+            f"header/footer lines were dropped ({dropped} across pages)",
+        )
         body = " ".join(chunk.content_text for chunk in outcome.chunks)
-        check("Page 1 of 3" not in body, "running page numbers are not in any chunk")
-        check("Section 1. Scope" in body, "per-page section headings are kept (not dropped)")
+        check(
+            "Page 1 of 3" not in body,
+            "running page numbers are not in any chunk",
+        )
+        check(
+            "Section 1. Scope" in body,
+            "per-page section headings are kept (not dropped)",
+        )
 
     # --- OCR 兜底：开了就必须真出片，且带来源标记 ---
     scanned = layout_root / "scanned-demo.pdf"
@@ -339,7 +422,9 @@ def _check_layout_fixtures(conn, samples_root: Path, written_ids: list[str]) -> 
             acl=Acl(is_public=True),
         )
         page2 = next(page for page in off.doc.pages if page.page_num == 2)
-        check(not page2.ocr_applied, "OCR is off by default on the scanned page")
+        check(
+            not page2.ocr_applied, "OCR is off by default on the scanned page"
+        )
         return
     on = parse_document(
         scanned,
@@ -352,7 +437,9 @@ def _check_layout_fixtures(conn, samples_root: Path, written_ids: list[str]) -> 
     page2 = next(page for page in on.doc.pages if page.page_num == 2)
     check(page2.ocr_applied, "scanned page 2 goes through OCR when enabled")
     page2_chunks = [chunk for chunk in on.chunks if chunk.page_num == 2]
-    check(len(page2_chunks) > 0, f"OCR page produced {len(page2_chunks)} chunk(s)")
+    check(
+        len(page2_chunks) > 0, f"OCR page produced {len(page2_chunks)} chunk(s)"
+    )
     check(
         all("source:ocr" in chunk.notes for chunk in page2_chunks),
         "OCR chunks are marked source:ocr",
@@ -360,7 +447,8 @@ def _check_layout_fixtures(conn, samples_root: Path, written_ids: list[str]) -> 
 
     # --- 来源标记必须真的入库：内存里有、库里没有等于没标 ---
     # 写的是 `scanned-on#` 这个版本；写完读回 `notes` 列。001 没有 notes 列时
-    # 这一段会直接报 UndefinedColumn（不是静默丢），因为 as_row() 把它放进 INSERT。
+    # 这一段会直接报 UndefinedColumn（不是静默丢），因为 as_row() 把它放进
+    # INSERT。
     doc_key = DOC_PREFIX + "scanned-on"
     version_id = doc_key + "#abcdef123456"
     _ensure_version(conn, doc_key=doc_key, version_id=version_id, path=scanned)
@@ -383,16 +471,24 @@ def _check_layout_fixtures(conn, samples_root: Path, written_ids: list[str]) -> 
 
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT page_num, notes FROM chunks WHERE version_id = %s ORDER BY page_num, chunk_id",
+            "SELECT page_num, notes FROM chunks WHERE version_id = %s ORDER BY"
+            " page_num, chunk_id",
             (version_id,),
         )
         stored = cur.fetchall()
-    ocr_pages = {page_num for page_num, notes in stored if "source:ocr" in (notes or [])}
+    ocr_pages = {
+        page_num for page_num, notes in stored if "source:ocr" in (notes or [])
+    }
     check(
         ocr_pages == {2},
-        f"notes['source:ocr'] survived the DB round trip on page(s) {sorted(ocr_pages)}",
+        "notes['source:ocr'] survived the DB round trip on page(s) "
+        f"{sorted(ocr_pages)}",
     )
-    text_pages = {page_num for page_num, notes in stored if "source:ocr" not in (notes or [])}
+    text_pages = {
+        page_num
+        for page_num, notes in stored
+        if "source:ocr" not in (notes or [])
+    }
     check(
         1 in text_pages,
         "page 1 (real text layer) is not marked as OCR",
@@ -400,10 +496,11 @@ def _check_layout_fixtures(conn, samples_root: Path, written_ids: list[str]) -> 
 
 
 def _check_stored_tables(conn, written_ids: list[str]) -> None:
-    """从库里读回表格切片，用**库里的三份表示**重建矩阵并互相比对。
+    """从库里读回表格切片，用**库里的三份表示**重建矩阵并互相比对。.
 
     这一条是本脚本里唯一能发现"入库丢列"的断言：别的断言都拿内存里的 `Chunk`
-    比对，而 `as_row()` 少写一列不会让内存对象变样。实测过：001 没有 `table_cells`
+    比对，而 `as_row()` 少写一列不会让内存对象变样。实测过：001 没有
+    `table_cells`
     列时，脚本对三表示一致照样打 PASS。
     """
     from api.parse.model import TableCell, expand_to_matrix  # noqa: PLC0415
@@ -422,11 +519,18 @@ def _check_stored_tables(conn, written_ids: list[str]) -> None:
     if not rows:
         # SAMPLES 里固定带一份表格样本：跑完一条表格切片都没有，说明"表格入库后
         # 三表示仍一致"根本没验到。不许静默通过。
-        check(False, "no table chunk was written: the round-trip assertion never ran")
+        check(
+            False,
+            "no table chunk was written: the round-trip assertion never ran",
+        )
         return
     for chunk_id, html, md, cells_raw in rows:
         if cells_raw is None:
-            check(False, f"stored {chunk_id}: table_cells is NULL (004 迁移的列没写进去)")
+            check(
+                False,
+                f"stored {chunk_id}: table_cells is NULL "
+                "(004 迁移的列没写进去)",
+            )
             continue
         if not (html and md):
             check(False, f"stored {chunk_id}: table_html/table_md missing")
@@ -448,12 +552,13 @@ def _check_stored_tables(conn, written_ids: list[str]) -> None:
         from_html = expand_to_matrix(from_html_cells, rows_n, cols_n)
         check(
             from_html == from_cells == md_matrix,
-            f"stored {chunk_id}: html / cells / md still agree after a DB round trip",
+            f"stored {chunk_id}: html / cells / md still agree "
+            "after a DB round trip",
         )
 
 
 def _ensure_version(conn, *, doc_key: str, version_id: str, path: Path) -> None:
-    """chunks 有复合外键到 doc_versions：要先有一行版本。
+    """Chunks 有复合外键到 doc_versions：要先有一行版本。.
 
     脚本**不动**真实的扫描结果（`documents` / `doc_versions` 里的既有行），
     所以用 `verify-parse/` 前缀的 doc_key + 一份 pending 版本。
@@ -461,7 +566,8 @@ def _ensure_version(conn, *, doc_key: str, version_id: str, path: Path) -> None:
     from api.ingest.fingerprint import file_hash  # noqa: PLC0415
 
     conn.execute(
-        "INSERT INTO documents (doc_key, filename, status) VALUES (%s, %s, 'queued') "
+        "INSERT INTO documents (doc_key, filename, status) VALUES (%s, %s,"
+        " 'queued') "
         "ON CONFLICT (doc_key) DO NOTHING",
         (doc_key, path.name),
     )
@@ -473,7 +579,7 @@ def _ensure_version(conn, *, doc_key: str, version_id: str, path: Path) -> None:
 
 
 def _table_three_ways_agree(chunk) -> bool:
-    """HTML 反解 == cells 展开 == md 解析。"""
+    """HTML 反解 == cells 展开 == md 解析。."""
     if not (chunk.table_html and chunk.table_md and chunk.table_cells):
         return False
     from api.parse.model import TableCell  # noqa: PLC0415
@@ -492,7 +598,9 @@ def _table_three_ways_agree(chunk) -> bool:
     ]
     from_cells = expand_to_matrix(cells, len(md_matrix), len(md_matrix[0]))
     from_html_cells, rows, cols = cells_from_html(chunk.table_html)
-    return expand_to_matrix(from_html_cells, rows, cols) == from_cells == md_matrix
+    return (
+        expand_to_matrix(from_html_cells, rows, cols) == from_cells == md_matrix
+    )
 
 
 def report() -> int:

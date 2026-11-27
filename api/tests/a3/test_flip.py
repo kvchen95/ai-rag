@@ -32,7 +32,7 @@ from api.ingest.flip import (
     rollback_to,
 )
 from api.ingest.sync import task_for
-from api.tests.a3.conftest import (  # 只有辅助函数需要 import；fixtures 由 conftest 自动发现
+from api.tests.a3.conftest import (  # 只 import 辅助函数；fixtures 自动发现
     doc_key,
     seed_document,
 )
@@ -56,14 +56,18 @@ def _chunk_statuses(conn, version_id: str) -> dict[str, str]:
     from psycopg.rows import dict_row
 
     with conn.cursor(row_factory=dict_row) as cur:
-        cur.execute("SELECT chunk_id, status FROM chunks WHERE version_id = %s", (version_id,))
+        cur.execute(
+            "SELECT chunk_id, status FROM chunks WHERE version_id = %s",
+            (version_id,),
+        )
         return {r["chunk_id"]: r["status"] for r in cur.fetchall()}
 
 
 def _active_versions(conn, key: str) -> list[str]:
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT version_id FROM doc_versions WHERE doc_key = %s AND status = 'active'",
+            "SELECT version_id FROM doc_versions "
+            "WHERE doc_key = %s AND status = 'active'",
             (doc_key(key),),
         )
         return [str(r[0]) for r in cur.fetchall()]
@@ -74,8 +78,12 @@ def _active_versions(conn, key: str) -> list[str]:
 
 def test_flip_moves_all_three_places(conn) -> None:
     """§4.1 的三处：旧版下线、新版生效、切片状态同步。"""
-    old = seed_document(conn, key="flip", version_tag="old", version_status="active")
-    conn.execute("UPDATE chunks SET status = 'active' WHERE version_id = %s", (old,))
+    old = seed_document(
+        conn, key="flip", version_tag="old", version_status="active"
+    )
+    conn.execute(
+        "UPDATE chunks SET status = 'active' WHERE version_id = %s", (old,)
+    )
     new = seed_document(conn, key="flip", version_tag="new")
     conn.commit()
 
@@ -87,12 +95,16 @@ def test_flip_moves_all_three_places(conn) -> None:
 
     old_row = _version_row(conn, old)
     assert old_row["status"] == "deprecated"
-    assert old_row["deprecated_at"] is not None, "下线时间必须写入（回收窗口从这里起算）"
+    assert (
+        old_row["deprecated_at"] is not None
+    ), "下线时间必须写入（回收窗口从这里起算）"
     assert old_row["superseded_by"] == new
 
     new_row = _version_row(conn, new)
     assert new_row["status"] == "active"
-    assert new_row["activated_at"] is not None, "ck_doc_versions_active_has_activated_at"
+    assert (
+        new_row["activated_at"] is not None
+    ), "ck_doc_versions_active_has_activated_at"
 
     assert set(_chunk_statuses(conn, new).values()) == {"active"}
     # 旧版切片必须降级，否则已废止的条款还能被召回（§2.2）
@@ -107,8 +119,12 @@ def test_flip_moves_all_three_places(conn) -> None:
 
 def test_flip_is_the_only_way_to_get_exactly_one_active(conn) -> None:
     """连翻三次（三个版本）后仍然只有一个 active。"""
-    v1 = seed_document(conn, key="chain", version_tag="v1", version_status="active")
-    conn.execute("UPDATE chunks SET status = 'active' WHERE version_id = %s", (v1,))
+    v1 = seed_document(
+        conn, key="chain", version_tag="v1", version_status="active"
+    )
+    conn.execute(
+        "UPDATE chunks SET status = 'active' WHERE version_id = %s", (v1,)
+    )
     v2 = seed_document(conn, key="chain", version_tag="v2")
     v3 = seed_document(conn, key="chain", version_tag="v3")
     conn.commit()
@@ -130,9 +146,16 @@ def test_flip_is_the_only_way_to_get_exactly_one_active(conn) -> None:
 
 
 def test_flip_writes_desired_state_for_both_versions(conn) -> None:
-    """期望状态必须与翻牌同事务写入——这是"Qdrant 一定知道发生过翻牌"的唯一保证。"""
-    old = seed_document(conn, key="desired", version_tag="old", version_status="active")
-    conn.execute("UPDATE chunks SET status = 'active' WHERE version_id = %s", (old,))
+    """期望状态必须与翻牌同事务写入。
+
+    这是“Qdrant 一定知道发生过翻牌”的唯一保证。
+    """
+    old = seed_document(
+        conn, key="desired", version_tag="old", version_status="active"
+    )
+    conn.execute(
+        "UPDATE chunks SET status = 'active' WHERE version_id = %s", (old,)
+    )
     new = seed_document(conn, key="desired", version_tag="new")
     conn.commit()
 
@@ -148,7 +171,10 @@ def test_flip_writes_desired_state_for_both_versions(conn) -> None:
 
 
 def test_reflipping_an_active_version_is_refused_not_duplicated(conn) -> None:
-    """重复翻同一版本：报 NotPending（幂等的正常结果），不会造出第二个 active。"""
+    """重复翻同一版本：报 NotPending（幂等的正常结果）。
+
+    不会造出第二个 active。
+    """
     version = seed_document(conn, key="reflip", version_tag="v1")
     conn.commit()
     flip(conn, version)
@@ -173,8 +199,12 @@ def test_empty_version_cannot_be_flipped(conn) -> None:
     放过去的话：旧版立刻下线、新版一条切片也没有——线上"什么都问不出来"，
     而且没有任何报错。这是最短的一条"翻牌把服务翻空"的路径。
     """
-    old = seed_document(conn, key="empty", version_tag="old", version_status="active")
-    conn.execute("UPDATE chunks SET status = 'active' WHERE version_id = %s", (old,))
+    old = seed_document(
+        conn, key="empty", version_tag="old", version_status="active"
+    )
+    conn.execute(
+        "UPDATE chunks SET status = 'active' WHERE version_id = %s", (old,)
+    )
     empty = seed_document(conn, key="empty", version_tag="empty", chunks=[])
     conn.commit()
 
@@ -188,15 +218,21 @@ def test_empty_version_cannot_be_flipped(conn) -> None:
 # --- 2. 事务性 ----------------------------------------------------------------
 
 
-def test_flip_rolls_back_completely_on_failure(conn, pool: ConnectionPool, a3_dsn: str) -> None:
+def test_flip_rolls_back_completely_on_failure(
+    conn, pool: ConnectionPool, a3_dsn: str
+) -> None:
     """翻牌中途失败 → 三处全部回滚，新版仍是 pending，旧版仍在服务。
 
     做法：先让翻牌跑起来，然后在同一个事务里制造一次失败（用数据库约束拒一次写）。
     这里选"给 documents 写一个 CHECK 不允许的状态"来制造失败——它发生在翻牌
     最后一步，前面的三处改动都已经执行过了。
     """
-    old = seed_document(conn, key="atomic", version_tag="old", version_status="active")
-    conn.execute("UPDATE chunks SET status = 'active' WHERE version_id = %s", (old,))
+    old = seed_document(
+        conn, key="atomic", version_tag="old", version_status="active"
+    )
+    conn.execute(
+        "UPDATE chunks SET status = 'active' WHERE version_id = %s", (old,)
+    )
     new = seed_document(conn, key="atomic", version_tag="new")
     conn.commit()
 
@@ -204,7 +240,8 @@ def test_flip_rolls_back_completely_on_failure(conn, pool: ConnectionPool, a3_ds
         flip(conn, new)
         # 翻牌已经改了三处；这里追加一条会被库拒掉的写，模拟"翻牌后半段失败"
         conn.execute(
-            "UPDATE documents SET status = 'not-a-valid-status' WHERE doc_key = %s",
+            "UPDATE documents SET status = 'not-a-valid-status' "
+            "WHERE doc_key = %s",
             (doc_key("atomic"),),
         )
         conn.commit()
@@ -230,7 +267,9 @@ def test_flip_waits_for_the_document_lock(conn, a3_dsn: str) -> None:
     blocker = psycopg.connect(normalize_dsn(a3_dsn))
     try:
         with blocker.cursor() as cur:
-            cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (doc_key("lock"),))
+            cur.execute(
+                "SELECT pg_advisory_xact_lock(hashtext(%s))", (doc_key("lock"),)
+            )
         with pytest.raises(DocumentLocked):
             flip(conn, version, wait_for_lock=False)
         conn.rollback()
@@ -244,7 +283,9 @@ def test_flip_waits_for_the_document_lock(conn, a3_dsn: str) -> None:
     assert _active_versions(conn, "lock") == [version]
 
 
-def test_concurrent_flips_never_produce_two_actives(pool: ConnectionPool, a3_dsn: str) -> None:
+def test_concurrent_flips_never_produce_two_actives(
+    pool: ConnectionPool, a3_dsn: str
+) -> None:
     """两个线程同时翻同一文档的两个不同版本：最终只有一个 active。
 
     这是 §4.1「一份文档不能同时翻两次」的实际后果——两份同时生效会让同一句话
@@ -275,8 +316,11 @@ def test_concurrent_flips_never_produce_two_actives(pool: ConnectionPool, a3_dsn
 
     with pool.connection() as check:
         actives = _active_versions(check, "race")
-    assert len(actives) == 1, f"expected exactly one active version, got {actives}"
-    # 两个翻牌都可以成功（第二个把第一个刚翻上去的那个顶下来），或有一个被状态检查
+    assert (
+        len(actives) == 1
+    ), f"expected exactly one active version, got {actives}"
+    # 两个翻牌都可以成功（第二个把第一个刚翻上去的那个顶下来），或有一个被状态检
+    # 查
     # 拒掉；但**不能**两个都报错，也不能产生两个 active。
     assert all(isinstance(e, NotPending | EmptyVersion) for e in errors), errors
 
@@ -301,7 +345,9 @@ def test_rollback_restores_the_previous_version(conn) -> None:
     assert result.restored == v1
     assert result.demoted == [v2]
     assert _active_versions(conn, "rollback") == [v1]
-    assert _version_row(conn, v1)["deprecated_at"] is None, "翻回来的版本不该再有下线时间"
+    assert (
+        _version_row(conn, v1)["deprecated_at"] is None
+    ), "翻回来的版本不该再有下线时间"
     assert _version_row(conn, v2)["status"] == "deprecated"
     assert set(_chunk_statuses(conn, v1).values()) == {"active"}
     assert set(_chunk_statuses(conn, v2).values()) == {"deprecated"}
@@ -316,7 +362,9 @@ def test_rollback_only_works_inside_the_retention_window_by_state(conn) -> None:
     conn.commit()
     flip(conn, v1)
     conn.commit()
-    conn.execute("UPDATE doc_versions SET status = 'purged' WHERE version_id = %s", (v1,))
+    conn.execute(
+        "UPDATE doc_versions SET status = 'purged' WHERE version_id = %s", (v1,)
+    )
     conn.commit()
 
     with pytest.raises(NotPending):
@@ -339,7 +387,10 @@ def test_scan_and_flip_share_the_same_document_lock(conn, a3_dsn: str) -> None:
     holder = psycopg.connect(normalize_dsn(a3_dsn))
     try:
         with holder.cursor() as cur:
-            cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (doc_key("shared"),))
+            cur.execute(
+                "SELECT pg_advisory_xact_lock(hashtext(%s))",
+                (doc_key("shared"),),
+            )
         # 翻牌路径拿不到
         with pytest.raises(DocumentLocked):
             flip(conn, version, wait_for_lock=False)
@@ -347,23 +398,31 @@ def test_scan_and_flip_share_the_same_document_lock(conn, a3_dsn: str) -> None:
         # 直接调 lock_document 也拿不到（同一个表达式）
         with pytest.raises(DocumentLocked):
             with conn.cursor() as cur:
-                cur.execute("SELECT pg_try_advisory_xact_lock(hashtext(%s))", (doc_key("shared"),))
+                cur.execute(
+                    "SELECT pg_try_advisory_xact_lock(hashtext(%s))",
+                    (doc_key("shared"),),
+                )
                 assert not cur.fetchone()[0]
             lock_document(conn, doc_key("shared"), wait=False)
         conn.rollback()
     finally:
         holder.rollback()
         holder.close()
-    time.sleep(0.05)  # 让 holder 的事务真的结束（rollback 是同步的，这里只是稳妥）
+    time.sleep(
+        0.05
+    )  # 让 holder 的事务真的结束（rollback 是同步的，这里只是稳妥）
 
 
 def test_flip_updates_documents_status_to_active(conn) -> None:
-    version = seed_document(conn, key="docstatus", version_tag="v1", doc_status="queued")
+    version = seed_document(
+        conn, key="docstatus", version_tag="v1", doc_status="queued"
+    )
     conn.commit()
     flip(conn, version)
     conn.commit()
     status = conn.execute(
-        "SELECT status FROM documents WHERE doc_key = %s", (doc_key("docstatus"),)
+        "SELECT status FROM documents WHERE doc_key = %s",
+        (doc_key("docstatus"),),
     ).fetchone()[0]
     assert status == "active"
 

@@ -1,4 +1,4 @@
-"""在线检索（详细设计.md §7 / §8）。
+"""在线检索（详细设计.md §7 / §8）。.
 
 三段职责，分开是因为它们的失败模式完全不同：
 
@@ -48,10 +48,10 @@ from api.retrieval.pipeline import (
     RetrievalSnapshot,
 )
 from api.retrieval.rerank import (
+    Reranker,
     RerankOutcome,
     RerankTimeout,
     RerankUnavailable,
-    Reranker,
     rerank_candidates,
 )
 from api.retrieval.texts import ChunkText, doc_names, fetch_texts

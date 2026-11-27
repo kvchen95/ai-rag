@@ -1,12 +1,12 @@
-"""受限生成层（详细设计.md §9 / 附录 D）。"""
+"""受限生成层（详细设计.md §9 / 附录 D）。."""
 
 from __future__ import annotations
 
 from api.generate.evidence import Evidence, EvidencePack, build_evidence_pack
 from api.generate.llm import (
-    Fact,
     Draft,
     DraftFormatError,
+    Fact,
     GenerationRejected,
     GenerationUnavailable,
     LlmClient,

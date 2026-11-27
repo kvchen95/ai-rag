@@ -43,7 +43,9 @@ def merged_pdf(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return target
 
 
-def test_pdfplumber_reports_the_merged_cell_as_a_wide_bbox(merged_pdf: Path) -> None:
+def test_pdfplumber_reports_the_merged_cell_as_a_wide_bbox(
+    merged_pdf: Path,
+) -> None:
     """前提事实：表头那个格被报成跨三列的一个 bbox（不是三个格）。"""
     with pdfplumber.open(str(merged_pdf)) as pdf:
         page = pdf.pages[0]
@@ -70,7 +72,9 @@ def test_span_reaches_the_model_and_the_html(merged_pdf: Path) -> None:
     assert 'colspan="2"' in table.html  # 末行跨两列
 
 
-def test_merged_header_fills_every_covered_column_in_md(merged_pdf: Path) -> None:
+def test_merged_header_fills_every_covered_column_in_md(
+    merged_pdf: Path,
+) -> None:
     """§3.3 规则 3：Markdown 不支持合并表头，展开成重复列名。"""
     with pdfplumber.open(str(merged_pdf)) as pdf:
         page = pdf.pages[0]
@@ -81,8 +85,13 @@ def test_merged_header_fills_every_covered_column_in_md(merged_pdf: Path) -> Non
     assert parse_md(table.md) == matrix
 
 
-def test_merged_table_three_representations_agree_on_real_pdf(merged_pdf: Path) -> None:
-    """真实 PDF 上跑一遍三表示往返（HTML / md / cells 都从 pdfplumber 的结果出发）。"""
+def test_merged_table_three_representations_agree_on_real_pdf(
+    merged_pdf: Path,
+) -> None:
+    """真实 PDF 上跑一遍三表示往返。
+
+    HTML / md / cells 都从 pdfplumber 的结果出发。
+    """
     with pdfplumber.open(str(merged_pdf)) as pdf:
         page = pdf.pages[0]
         space = PageSpace.from_display(page)

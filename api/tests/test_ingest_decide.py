@@ -21,11 +21,17 @@ from api.ingest.decide import (
 
 
 def test_new_doc_key_is_add() -> None:
-    assert classify(doc_exists=False, existing_status=None) == (Outcome.ADD, None)
+    assert classify(doc_exists=False, existing_status=None) == (
+        Outcome.ADD,
+        None,
+    )
 
 
 def test_existing_doc_with_new_hash_is_change() -> None:
-    assert classify(doc_exists=True, existing_status=None) == (Outcome.CHANGE, None)
+    assert classify(doc_exists=True, existing_status=None) == (
+        Outcome.CHANGE,
+        None,
+    )
 
 
 @pytest.mark.parametrize("status", sorted(SEEN_SKIP_STATUSES))
@@ -50,8 +56,10 @@ def test_failed_version_is_not_silently_retried() -> None:
 
 @pytest.mark.parametrize("status", sorted(REVERT_STATUSES))
 def test_reverted_content_is_reported_not_recreated(status: str) -> None:
-    """内容回退到 deprecated/purged 版本：唯一约束让它建不了新版本，
-    静默当 unchanged 会让人以为回滚已经生效了。"""
+    """内容回退到 deprecated/purged 版本时只能报出来。
+
+    唯一约束让它建不了新版本，静默当 unchanged 会让人以为回滚已经生效了。
+    """
     assert classify(doc_exists=True, existing_status=status) == (
         Outcome.SKIP,
         SkipReason.CONTENT_REVERT,
@@ -68,9 +76,12 @@ def test_every_version_status_has_a_defined_outcome() -> None:
         for s in VersionStatus
     }
     assert set(outcomes) == {s.value for s in VersionStatus}
-    # 只有 pending/active/skipped 能落到 unchanged；failed 与回退态各有自己的码。
+    # 只有 pending/active/skipped 能落到 unchanged；failed 与回退态各有
+    # 自己的码。
     unchanged = {
-        k for k, v in outcomes.items() if v == (Outcome.SKIP, SkipReason.UNCHANGED)
+        k
+        for k, v in outcomes.items()
+        if v == (Outcome.SKIP, SkipReason.UNCHANGED)
     }
     assert unchanged == {"pending", "active", "skipped"}
 
@@ -82,9 +93,14 @@ def test_unknown_status_is_rejected_not_guessed() -> None:
 
 
 def test_skip_outcomes_never_create_versions() -> None:
-    """跳过就是不写库。任何 SKIP 结论都必须带原因码，否则日志里查不出为什么跳过。"""
+    """跳过就是不写库。
+
+    任何 SKIP 结论都必须带原因码，否则日志里查不出为什么跳过。
+    """
     for status in VersionStatus:
-        outcome, reason = classify(doc_exists=True, existing_status=status.value)
+        outcome, reason = classify(
+            doc_exists=True, existing_status=status.value
+        )
         if outcome is Outcome.SKIP:
             assert reason is not None, status
         else:  # pragma: no cover - 当前没有非 SKIP 的既有状态分支

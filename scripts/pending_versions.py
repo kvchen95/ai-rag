@@ -1,4 +1,4 @@
-"""列出待转正的 pending 版本（version_id / doc_key / 切片数）。
+"""列出待转正的 pending 版本（version_id / doc_key / 切片数）。.
 
 作为脚本而不是 Makefile heredoc 存在，因为 heredoc 的结束标记在 Makefile 里
 被 tab 缩进后 bash 认不出来（`make pending` 报 "here-document delimited by
@@ -19,13 +19,16 @@ def main() -> int:
     try:
         with db.connection() as conn:
             rows = conn.execute(
-                """
-                SELECT v.version_id, v.doc_key,
-                       (SELECT count(*) FROM chunks c WHERE c.version_id = v.version_id)
-                FROM doc_versions v
-                WHERE v.status = 'pending'
-                ORDER BY v.doc_key
-                """
+
+                    "\n"
+                    "                SELECT v.version_id, v.doc_key,\n"
+                    "                       (SELECT count(*) FROM chunks c "
+                    "WHERE c.version_id = v.version_id)\n"
+                    "                FROM doc_versions v\n"
+                    "                WHERE v.status = 'pending'\n"
+                    "                ORDER BY v.doc_key\n"
+                    "                "
+
             ).fetchall()
     finally:
         db.close()

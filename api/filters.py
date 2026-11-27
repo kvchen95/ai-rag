@@ -1,4 +1,4 @@
-"""前置过滤表达式（详细设计.md §5.2 / §7.1）。
+"""前置过滤表达式（详细设计.md §5.2 / §7.1）。.
 
 一句话：**同一份归一条件，渲染成 Qdrant filter 和 PG WHERE 两条路。**
 两条路各自手写一遍是这类系统最典型的裂缝——实测过的形状是"语义路带了权限、
@@ -15,7 +15,8 @@ BM25 路漏了"，于是没权限的文档从另一条路漏进候选池，而�
 
     status = 'active'
     AND ( is_public OR depts 交集 OR roles 交集 )      # admin 时整条去掉
-    AND ( effective_date BETWEEN .. AND .. AND date_confidence='explicit' )  # 有时间条件时
+    AND ( effective_date BETWEEN .. AND ..             # 有时间条件时
+          AND date_confidence='explicit' )
     AND ( doc_key = ANY(..) )                          # 请求带 scope 时
 
 三条刻意写进代码的取舍：
@@ -31,9 +32,10 @@ BM25 路漏了"，于是没权限的文档从另一条路漏进候选池，而�
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any, Sequence
+from typing import Any
 
 from api.identity import IdentitySnapshot
 from api.observability import get_logger, log_event
@@ -44,7 +46,7 @@ logger = get_logger("api.filters")
 
 
 class PgSource(StrEnum):
-    """PG 侧取数的两个来源。语义不同，不能混用（见 `pg_where` 的说明）。"""
+    """PG 侧取数的两个来源。语义不同，不能混用（见 `pg_where` 的说明）。."""
 
     ACTIVE_VIEW = "v_active_chunks"  # 视图已含"双 active"，不要再写 status
     CHUNKS = "chunks"  # 直连原表，必须自己写 status
@@ -77,13 +79,14 @@ BRANCH_ROLES = "roles"
 
 @dataclass(frozen=True, slots=True)
 class RetrievalFilter:
-    """一次检索的完整前置条件。构造后不可变，两条渲染路都只读它。"""
+    """一次检索的完整前置条件。构造后不可变，两条渲染路都只读它。."""
 
     identity: IdentitySnapshot
     time_range: TimeRange | None = None
     doc_keys: tuple[str, ...] | None = None
 
     def __post_init__(self) -> None:
+        """Run __post_init__."""
         if self.doc_keys is not None:
             cleaned = tuple(
                 dict.fromkeys(k.strip() for k in self.doc_keys if k.strip())
@@ -99,10 +102,11 @@ class RetrievalFilter:
 
     @property
     def is_admin(self) -> bool:
+        """Run is_admin."""
         return self.identity.admin
 
     def acl_branches(self) -> tuple[str, ...]:
-        """ACL 生效的分支名。空元组表示不加 ACL 条件（管理员）。"""
+        """ACL 生效的分支名。空元组表示不加 ACL 条件（管理员）。."""
         if self.is_admin:
             return ()
         branches = [BRANCH_PUBLIC]
@@ -114,12 +118,13 @@ class RetrievalFilter:
 
     @property
     def has_time_filter(self) -> bool:
+        """Run has_time_filter."""
         return self.time_range is not None
 
     # --- Qdrant 渲染 ---
 
     def to_qdrant(self) -> Any:
-        """渲染成 qdrant_client 的 Filter。
+        """渲染成 qdrant_client 的 Filter。.
 
         延迟 import：`api.filters` 要能在没装 qdrant-client 的解释器里被 import
         （迁移脚本、离线工具只需要 PG 那一半）。
@@ -141,7 +146,9 @@ class RetrievalFilter:
         branches = self.acl_branches()
         should: list[Any] = []
         if BRANCH_PUBLIC in branches:
-            should.append(FieldCondition(key=P_IS_PUBLIC, match=MatchValue(value=True)))
+            should.append(
+                FieldCondition(key=P_IS_PUBLIC, match=MatchValue(value=True))
+            )
         if BRANCH_DEPTS in branches:
             should.append(
                 FieldCondition(
@@ -155,13 +162,19 @@ class RetrievalFilter:
                 )
             )
         if should:
-            # 嵌套 Filter 放在 must 里 = "这一组内部按 should 取或，整体作为与条件"。
+            # 嵌套 Filter 放在 must 里 = "这一组内部按 should 取或，
+            # 整体作为与条件"。
             must.append(Filter(should=should))
 
         if self.time_range is not None:
             tr = self.time_range
-            if tr.use_report_period and tr.granularity in ("year", "half_year", "quarter"):
-                # 主流口径：报告覆盖期精确过滤；报告期缺失时依次退化为精确日期、年份。
+            if tr.use_report_period and tr.granularity in (
+                "year",
+                "half_year",
+                "quarter",
+            ):
+                # 主流口径：报告覆盖期精确过滤；报告期缺失时依次退化为
+                # 精确日期、年份。
                 must.append(
                     Filter(
                         should=[
@@ -169,39 +182,55 @@ class RetrievalFilter:
                                 must=[
                                     FieldCondition(
                                         key=P_REPORT_PERIOD_START,
-                                        range=Range(gte=tr.date_from, lte=tr.date_to),
+                                        range=Range(
+                                            gte=tr.date_from, lte=tr.date_to
+                                        ),
                                     ),
                                     FieldCondition(
                                         key=P_REPORT_PERIOD_END,
-                                        range=Range(gte=tr.date_from, lte=tr.date_to),
+                                        range=Range(
+                                            gte=tr.date_from, lte=tr.date_to
+                                        ),
                                     ),
                                 ]
                             ),
                             Filter(
                                 must=[
                                     IsNullCondition(
-                                        is_null=PayloadField(key=P_REPORT_PERIOD_START)
+                                        is_null=PayloadField(
+                                            key=P_REPORT_PERIOD_START
+                                        )
                                     ),
                                     IsNullCondition(
-                                        is_null=PayloadField(key=P_REPORT_PERIOD_END)
+                                        is_null=PayloadField(
+                                            key=P_REPORT_PERIOD_END
+                                        )
                                     ),
                                     FieldCondition(
                                         key=P_EFFECTIVE_DATE,
-                                        range=Range(gte=tr.date_from, lte=tr.date_to),
+                                        range=Range(
+                                            gte=tr.date_from, lte=tr.date_to
+                                        ),
                                     ),
                                     FieldCondition(
                                         key=P_DATE_CONFIDENCE,
-                                        match=MatchValue(value=EXPLICIT_CONFIDENCE),
+                                        match=MatchValue(
+                                            value=EXPLICIT_CONFIDENCE
+                                        ),
                                     ),
                                 ]
                             ),
                             Filter(
                                 must=[
                                     IsNullCondition(
-                                        is_null=PayloadField(key=P_REPORT_PERIOD_START)
+                                        is_null=PayloadField(
+                                            key=P_REPORT_PERIOD_START
+                                        )
                                     ),
                                     IsNullCondition(
-                                        is_null=PayloadField(key=P_REPORT_PERIOD_END)
+                                        is_null=PayloadField(
+                                            key=P_REPORT_PERIOD_END
+                                        )
                                     ),
                                     FieldCondition(
                                         key=P_EFFECTIVE_YEAR,
@@ -215,7 +244,8 @@ class RetrievalFilter:
                     )
                 )
             elif tr.granularity in ("year", "half_year", "quarter"):
-                # 旧数据兼容：没有 report_period metadata 时退化为 effective_year。
+                # 旧数据兼容：没有 report_period metadata 时
+                # 退化为 effective_year。
                 must.append(
                     FieldCondition(
                         key=P_EFFECTIVE_YEAR,
@@ -225,7 +255,8 @@ class RetrievalFilter:
             else:
                 must.append(
                     FieldCondition(
-                        key=P_EFFECTIVE_DATE, range=Range(gte=tr.date_from, lte=tr.date_to)
+                        key=P_EFFECTIVE_DATE,
+                        range=Range(gte=tr.date_from, lte=tr.date_to),
                     )
                 )
                 must.append(
@@ -237,7 +268,9 @@ class RetrievalFilter:
 
         if self.doc_keys is not None:
             must.append(
-                FieldCondition(key=P_DOC_KEY, match=MatchAny(any=list(self.doc_keys)))
+                FieldCondition(
+                    key=P_DOC_KEY, match=MatchAny(any=list(self.doc_keys))
+                )
             )
 
         return Filter(must=must)
@@ -245,21 +278,23 @@ class RetrievalFilter:
     # --- PG 渲染 ---
 
     def pg_where(
-        self, alias: str = "c", source: "PgSource | str" = "v_active_chunks"
+        self, alias: str = "c", source: PgSource | str = "v_active_chunks"
     ) -> tuple[str, list[Any]]:
-        """渲染成 PG 的 WHERE 片段（不含 `WHERE` 关键字）与参数。
+        """渲染成 PG 的 WHERE 片段（不含 `WHERE` 关键字）与参数。.
 
-        **`source` 不是可有可无的开关，而是这条路的语义前提**：PG 的"生效"是关系性的
-        （chunk 与 version 双 active，要 JOIN 两张表），Qdrant 的"生效"是扁平字段
-        （`payload.status`）。所以两边**不可能条件列表一一对应**，只能做到结果集合相同。
+        **`source` 不是可有可无的开关，而是这条路的语义前提**：PG 的
+        "生效"是关系性的（chunk 与 version 双 active，要 JOIN 两张表），
+        Qdrant 的"生效"是扁平字段（`payload.status`）。所以两边**不可能
+        条件列表一一对应**，只能做到结果集合相同。
 
         - `v_active_chunks`（默认）：视图已经把"双 active"写进 WHERE，
           这边再加 `status = 'active'` 不但冗余，而且视图里根本没有这一列
           （直接报 `column c.status does not exist`——这是实测撞出来的）。
         - `chunks`：直连原表时必须自己写状态，否则待转正与已下线的切片都会进来。
 
-        `alias` 由调用方给，默认 `c`。参数顺序与占位符顺序严格对应，全部走 %s 占位符——
-        部门/角色列表直接拼进 SQL 会让 GIN 索引用不上，也给了注入面。
+        `alias` 由调用方给，默认 `c`。参数顺序与占位符顺序严格对应，全部走
+        %s 占位符——部门/角色列表直接拼进 SQL 会让 GIN 索引用不上，
+        也给了注入面。
         """
         resolved_source = PgSource(source)
         prefix = f"{alias}." if alias else ""
@@ -287,24 +322,48 @@ class RetrievalFilter:
 
         if self.time_range is not None:
             tr = self.time_range
-            if tr.use_report_period and tr.granularity in ("year", "half_year", "quarter"):
-                start = f"{tr.date_from // 10000:04d}-{(tr.date_from // 100) % 100:02d}-{tr.date_from % 100:02d}"
-                end = f"{tr.date_to // 10000:04d}-{(tr.date_to // 100) % 100:02d}-{tr.date_to % 100:02d}"
-                clauses.append(
-                    "(" 
-                    f"{prefix}report_period_start BETWEEN %s AND %s " 
-                    f"AND {prefix}report_period_end BETWEEN %s AND %s) " 
-                    "OR (" 
-                    f"{prefix}report_period_start IS NULL " 
-                    f"AND {prefix}report_period_end IS NULL " 
-                    f"AND {prefix}effective_date BETWEEN %s AND %s " 
-                    f"AND {prefix}date_confidence = %s) " 
-                    "OR (" 
-                    f"{prefix}report_period_start IS NULL " 
-                    f"AND {prefix}report_period_end IS NULL " 
-                    f"AND {prefix}effective_year BETWEEN %s AND %s)" 
+            if tr.use_report_period and tr.granularity in (
+                "year",
+                "half_year",
+                "quarter",
+            ):
+                start = (
+                    f"{tr.date_from // 10000:04d}-"
+                    f"{(tr.date_from // 100) % 100:02d}-"
+                    f"{tr.date_from % 100:02d}"
                 )
-                params.extend([start, end, start, end, tr.date_from, tr.date_to, EXPLICIT_CONFIDENCE, min(tr.years), max(tr.years)])
+                end = (
+                    f"{tr.date_to // 10000:04d}-"
+                    f"{(tr.date_to // 100) % 100:02d}-"
+                    f"{tr.date_to % 100:02d}"
+                )
+                clauses.append(
+                    "("
+                    f"{prefix}report_period_start BETWEEN %s AND %s "
+                    f"AND {prefix}report_period_end BETWEEN %s AND %s) "
+                    "OR ("
+                    f"{prefix}report_period_start IS NULL "
+                    f"AND {prefix}report_period_end IS NULL "
+                    f"AND {prefix}effective_date BETWEEN %s AND %s "
+                    f"AND {prefix}date_confidence = %s) "
+                    "OR ("
+                    f"{prefix}report_period_start IS NULL "
+                    f"AND {prefix}report_period_end IS NULL "
+                    f"AND {prefix}effective_year BETWEEN %s AND %s)"
+                )
+                params.extend(
+                    [
+                        start,
+                        end,
+                        start,
+                        end,
+                        tr.date_from,
+                        tr.date_to,
+                        EXPLICIT_CONFIDENCE,
+                        min(tr.years),
+                        max(tr.years),
+                    ]
+                )
             elif tr.granularity in ("year", "half_year", "quarter"):
                 clauses.append(f"{prefix}effective_year BETWEEN %s AND %s")
                 params.extend([min(tr.years), max(tr.years)])
@@ -318,15 +377,16 @@ class RetrievalFilter:
             clauses.append(f"{prefix}doc_key = ANY(%s)")
             params.append(list(self.doc_keys))
 
-        # 管理员 + 无时间 + 无 scope 时一条条件都没有。返回 "TRUE" 而不是空串：
-        # 空串会拼出 `WHERE ORDER BY ...`（实测报 syntax error at or near "ORDER"）。
-        # 用 "TRUE" 而不是让调用方判空，是因为调用方判空迟早有一处忘了判。
+        # 管理员 + 无时间 + 无 scope 时一条条件都没有。返回 "TRUE" 而不是
+        # 空串：空串会拼出 `WHERE ORDER BY ...`（实测报 syntax error at or
+        # near "ORDER"）。用 "TRUE" 而不是让调用方判空，是因为调用方
+        # 判空迟早有一处忘了判。
         return (" AND ".join(clauses) or "TRUE"), params
 
     # --- 日志 / 审计 ---
 
     def describe(self) -> dict[str, Any]:
-        """给日志与审计的一句话描述。不含原文、不含问题，只有口径。"""
+        """给日志与审计的一句话描述。不含原文、不含问题，只有口径。."""
         return {
             "user_id": self.identity.user_id,
             "admin": self.is_admin,
@@ -340,6 +400,7 @@ class RetrievalFilter:
         }
 
     def log(self) -> None:
+        """Run log."""
         log_event(logger, "retrieval_filter_built", **self.describe())
         trace_event("filter.built", **self.describe())
 
@@ -350,7 +411,7 @@ def build_filter(
     time_range: TimeRange | None = None,
     doc_keys: Sequence[str] | None = None,
 ) -> RetrievalFilter:
-    """构造过滤条件并留一条日志。
+    """构造过滤条件并留一条日志。.
 
     留日志不是仪式：出线上问题时第一个要回答的是"这次到底按什么权限搜的"，
     而这个问题没法从结果反推。管理员访问另有一条 `admin_access` 级别更高的日志。

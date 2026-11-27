@@ -20,13 +20,13 @@ from api.generate.llm import (
     strip_code_fence,
 )
 
-
 # --- 解析 §9.2 的四行表格 -----------------------------------------------------
 
 
 def test_plain_json_is_parsed() -> None:
     draft = parse_draft(
-        '{"status":"answered","answer":"每人每天 500 元[1]。","facts":[{"text":"每人每天 500 元","evidence_ids":["1"]}]}'
+        '{"status":"answered","answer":"每人每天 500 元[1]。",'
+        '"facts":[{"text":"每人每天 500 元","evidence_ids":["1"]}]}'
     )
     assert draft.status == "answered"
     assert draft.facts[0].evidence_ids == ("1",)
@@ -35,13 +35,20 @@ def test_plain_json_is_parsed() -> None:
 
 
 def test_code_fence_is_unwrapped_once() -> None:
-    draft = parse_draft('```json\n{"status":"unknown","answer":"未找到。","facts":[]}\n```')
+    draft = parse_draft(
+        '```json\n{"status":"unknown","answer":"未找到。","facts":[]}\n```'
+    )
     assert draft.status == "unknown"
-    assert draft.unwrapped is True, "拨过围栏要留痕：模型总在包围栏是提示词退化的信号"
+    assert (
+        draft.unwrapped is True
+    ), "拨过围栏要留痕：模型总在包围栏是提示词退化的信号"
 
 
 def test_surrounding_prose_is_ignored_only_after_unwrapping() -> None:
-    draft = parse_draft('以下是 JSON：\n```json\n{"status":"unknown","answer":"x","facts":[]}\n```')
+    draft = parse_draft(
+        '以下是 JSON：\n```json\n{"status":"unknown","answer":"x",'
+        '"facts":[]}\n```'
+    )
     assert draft.status == "unknown"
 
 
@@ -63,13 +70,19 @@ def test_missing_facts_field_is_a_format_error() -> None:
 
 def test_answered_with_empty_answer_is_a_format_error() -> None:
     with pytest.raises(DraftFormatError):
-        parse_draft('{"status":"answered","facts":[{"text":"   ","evidence_ids":["1"]}]}')
+        parse_draft(
+            '{"status":"answered","facts":[{"text":"   ",'
+            '"evidence_ids":["1"]}]}'
+        )
 
 
 def test_answered_without_evidence_ids_is_a_format_error() -> None:
     """缺 evidence_ids 的 answered 输出被判定为格式错误。"""
     with pytest.raises(DraftFormatError):
-        parse_draft('{"status":"answered","facts":[{"text":"500 元。","evidence_ids":[]}]}')
+        parse_draft(
+            '{"status":"answered","facts":[{"text":"500 元。",'
+            '"evidence_ids":[]}]}'
+        )
 
 
 def test_out_of_range_citation_is_left_to_the_first_check() -> None:
@@ -78,24 +91,32 @@ def test_out_of_range_citation_is_left_to_the_first_check() -> None:
     解析层不知道证据范围，所以它必须放行——在这里自己判等于把第一道校验做进解析器，
     而那样第一道就永远不会被执行到（它会被"已经拦过"的理由跳过）。
     """
-    draft = parse_draft('{"status":"answered","facts":[{"text":"x[9]。","evidence_ids":["9"]}]}')
+    draft = parse_draft(
+        '{"status":"answered","facts":[{"text":"x[9]。","evidence_ids":["9"]}]}'
+    )
     assert draft.facts[0].evidence_ids == ("9",)
 
 
 def test_bool_is_not_accepted_as_a_citation_number() -> None:
     """`True` 是 int 的子类：不排除 bool 的话 `[true]` 会变成 `[1]`。"""
     with pytest.raises(DraftFormatError):
-        parse_draft('{"status":"answered","facts":[{"text":"x[1]","evidence_ids":[true]}]}')
+        parse_draft(
+            '{"status":"answered","facts":[{"text":"x[1]","evidence_ids":[true]}]}'
+        )
 
 
 def test_citation_strings_that_are_digits_are_accepted() -> None:
     """模型偶尔把编号写成字符串；语义明确，认。"""
-    draft = parse_draft('{"status":"answered","facts":[{"text":"x[1]","evidence_ids":["1"]}]}')
+    draft = parse_draft(
+        '{"status":"answered","facts":[{"text":"x[1]","evidence_ids":["1"]}]}'
+    )
     assert draft.facts[0].evidence_ids == ("1",)
 
 
 def test_duplicate_citations_are_deduplicated_in_order() -> None:
-    draft = parse_draft('{"status":"answered","facts":[{"text":"x[1][2]","evidence_ids":[2,1,2]}]}')
+    draft = parse_draft(
+        '{"status":"answered","facts":[{"text":"x[1][2]","evidence_ids":[2,1,2]}]}'
+    )
     assert draft.facts[0].evidence_ids == ("2", "1")
 
 
@@ -120,7 +141,10 @@ def test_empty_draft_raw_is_kept_for_audit() -> None:
 
 
 def test_generation_prompt_keeps_the_three_hard_constraints() -> None:
-    """附录 D："三条不可弱化：只用证据、无证据说不知道、每句带引用。" """
+    """附录 D：三条不可弱化的约束。
+
+    只用证据、无证据说不知道、每句带引用。
+    """
     assert "只使用证据包内容" in GENERATION_SYSTEM_PROMPT
     assert "status=unknown" in GENERATION_SYSTEM_PROMPT
     assert "facts" in GENERATION_SYSTEM_PROMPT
@@ -155,7 +179,10 @@ def test_judge_messages_carry_only_question_evidence_answer() -> None:
 
 
 def test_judge_verdict_json_is_parsed() -> None:
-    assert parse_verdict('{"verdict":"SUPPORTED","reason":"直接引用"}') == ("SUPPORTED", "直接引用")
+    assert parse_verdict('{"verdict":"SUPPORTED","reason":"直接引用"}') == (
+        "SUPPORTED",
+        "直接引用",
+    )
 
 
 def test_judge_bare_verdict_word_is_accepted() -> None:
@@ -179,7 +206,10 @@ def test_garbage_judge_output_is_a_format_error() -> None:
 
 
 def test_missing_judge_client_yields_skipped_not_unsupported() -> None:
-    """没配模型 → `skipped`。与"判了不支持"必须能分辨：一个是部署缺配置，一个是内容问题。"""
+    """没配模型 → `skipped`。
+
+    与"判了不支持"必须能分辨：一个是部署缺配置，一个是内容问题。
+    """
     result = judge(None, "q", "ev", "ans")
     assert result.verdict == "skipped"
     assert result.skipped is True
@@ -193,9 +223,9 @@ class _BrokenClient(LlmClient):
         pass
 
     def complete(self, messages, *, temperature: float = 0.0) -> str:  # type: ignore[override]
-        raise __import__("api.generate.llm", fromlist=["GenerationUnavailable"]).GenerationUnavailable(
-            "boom"
-        )
+        raise __import__(
+            "api.generate.llm", fromlist=["GenerationUnavailable"]
+        ).GenerationUnavailable("boom")
 
 
 class _GarbageClient(LlmClient):

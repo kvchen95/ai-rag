@@ -1,4 +1,4 @@
-"""B4 的变异测试：把每条关键判据故意改坏，确认对应用例会红，再改回。
+"""B4 的变异测试：把每条关键判据故意改坏，确认对应用例会红，再改回。.
 
 判据从没红过 = 和被删掉等价。这里每组**只改一处语义、不改数量**——只改数量的变异
 会被"条数"类断言一抓一个准，让人误以为判据很严；只改语义的变异才会暴露
@@ -13,7 +13,8 @@
 5. 第二道只看 `claims`、不看 answer 的句子 → "模型没报的句子"用例必须红
 6. 第三道用**整包**证据而不是被引证据 → "引错编号"用例必须红
 7. 第四道通过就 return（第五道永远不执行）→ 五道全跑用例必须红
-8. `gate2_verdict` 只看 `judge is None`（把 skipped 读成 not_supported）→ 审计用例必须红
+8. `gate2_verdict` 只看 `judge is None`（把 skipped 读成 not_supported）→ 审计用
+例必须红
 9. 空 claim 被 `continue` 掉（第二道放过空主张）→ 空主张用例必须红
 10. `token` 在生成之后就发（不等校验）→ "校验不过无 token"用例必须红
 
@@ -49,12 +50,29 @@ PYTEST_TARGETS = [
 
 def run(targets: list[str]) -> tuple[int, str]:
     env = dict(os.environ)
-    for var in ("ALL_PROXY", "all_proxy", "HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
+    for var in (
+        "ALL_PROXY",
+        "all_proxy",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "http_proxy",
+        "https_proxy",
+    ):
         env.pop(var, None)
     proc = subprocess.run(  # noqa: S603
         # 不自己传 `-q`：`api/pytest.ini` 的 addopts 里已经有一个，叠成 `-qq`
         # 会把"29 passed"这行摘要一起抑制掉（实测：stdout 里只剩进度点）。
-        [sys.executable, "-m", "pytest", "-c", "api/pytest.ini", "--no-header", "-p", "no:cacheprovider", *targets],
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-c",
+            "api/pytest.ini",
+            "--no-header",
+            "-p",
+            "no:cacheprovider",
+            *targets,
+        ],
         cwd=REPO,
         capture_output=True,
         text=True,
@@ -72,7 +90,11 @@ def run(targets: list[str]) -> tuple[int, str]:
             if not stripped:
                 continue
             head = stripped.split()[0]
-            if head.isdigit() and ("passed" in stripped or "failed" in stripped or "error" in stripped):
+            if head.isdigit() and (
+            "passed" in stripped
+                or "failed" in stripped
+                or "error" in stripped
+            ):
                 summary = stripped
                 break
         if summary:
@@ -80,7 +102,11 @@ def run(targets: list[str]) -> tuple[int, str]:
     if not summary:
         summary = (combined.strip().splitlines() or ["<no output>"])[-1][:300]
     # 红的时候还要说清是哪条用例红的——否则只看到 rc=1 不知道该看什么。
-    failures = [ln for ln in combined.splitlines() if ln.startswith("FAILED") or ln.startswith("ERROR api")]
+    failures = [
+        ln
+        for ln in combined.splitlines()
+        if ln.startswith("FAILED") or ln.startswith("ERROR api")
+    ]
     if failures:
         summary = summary + " | " + "; ".join(failures[:3])
     return proc.returncode, summary
@@ -92,7 +118,9 @@ def mutate(path: Path, old: str, new: str) -> None:
     path.write_text(text.replace(old, new, 1), encoding="utf-8")
     # 校验文件真的变了：锚点落在 docstring 里的同名文本上时，变异等于没改，
     # 于是报"判据无效"——而真相是变异根本没生效（B3 实测撞过这个坑）。
-    assert path.read_text(encoding="utf-8") != text, f"变异没有改变文件内容: {path.name}"
+    assert (
+        path.read_text(encoding="utf-8") != text
+    ), f"变异没有改变文件内容: {path.name}"
 
 
 MUTATIONS = [
@@ -120,14 +148,21 @@ MUTATIONS = [
     {
         "name": "封顶时从高分往低分丢（方向反了）",
         "file": "api/generate/evidence.py",
-        "old": """    kept: list[tuple[Candidate, tuple[str, ...], str, ChunkText]] = []
-    dropped: list[str] = []
-    used = 0
-    for index, entry in enumerate(merged):""",
-        "new": """    kept: list[tuple[Candidate, tuple[str, ...], str, ChunkText]] = []
-    dropped: list[str] = []
-    used = 0
-    for index, entry in enumerate(reversed(merged)):  # 变异：从低分开始装""",
+        "old": (
+            "    kept: list[tuple[Candidate, tuple[str, ...], str, "
+            "ChunkText]] = []\n"
+            "    dropped: list[str] = []\n"
+            "    used = 0\n"
+            "    for index, entry in enumerate(merged):"
+        ),
+        "new": (
+            "    kept: list[tuple[Candidate, tuple[str, ...], str, "
+            "ChunkText]] = []\n"
+            "    dropped: list[str] = []\n"
+            "    used = 0\n"
+            "    for index, entry in enumerate(reversed(merged)):  # "
+            "变异：从低分开始装"
+        )
     },
     {
         "name": "第一道只扫 citations 字段，不扫正文",
@@ -144,10 +179,14 @@ MUTATIONS = [
         "file": "api/verify/checks.py",
         "old": """    sentences = _draft_sentences(draft)
     if not sentences:""",
-        "new": """    sentences = tuple(
-        Sentence(text=c.text, citations=c.citations, bare=c.text) for c in draft.claims
-    )  # 变异：丢掉 answer 里模型没报的句子
-    if not sentences:""",
+        "new": (
+            "    sentences = tuple(\n"
+            "        Sentence(text=c.text, citations=c.citations, "
+            "bare=c.text) for c in draft.claims\n"
+            "    )  # 变异：丢掉 answer "
+            "里模型没报的句子\n"
+            "    if not sentences:"
+        ),
     },
     {
         "name": "第三道用整包证据而不是被引证据",
@@ -163,20 +202,28 @@ MUTATIONS = [
     {
         "name": "第四道通过就 return（第五道永远不执行）",
         "file": "api/verify/checks.py",
-        "old": """        elif check == CHECK_NLI:
-            failure, judge_result = check_nli(judge_client, question, draft, pack)""",
-        "new": """        elif check == CHECK_NLI:
-            failure, judge_result = check_nli(judge_client, question, draft, pack)
-            if failure is None:
-                return VerificationReport(
-                    passed=True,
-                    checks_run=tuple(ran),
-                    judge=judge_result,
-                    answer=draft.answer,
-                    citations=draft.citations,
-                    cited_evidence=referable_evidence(pack, draft.citations),
-                    elapsed_ms=0.0,
-                )  # 变异：提前收尾""",
+        "old": (
+            "        elif check == CHECK_NLI:\n"
+            "            failure, judge_result = check_nli(judge_client, "
+            "question, draft, pack)"
+        ),
+        "new": (
+            "        elif check == CHECK_NLI:\n"
+            "            failure, judge_result = check_nli(judge_client, "
+            "question, draft, pack)\n"
+            "            if failure is None:\n"
+            "                return VerificationReport(\n"
+            "                    passed=True,\n"
+            "                    checks_run=tuple(ran),\n"
+            "                    judge=judge_result,\n"
+            "                    answer=draft.answer,\n"
+            "                    citations=draft.citations,\n"
+            "                    cited_evidence=referable_evidence(pack, "
+            "draft.citations),\n"
+            "                    elapsed_ms=0.0,\n"
+            "                )  # "
+            "变异：提前收尾"
+        )
     },
     {
         "name": "gate2 只看 judge is None（skipped 被读成 not_supported）",
@@ -193,27 +240,42 @@ MUTATIONS = [
     {
         "name": "空 claim 被跳过（第二道放过空主张）",
         "file": "api/verify/sentences.py",
-        "old": """        if not bare:
-            primary.append(Sentence(text=claim.strip(), citations=parse_citations(claim), bare=""))
-            continue""",
+        "old": (
+            "        if not bare:\n"
+            "            primary.append(Sentence(text=claim.strip(), "
+            "citations=parse_citations(claim), bare=\"\"))\n"
+            "            continue"
+        ),
         "new": """        if not bare:
             continue  # 变异：空主张直接丢掉""",
     },
     {
         "name": "score_snapshot 重复字典键（分数分布被静默覆盖）",
         "file": "api/retrieval/pipeline.py",
-        "old": '            "rerank_scores": [round(s, 6) for s in rerank_scores],',
-        "new": '            "rerank": [round(s, 6) for s in rerank_scores],  # 变异：与下面的键重名',
+        "old": '            "rerank_scores": [round(s, 6) for s in'
+        ' rerank_scores],',
+        "new": '            "rerank": [round(s, 6) for s in rerank_scores],  #'
+        ' 变异：与下面的键重名',
     },
     {
         "name": "token 在校验之前就发（不等校验结论）",
         "file": "api/qa/orchestrator.py",
-        "old": """        send(ev.step(ev.PHASE_VERIFY, hop=snapshot.hop_count, elapsed_ms=_ms(started)))
-        report = verify_draft(draft, pack, question=question, judge_client=self.judge_client)""",
-        "new": """        for _piece in ev.chunk_text(draft.answer, self.token_chunk_chars):
-            send(ev.token(_piece))  # 变异：不等校验就发正文
-        send(ev.step(ev.PHASE_VERIFY, hop=snapshot.hop_count, elapsed_ms=_ms(started)))
-        report = verify_draft(draft, pack, question=question, judge_client=self.judge_client)""",
+        "old": (
+            "        send(ev.step(ev.PHASE_VERIFY, "
+            "hop=snapshot.hop_count, elapsed_ms=_ms(started)))\n"
+            "        report = verify_draft(draft, pack, "
+            "question=question, judge_client=self.judge_client)"
+        ),
+        "new": (
+            "        for _piece in ev.chunk_text(draft.answer, "
+            "self.token_chunk_chars):\n"
+            "            send(ev.token(_piece))  # "
+            "变异：不等校验就发正文\n"
+            "        send(ev.step(ev.PHASE_VERIFY, "
+            "hop=snapshot.hop_count, elapsed_ms=_ms(started)))\n"
+            "        report = verify_draft(draft, pack, "
+            "question=question, judge_client=self.judge_client)"
+        ),
     },
 ]
 

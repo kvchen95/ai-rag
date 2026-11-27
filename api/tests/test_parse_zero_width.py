@@ -1,8 +1,8 @@
 """零宽字符与字宽兜底（§3.2 的隐含前提：坐标得能用）。
 
-**这一组是被真实样本逼出来的**：`scripts/make_samples.py` 生成的三份制度文件用标准
-Helvetica 但没写 `/Widths`，pdfplumber 照实报每个字符 `w=0.00`（实测 268 个字符
-全是零宽）。后果不是"坐标略偏"，而是：
+**这一组是被真实样本逼出来的**：`scripts/make_samples.py` 生成的三份制度
+文件用标准 Helvetica 但没写 `/Widths`，pdfplumber 照实报每个字符 `w=0.00`
+（实测 268 个字符全是零宽）。后果不是“坐标略偏”，而是：
 
 * 行宽 = 0 → `bbox` 退化成一个竖条 → `Chunk.missing_fields()` 把 `bbox(invalid)`
   报成缺失 → **整份文档一条切片都出不来**；
@@ -37,11 +37,14 @@ PORTRAIT = REPO_ROOT / "samples" / "policy" / "travel-cn.pdf"
 LANDSCAPE = REPO_ROOT / "samples" / "hr" / "leave-2025.pdf"
 
 pytestmark = pytest.mark.skipif(
-    not PORTRAIT.exists(), reason="samples/ 不在仓库里（先跑 scripts/make_samples.py）"
+    not PORTRAIT.exists(),
+    reason="samples/ 不在仓库里（先跑 scripts/make_samples.py）",
 )
 
 
-def _char(text: str, *, x: float, top: float, height: float = 11.0, width: float = 0.0) -> dict:
+def _char(
+    text: str, *, x: float, top: float, height: float = 11.0, width: float = 0.0
+) -> dict:
     return {
         "text": text,
         "x0": x,
@@ -59,7 +62,8 @@ def test_real_samples_have_zero_width_chars() -> None:
     """先确认这个坑真实存在，否则后面的兜底测试是在测一个不存在的问题。
 
     这条前提**只对 `make_samples.py` 造的样本成立**：它用标准 Helvetica 且不写
-    `/Widths`，pdfplumber 照实报 `w=0.00`。真实财报/研报（`samples/pdf_reports/`）
+    `/Widths`，pdfplumber 照实报 `w=0.00`。真实财报/研报
+    （`samples/pdf_reports/`）
     带完整字宽，这条断言在它们身上是假的——所以只在"样本确实是合成件"时才验。
     """
     with pdfplumber.open(str(PORTRAIT)) as pdf:
@@ -77,7 +81,10 @@ def test_real_samples_have_zero_width_chars() -> None:
 
 
 def test_fallback_restores_spaces_and_line_width() -> None:
-    """`Travel Expense Policy (CN)` 不能是 `TravelExpensePolicy(CN)`，也不能宽 0。"""
+    """`Travel Expense Policy (CN)` 不能被压成 `TravelExpensePolicy(CN)`。
+
+    宽度也不能是 0。
+    """
     with pdfplumber.open(str(PORTRAIT)) as pdf:
         page = pdf.pages[0]
         space = PageSpace.from_display(page)
@@ -104,22 +111,33 @@ def test_fallback_is_proportional_to_font_size() -> None:
     标题/正文在同一页上很常见。
     """
     chars = fill_missing_widths(
-        [_char("a", x=100.0, top=10.0, height=20.0), _char("b", x=100.0, top=40.0, height=10.0)]
+        [
+            _char("a", x=100.0, top=10.0, height=20.0),
+            _char("b", x=100.0, top=40.0, height=10.0),
+        ]
     )
     by_text = {c["text"]: c for c in chars}
-    assert by_text["a"]["x1"] - by_text["a"]["x0"] == pytest.approx(20.0 * FALLBACK_LATIN_EM)
-    assert by_text["b"]["x1"] - by_text["b"]["x0"] == pytest.approx(10.0 * FALLBACK_LATIN_EM)
+    assert by_text["a"]["x1"] - by_text["a"]["x0"] == pytest.approx(
+        20.0 * FALLBACK_LATIN_EM
+    )
+    assert by_text["b"]["x1"] - by_text["b"]["x0"] == pytest.approx(
+        10.0 * FALLBACK_LATIN_EM
+    )
 
 
 def test_fallback_uses_full_em_for_cjk() -> None:
     """中文按 1 em：汉字是方块字，用 0.5em 会让行宽只有一半。"""
     chars = fill_missing_widths([_char("住", x=100.0, top=10.0, height=12.0)])
-    assert chars[0]["x1"] - chars[0]["x0"] == pytest.approx(12.0 * FALLBACK_CJK_EM)
+    assert chars[0]["x1"] - chars[0]["x0"] == pytest.approx(
+        12.0 * FALLBACK_CJK_EM
+    )
 
 
 def test_fallback_uses_a_narrow_space() -> None:
     chars = fill_missing_widths([_char(" ", x=100.0, top=10.0, height=10.0)])
-    assert chars[0]["x1"] - chars[0]["x0"] == pytest.approx(10.0 * FALLBACK_SPACE_EM)
+    assert chars[0]["x1"] - chars[0]["x0"] == pytest.approx(
+        10.0 * FALLBACK_SPACE_EM
+    )
 
 
 def test_fallback_advances_the_cursor_within_a_line() -> None:
@@ -128,7 +146,11 @@ def test_fallback_advances_the_cursor_within_a_line() -> None:
     `x0` 全相同的 PDF 里只给宽度不推进游标，拼出来的行宽还是 0。
     """
     chars = fill_missing_widths(
-        [_char("a", x=72.0, top=10.0), _char("b", x=72.0, top=10.0), _char("c", x=72.0, top=10.0)]
+        [
+            _char("a", x=72.0, top=10.0),
+            _char("b", x=72.0, top=10.0),
+            _char("c", x=72.0, top=10.0),
+        ]
     )
     positions = [(c["x0"], c["x1"]) for c in chars]
     assert positions[0][0] == 72.0
@@ -162,7 +184,9 @@ def test_fallback_does_not_mutate_the_input() -> None:
 # --- 3. 端到端：真实样本能产出完整切片 --------------------------------------
 
 
-@pytest.mark.parametrize("path", [PORTRAIT, LANDSCAPE], ids=lambda p: Path(p).stem)
+@pytest.mark.parametrize(
+    "path", [PORTRAIT, LANDSCAPE], ids=lambda p: Path(p).stem
+)
 def test_zero_width_sample_produces_complete_chunks(path: Path) -> None:
     """零宽样本也必须产出**通过六项校验**的切片。
 

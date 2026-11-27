@@ -35,7 +35,9 @@ W, H = 595.0, 842.0
 SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
 
 
-def _solid(width: int, height: int, color: tuple[int, int, int] = (255, 255, 255)) -> Image.Image:
+def _solid(
+    width: int, height: int, color: tuple[int, int, int] = (255, 255, 255)
+) -> Image.Image:
     return Image.new("RGB", (width, height), color)
 
 
@@ -80,8 +82,8 @@ def test_crop_at_200_dpi_meets_the_floor() -> None:
 def test_crop_of_a_tiny_figure_is_upscaled_to_the_pixel_floor() -> None:
     """0.5 英寸宽的迷你图在 200 DPI 下只有 100px —— 刻度读不出来。
 
-    放大到 `MIN_CROP_PX` 是有意的：`§3.4` 的边界表写的是"放大后重裁，仍不行则标失败"。
-    这里实现"放大"那一半。
+    放大到 `MIN_CROP_PX` 是有意的：`§3.4` 的边界表写的是“放大后重裁，
+    仍不行则标失败”。这里实现“放大”那一半。
     """
     image = _page_image(200)
     rect = Rect(72.0, 100.0, 108.0, 130.0)  # 36pt = 0.5 英寸
@@ -94,7 +96,9 @@ def test_crop_rejects_an_aspect_mismatch() -> None:
     """渲染尺寸与页面尺寸不匹配时继续裁会得到错位切片，直接报错。"""
     wrong = _solid(100, 1000)  # 与 595×842 的宽高比不符
     with pytest.raises(FigureRenderError, match="aspect mismatch"):
-        crop_display(wrong, Rect(0, 0, 100, 100), display_width=W, display_height=H)
+        crop_display(
+            wrong, Rect(0, 0, 100, 100), display_width=W, display_height=H
+        )
 
 
 def test_crop_of_a_tiny_rect_is_upscaled_not_rejected() -> None:
@@ -102,11 +106,15 @@ def test_crop_of_a_tiny_rect_is_upscaled_not_rejected() -> None:
 
     "极小"不是拒绝的理由：`§3.4` 的边界表写的是"放大后重裁，仍不行则标失败"。
     放大到 `MIN_CROP_PX` 之后刻度能看清，就没有拒绝的必要；
-    真拒绝发生在渲染失败或 DPI 不足（见 `test_assert_min_dpi_rejects_a_low_resolution_crop`）。
+    真拒绝发生在渲染失败或 DPI 不足（见
+    `test_assert_min_dpi_rejects_a_low_resolution_crop`）。
     """
     image = _page_image(200)
     rendered = crop_display(
-        image, Rect(100.0, 100.0, 100.2, 100.2), display_width=W, display_height=H
+        image,
+        Rect(100.0, 100.0, 100.2, 100.2),
+        display_width=W,
+        display_height=H,
     )
     assert rendered.width_px == MIN_CROP_PX
 
@@ -114,7 +122,10 @@ def test_crop_of_a_tiny_rect_is_upscaled_not_rejected() -> None:
 def test_assert_min_dpi_passes_above_the_floor() -> None:
     image = _page_image(220)
     rendered = crop_display(
-        image, Rect(72.0, 100.0, 216.0, 200.0), display_width=W, display_height=H
+        image,
+        Rect(72.0, 100.0, 216.0, 200.0),
+        display_width=W,
+        display_height=H,
     )
     assert_min_dpi(rendered, minimum=200)
 
@@ -126,9 +137,13 @@ def test_assert_min_dpi_rejects_a_low_resolution_crop() -> None:
     它就会静默放行糊图。
     """
     image = _page_image(120)  # 整页只有 120 DPI
-    rect = Rect(72.0, 100.0, 500.0, 400.0)  # 宽 428pt ≈ 5.9 英寸 → 714px ≈ 120 DPI
+    rect = Rect(
+        72.0, 100.0, 500.0, 400.0
+    )  # 宽 428pt ≈ 5.9 英寸 → 714px ≈ 120 DPI
     rendered = crop_display(image, rect, display_width=W, display_height=H)
-    assert rendered.dpi < MIN_FIGURE_DPI, f"fixture not low-res enough: {rendered.dpi:.0f}"
+    assert (
+        rendered.dpi < MIN_FIGURE_DPI
+    ), f"fixture not low-res enough: {rendered.dpi:.0f}"
     with pytest.raises(FigureRenderError, match="DPI"):
         assert_min_dpi(rendered, minimum=MIN_FIGURE_DPI)
 
@@ -207,17 +222,25 @@ def test_lossless_webp_roundtrip_is_byte_identical(tmp_path: Path) -> None:
         for y in range(80):
             original.putpixel((x, y), (0, 0, 0))
     image = crop_display(
-        _page_image(200), Rect(72.0, 100.0, 300.0, 250.0), display_width=W, display_height=H
+        _page_image(200),
+        Rect(72.0, 100.0, 300.0, 250.0),
+        display_width=W,
+        display_height=H,
     )
     buffer = io.BytesIO()
     image.image.save(buffer, format="WEBP", lossless=True)
     with Image.open(io.BytesIO(buffer.getvalue())) as decoded:
-        assert list(decoded.convert("RGB").getdata()) == list(image.image.getdata())
+        assert list(decoded.convert("RGB").getdata()) == list(
+            image.image.getdata()
+        )
 
 
 def test_save_lossless_webp_writes_the_file(tmp_path: Path) -> None:
     image = crop_display(
-        _page_image(220), Rect(72.0, 100.0, 216.0, 200.0), display_width=W, display_height=H
+        _page_image(220),
+        Rect(72.0, 100.0, 216.0, 200.0),
+        display_width=W,
+        display_height=H,
     )
     target = tmp_path / "figures" / "ch_x.webp"
     size = image.save_lossless_webp(target)

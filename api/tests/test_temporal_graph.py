@@ -46,7 +46,10 @@ def test_graph_series_is_sorted_and_comparable() -> None:
     )
     graph = TemporalKnowledgeGraph(facts)
     series = graph.series("寒武纪", "营业收入")
-    assert [item.period_start for item in series] == ["2025-01-01", "2026-01-01"]
+    assert [item.period_start for item in series] == [
+        "2025-01-01",
+        "2026-01-01",
+    ]
 
     comparison = graph.compare("寒武纪", "营业收入", "2026-01-01", "2026-06-30")
     assert comparison is not None
@@ -66,7 +69,11 @@ def test_graph_rejects_cross_unit_comparison() -> None:
             subject="寒武纪",
             report_period_start="2026-01-01",
             report_period_end="2026-06-30",
-            table_md="| 项目 | 本期数 |\n| --- | --- |\n| 研发投入 | 70,246.61 |",
+            table_md=(
+                "| 项目 | 本期数 |\n"
+                "| --- | --- |\n"
+                "| 研发投入 | 70,246.61 |"
+            ),
             unit="元",
         )
         + extract_table_facts(
@@ -79,13 +86,19 @@ def test_graph_rejects_cross_unit_comparison() -> None:
             unit="%",
         )
     )
-    assert graph.compare("寒武纪", "研发投入", "2026-01-01", "2026-06-30") is None
+    assert (
+        graph.compare("寒武纪", "研发投入", "2026-01-01", "2026-06-30") is None
+    )
 
 
 def test_change_rate_column_is_not_treated_as_prior_period() -> None:
-    table = """| 项目 | 本报告期 | 本报告期比上年同期增减变动幅度（%） | 年初至报告期末 |
-| --- | --- | --- | --- |
-| 营业收入 | 665,044,497.90 | 69.93 | 1,817,290,048.48 |"""
+    table = (
+        "| 项目 | 本报告期 "
+        "| 本报告期比上年同期增减变动幅度（%） "
+        "| 年初至报告期末 |\n"
+        "| --- | --- | --- | --- |\n"
+        "| 营业收入 | 665,044,497.90 | 69.93 | 1,817,290,048.48 |"
+    )
     facts = extract_table_facts(
         chunk_id="ch_q3",
         doc_key="unitree-q3",

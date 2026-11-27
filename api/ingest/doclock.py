@@ -1,4 +1,4 @@
-"""文档级咨询锁：同一份文档的写入必须串行（详细设计.md §4.1）。
+"""文档级咨询锁：同一份文档的写入必须串行（详细设计.md §4.1）。.
 
 三个模块要抢同一把锁：
 
@@ -32,27 +32,37 @@ from psycopg import Connection
 DOC_LOCK_SQL = "SELECT pg_advisory_xact_lock(hashtext(%s))"
 
 
-def lock_document(conn: Connection[Any], doc_key: str, *, wait: bool = True) -> None:
-    """给一份文档上事务级排他锁（必须已经在事务里）。
+def lock_document(
+    conn: Connection[Any], doc_key: str, *, wait: bool = True
+) -> None:
+    """给一份文档上事务级排他锁（必须已经在事务里）。.
 
-    `wait=False` 时用 `pg_try_advisory_xact_lock`，拿不到直接返回 False 给调用方——
-    给"人工触发的翻牌"用：与其排在队列里等几秒再失败，不如立刻告诉操作者
-    "这份文档正在被同步，稍后再试"。
+    `wait=False` 时用 `pg_try_advisory_xact_lock`，拿不到直接返回 False 给
+    调用方——给"人工触发的翻牌"用：与其排在队列里等几秒再失败，不如立刻
+    告诉操作者"这份文档正在被同步，稍后再试"。
     """
-    sql = DOC_LOCK_SQL if wait else "SELECT pg_try_advisory_xact_lock(hashtext(%s))"
+    sql = (
+        DOC_LOCK_SQL
+        if wait
+        else "SELECT pg_try_advisory_xact_lock(hashtext(%s))"
+    )
     with conn.cursor() as cur:
         cur.execute(sql, (doc_key,))
         row = cur.fetchone()
     if not wait and (row is None or not row[0]):
-        raise DocumentLocked(doc_key)
+        raise DocumentLockedError(doc_key)
 
 
-class DocumentLocked(RuntimeError):
-    """拿不到文档锁（另一事务正在写这份文档）。"""
+class DocumentLockedError(RuntimeError):
+    """拿不到文档锁（另一事务正在写这份文档）。."""
 
     def __init__(self, doc_key: str) -> None:
+        """Initialize the instance."""
         super().__init__(f"document {doc_key} is locked by another transaction")
         self.doc_key = doc_key
 
 
-__all__ = ["DOC_LOCK_SQL", "DocumentLocked", "lock_document"]
+__all__ = ["DOC_LOCK_SQL", "DocumentLockedError", "lock_document"]
+
+# Backwards-compatible alias (N818: exception names use Error suffix).
+DocumentLocked = DocumentLockedError

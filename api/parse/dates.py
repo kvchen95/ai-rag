@@ -1,4 +1,4 @@
-"""业务时间与可信度（详细设计.md §3.5 / §5.2 / 附录 A.3）。
+"""业务时间与可信度（详细设计.md §3.5 / §5.2 / 附录 A.3）。.
 
 两条规矩，写在这里是为了别处不再各自解释：
 
@@ -12,7 +12,7 @@
 
 | 情形 | effective_date | effective_year | confidence |
 |---|---|---|---|
-| 正文有完整日期（2025-03-01 / 20250301 / 2025年3月1日） | 20250301 | 2025 | explicit |
+| 正文有完整日期（如 2025-03-01） | 20250301 | 2025 | explicit |
 | 正文只有年份（2025 revision / 2025年度） | NULL | 2025 | inferred |
 | 什么都没有 | NULL | NULL | inferred |
 
@@ -23,8 +23,8 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Iterable, Sequence
 
 # 完整日期：2025-03-01 / 2025/3/1 / 2025.03.01 / 2025年3月1日 / 20250301
 #
@@ -37,9 +37,14 @@ _FULL_DATE = re.compile(
     r"|(?<!\d)(\d{4})(\d{2})(\d{2})(?!\d)"
 )
 # 年月（无日）：2025年3月 / 2025-03 / 2025.3
-_YEAR_MONTH = re.compile(r"(?<!\d)(\d{4})\s*[-/.年]\s*(\d{1,2})(?![\d日])\s*月?(?![\d日])")
+_YEAR_MONTH = re.compile(
+    r"(?<!\d)(\d{4})\s*[-/.年]\s*(\d{1,2})(?![\d日])\s*月?(?![\d日])"
+)
 # 只有年份：2025 / 2025年 / 2025 年度 / 2025 revision
-_YEAR = re.compile(r"(?<!\d)(20\d{2}|19\d{2})(?!\d)\s*(?:年|年度|版|revision|edition)?", re.IGNORECASE)
+_YEAR = re.compile(
+    r"(?<!\d)(20\d{2}|19\d{2})(?!\d)\s*(?:年|年度|版|revision|edition)?",
+    re.IGNORECASE,
+)
 
 # 日期前的引导词：有它才敢把"2025-03-01"当生效日期，而不是"文件里随便一个日期"。
 # 目录里的"发布日期"、发票里的"开票日期"都不该变成切片生效日期。
@@ -59,18 +64,21 @@ _DATE_LEADS = (
 
 @dataclass(frozen=True, slots=True)
 class BusinessDate:
-    """切片的业务时间。三个字段与 `chunks` 的三列逐字对应。"""
+    """切片的业务时间。三个字段与 `chunks` 的三列逐字对应。."""
 
     effective_date: int | None = None
     effective_year: int | None = None
     confidence: str = "inferred"
 
     def __post_init__(self) -> None:
+        """Run __post_init__."""
         if self.confidence not in {"explicit", "inferred"}:
             raise ValueError(f"bad date confidence: {self.confidence}")
         if self.effective_date is not None:
             if not (19000101 <= self.effective_date <= 29991231):
-                raise ValueError(f"effective_date out of range: {self.effective_date}")
+                raise ValueError(
+                    f"effective_date out of range: {self.effective_date}"
+                )
             # 派生列必须与日期自洽：这两行若不一致，时间过滤会按错误的年去筛。
             assert self.effective_year == self.effective_date // 10000, (
                 f"effective_year {self.effective_year} does not match "
@@ -79,6 +87,7 @@ class BusinessDate:
 
     @property
     def is_explicit(self) -> bool:
+        """Run is_explicit."""
         return self.confidence == "explicit"
 
 
@@ -86,6 +95,7 @@ EMPTY = BusinessDate()
 
 
 def _valid_month_day(month: int, day: int) -> bool:
+    """Run _valid_month_day."""
     if not (1 <= month <= 12):
         return False
     days = (31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
@@ -93,6 +103,7 @@ def _valid_month_day(month: int, day: int) -> bool:
 
 
 def _mk(year: int, month: int | None, day: int | None) -> int | None:
+    """Run _mk."""
     if year < 1900 or year > 2999:
         return None
     month = month or 1
@@ -103,9 +114,10 @@ def _mk(year: int, month: int | None, day: int | None) -> int | None:
 
 
 def find_date(text: str, *, require_lead: bool = False) -> BusinessDate:
-    """从一段文本里找业务日期。
+    """从一段文本里找业务日期。.
 
-    `require_lead=True` 时要求日期前面 20 个字符内出现引导词（生效/实施/effective…）。
+    `require_lead=True` 时要求日期前面 20 个字符内出现引导词
+    （生效/实施/effective…）。
     切片级用 `require_lead=True`：一段正文里出现的任何日期都不该变成"这批切片的
     生效时间"，只有明说"生效日期：…"的才算。文档级（`document_date`）用 False——
     标题里的 `2025 revision` 就是这份材料的年份。
@@ -150,12 +162,15 @@ def find_date(text: str, *, require_lead: bool = False) -> BusinessDate:
 
 
 def _has_lead(text: str, index: int, *, window: int = 20) -> bool:
+    """Run _has_lead."""
     prefix = text[max(0, index - window) : index].lower()
     return any(lead in prefix for lead in _DATE_LEADS)
 
 
-def document_date(title: str | None, first_pages_text: Sequence[str] | Iterable[str] = ()) -> BusinessDate:
-    """文档级日期：标题优先，其次前几页正文。
+def document_date(
+    title: str | None, first_pages_text: Sequence[str] | Iterable[str] = ()
+) -> BusinessDate:
+    """文档级日期：标题优先，其次前几页正文。.
 
     只用于给"正文里完全没写日期"的切片兜底（写 `inferred`）。它不进 `explicit`,
     所以不会被时间过滤当成"这条切片在 2025 年生效"。
@@ -172,7 +187,7 @@ def document_date(title: str | None, first_pages_text: Sequence[str] | Iterable[
 
 
 def merge_dates(primary: BusinessDate, fallback: BusinessDate) -> BusinessDate:
-    """切片级结果优先，缺什么用文档级补。
+    """切片级结果优先，缺什么用文档级补。.
 
     `confidence` 取**严格的那一个**：切片写了显式日期就用 explicit；只有补出来的
     年份就用 inferred。不做"切片有年、文档有日就拼成完整日期"——那是在造事实。
