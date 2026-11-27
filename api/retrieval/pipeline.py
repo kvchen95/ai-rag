@@ -23,8 +23,9 @@
 
 from __future__ import annotations
 
+import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Sequence
 
 from api.clients.pg import PgDatabase
@@ -34,7 +35,10 @@ from api.identity import IdentitySnapshot
 from api.observability import get_logger, log_event
 from api.trace import trace as trace_event
 from api.query import NeedsClarification, QueryPlan, understand
-from api.time_range import select_time_docs
+from api.temporal import build_temporal_scope
+from api.temporal.compound import CompoundGateResult, aggregate_gates
+from api.temporal.decompose import Decomposition, decompose_question
+from api.temporal.documents import select_documents
 from api.retrieval.gate import (
     GateConfig,
     GateDecision,
@@ -127,6 +131,7 @@ class RetrievalSnapshot:
     elapsed_ms: float
     hop_count: int = 0
     multihop: MultiHopResult | None = None
+    compound: CompoundGateResult | None = None
 
     @property
     def verdict(self) -> Verdict:
@@ -159,6 +164,7 @@ class RetrievalSnapshot:
             "filter": self.filter_json,
             "mode": self.plan.mode,
             "rewrite_trace": [step.as_text() for step in self.plan.trace],
+            **({"compound": self.compound.as_audit()} if self.compound is not None else {}),
         }
 
     def retrieved_ids(self) -> list[str]:
@@ -278,6 +284,42 @@ class RetrievalPipeline:
         previous_entities: Sequence[str] | None = None,
         time_range: Any = None,
     ) -> RetrievalSnapshot:
+        """复合问逐项独立检索；单问保持原链路。"""
+        decomposition = decompose_question(question)
+        if not decomposition.is_compound:
+            return self._run_single(
+                question,
+                identity,
+                doc_keys=doc_keys,
+                previous_entities=previous_entities,
+                time_range=time_range,
+                decomposition=decomposition,
+            )
+        snapshots = tuple(
+            self._run_single(
+                sub.question,
+                identity,
+                # 用户显式 doc scope 仍是硬约束；time scope 必须来自各子问题，
+                # 不能被第一子问题的时间窗复用。
+                doc_keys=doc_keys,
+                previous_entities=None,
+                time_range=None,
+                decomposition=decomposition,
+            )
+            for sub in decomposition.subquestions
+        )
+        return _combine_compound(question, identity, decomposition, snapshots)
+
+    def _run_single(
+        self,
+        question: str,
+        identity: IdentitySnapshot,
+        *,
+        doc_keys: Sequence[str] | None,
+        previous_entities: Sequence[str] | None,
+        time_range: Any,
+        decomposition: Decomposition,
+    ) -> RetrievalSnapshot:
         """一句问话 → 一个判定（§8.4 的五态之一）。
 
         `time_range` 显式传进来的优先级高于问句里归一出来的时间窗：前端给的
@@ -301,17 +343,28 @@ class RetrievalPipeline:
                 question, plan, "超出库范围，未检索", started
             )
 
-        effective_range = time_range if time_range is not None else plan.time.range
+        effective_range = time_range if time_range is not None else (
+            plan.temporal.document_ranges[0] if plan.temporal and plan.temporal.document_ranges else plan.time.range
+        )
         effective_doc_keys = tuple(doc_keys) if doc_keys is not None else None
         if not effective_doc_keys and effective_range is not None:
-            names = all_doc_names(self.pg)
-            selected = select_time_docs(question, names, client=self.time_llm)
+            selected = select_documents(
+                question,
+                pg=self.pg,
+                time_range=effective_range,
+                client=self.time_llm,
+            )
             if selected:
                 effective_doc_keys = selected
             else:
-                named_doc_keys = mentioned_doc_keys(question, names)
+                named_doc_keys = mentioned_doc_keys(question, all_doc_names(self.pg))
                 if named_doc_keys:
                     effective_doc_keys = named_doc_keys
+                else:
+                    # T04：结构化 metadata 无命中时 Fail-Closed，不全库回退。
+                    return self._reject_without_retrieval(
+                        question, plan, "文档选择无命中", started
+                    )
         flt = build_filter(identity, time_range=effective_range, doc_keys=effective_doc_keys)
         multi_entity = plan.mode == "multi" or len(plan.entities) >= self.multi_entity_threshold
 
@@ -515,6 +568,7 @@ class RetrievalPipeline:
         （实测撞过——异常从"被接住"变成"从接住处再抛一次"，最终冒到 HTTP 层）。
         时间归一单独跑一次即可，它跟指代无关，也不会抛。
         """
+        from api.temporal import build_temporal_scope
         from api.time_range import normalise_time
 
         detail = f"指代「{exc.pronoun}」有 {len(exc.candidates)} 个候选，未检索"
@@ -523,6 +577,7 @@ class RetrievalPipeline:
             retrieval_text=question,
             entities=tuple(exc.candidates),
             time=normalise_time(question),
+            temporal=build_temporal_scope(normalise_time(question)),
             mode="single",
             trace=(),
             original=question,
@@ -573,6 +628,39 @@ class RetrievalPipeline:
         self.retriever.close()
         self.reranker.close()
 
+
+def _combine_compound(
+    question: str,
+    identity: IdentitySnapshot,
+    decomposition: Decomposition,
+    snapshots: tuple[RetrievalSnapshot, ...],
+) -> RetrievalSnapshot:
+    compound = aggregate_gates(decomposition, snapshots)
+    first = snapshots[0]
+    plan = replace(first.plan, original=question)
+    seen: set[str] = set()
+    candidates = []
+    for snap in snapshots:
+        for c in snap.decision.evidence:
+            if c.chunk_id not in seen:
+                seen.add(c.chunk_id)
+                candidates.append(c)
+    elapsed_ms = sum(s.elapsed_ms for s in snapshots)
+    snapshot = RetrievalSnapshot(
+        plan=plan,
+        decision=compound.decision,
+        candidates=candidates,
+        filter_json={"compound": compound.as_audit()},
+        dense_count=sum(s.dense_count for s in snapshots),
+        sparse_count=sum(s.sparse_count for s in snapshots),
+        dropped_stale=[cid for s in snapshots for cid in s.dropped_stale],
+        rerank=first.rerank,
+        elapsed_ms=elapsed_ms,
+        hop_count=sum(s.hop_count for s in snapshots),
+        multihop=None,
+        compound=compound,
+    )
+    return snapshot
 
 def _term_in(term: str, texts: dict[str, ChunkText]) -> bool:
     return any(term in item.text for item in texts.values())

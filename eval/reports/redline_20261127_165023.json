@@ -1,0 +1,114 @@
+{
+  "schema": "eval.redline.v1",
+  "generated_at": "2026-11-27T08:50:23.912916+00:00",
+  "started_at": "2026-11-27T08:50:20.473437+00:00",
+  "base_url": "http://127.0.0.1:8000",
+  "golden": "/app/eval/golden_questions_v1.jsonl",
+  "token_source": "api.identity.mint_dev_token（fixed_jwt）",
+  "args": {
+    "user_id": "eval_runner",
+    "depts": [
+      "fin"
+    ],
+    "roles": [
+      "staff"
+    ],
+    "only": "G01",
+    "category": ""
+  },
+  "precondition": {
+    "llm_configured": true,
+    "llm_model": "deepseek/deepseek-v4-flash-fast",
+    "db": "psycopg 已连接",
+    "tbd_questions": 0,
+    "corpus_empty": false,
+    "rubric": "eval/README.md §5（细化 §12.1）"
+  },
+  "counts": {
+    "documents": 6,
+    "active_versions": 6,
+    "chunks": 8195,
+    "active_chunks": 8195,
+    "qa_log": 102
+  },
+  "red_lines": [
+    {
+      "key": "RL1",
+      "name": "陷阱题拒答率",
+      "status": "NOT_MEASURABLE",
+      "value": "无陷阱题",
+      "threshold": "= 100%",
+      "numerator": 0,
+      "denominator": 0,
+      "note": "判别力闸：应答题中拿到证据/进入生成层的 0/1；为 0 时本指标是\"全拒答\"真空态；库内 active 切片 8195 条"
+    },
+    {
+      "key": "RL2",
+      "name": "数值准确率",
+      "status": "NOT_MEASURABLE",
+      "value": "—",
+      "threshold": "≥ 96%",
+      "numerator": 0,
+      "denominator": 0,
+      "note": "口径：答案中每个数字（已去掉 [n] 角标）都必须出现在被引证据原文里；没有已答题或答案不含数字时不可测。"
+    },
+    {
+      "key": "RL3",
+      "name": "角标可点回率",
+      "status": "NOT_MEASURABLE",
+      "value": "无引用可查",
+      "threshold": "≥ 98%",
+      "numerator": 0,
+      "denominator": 0,
+      "note": "逐条回查 PG：chunk_id 存在、doc_key/page_num/bbox 与库一致、切片与版本均 active。"
+    },
+    {
+      "key": "RL4",
+      "name": "忠实度优先于覆盖率",
+      "status": "NOT_MEASURABLE",
+      "value": "0/0 = —",
+      "threshold": "= 100%（覆盖率单独报告，不得以覆盖率换忠实度）",
+      "numerator": 0,
+      "denominator": 0,
+      "note": "覆盖率 = 应答题得到答案/应答题总数 = 0/1 = 0.0%；0 题已答时忠实度不可测（不是通过）。"
+    }
+  ],
+  "verdict": "不可认证（存在不可测红线）",
+  "summary": "题目 1 题（应答题 1，陷阱 0），应答题得到答案 0 题，单题均分 0.00；陷阱安全拒答 0/0。",
+  "questions": [
+    {
+      "qid": "G01",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": null,
+      "status": 0,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [
+        "没有事件"
+      ],
+      "score": 0.0,
+      "fail_reasons": [
+        "没有 done 事件，无法判定"
+      ],
+      "top1": null,
+      "gate1": null,
+      "gate2": null,
+      "reject_reason": null,
+      "answer": "",
+      "citations": [],
+      "fallback": null,
+      "clarify": null,
+      "done": null,
+      "latency_ms": 0.2,
+      "top1_source": "none"
+    }
+  ]
+}

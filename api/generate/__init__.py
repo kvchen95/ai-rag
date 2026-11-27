@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from api.generate.evidence import Evidence, EvidencePack, build_evidence_pack
 from api.generate.llm import (
-    Claim,
+    Fact,
     Draft,
     DraftFormatError,
     GenerationRejected,
@@ -15,7 +15,7 @@ from api.generate.llm import (
 )
 
 __all__ = [
-    "Claim",
+    "Fact",
     "Draft",
     "DraftFormatError",
     "Evidence",

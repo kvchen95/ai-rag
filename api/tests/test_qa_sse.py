@@ -217,8 +217,7 @@ def _names(events: Sequence[SseEvent]) -> list[str]:
 
 
 PASS_DRAFT = (
-    '{"status":"answered","answer":"住宿费标准为每人每天 500 元[1]。",'
-    '"citations":[1],"claims":[{"text":"住宿费标准为每人每天 500 元","citations":[1]}]}'
+    '{"status":"answered","facts":[{"text":"住宿费标准为每人每天 500 元","evidence_ids":["ch_a"]}]}'
 )
 
 
@@ -326,14 +325,54 @@ def test_happy_path_event_order() -> None:
     assert names.count("done") == 1
 
 
+def test_emit_answer_uses_facts_without_legacy_claims_attribute(monkeypatch) -> None:
+    """成功出口只读 Draft.facts；旧 claims 属性不存在也必须完成回答。"""
+    from api.generate.llm import Draft, Fact
+    from api.generate.render import render_draft
+    from api.verify.checks import VerificationReport
+    import api.qa.orchestrator as mod
+
+    service = _service(_snapshot("pass", evidence=(_cand("ch_a"),)))
+    snapshot = service.pipeline.run("", FIN)
+    pack = service._build_pack(snapshot)
+    sent: list[SseEvent] = []
+    outcome = QaOutcome(question="住宿标准", verdict="internal", identity=FIN)
+    draft = Draft(
+        status="answered",
+        facts=(Fact(text="住宿费标准为每人每天 500 元", evidence_ids=("ch_a",)),),
+    )
+    rendered = render_draft(draft, pack)
+    report = VerificationReport(
+        passed=True,
+        checks_run=CHECKS,
+        answer=rendered.answer,
+        citations=rendered.citations,
+        cited_evidence=(pack.items[0],),
+        judge=None,
+    )
+    monkeypatch.setattr(mod, "log_event", lambda *args, **kwargs: None)
+
+    service._emit_answer(sent.append, outcome, snapshot, pack, report, (), draft)
+
+    assert outcome.verdict == "pass"
+    assert outcome.answer == "住宿费标准为每人每天 500 元[1]"
+    assert "evidence=1 facts=1" in outcome.detail
+    assert "citations" in [event.name for event in sent]
+    assert sent[-1].name == "citations"
+
+
 def test_answer_tokens_join_back_to_the_verified_text() -> None:
     """逐字增量拼起来必须等于校验通过的正文，一个字都不能多不能少。"""
     service = _service(
         _snapshot("pass", evidence=(_cand("ch_a"),)), llm=_StubLlm(PASS_DRAFT), judge=_Supported()
     )
     outcome, sent = _run(service)
+    assert outcome.error_code is None
+    assert outcome.verdict == "pass"
+    assert outcome.audit is not None
+    assert "facts=" in outcome.detail
     joined = "".join(event.payload["delta"] for event in sent if event.name == "token")
-    assert joined == "住宿费标准为每人每天 500 元[1]。"
+    assert joined == "住宿费标准为每人每天 500 元[1]"
     assert joined == outcome.answer
 
 
@@ -465,8 +504,7 @@ def test_clarify_options_are_passed_through_from_the_gate() -> None:
 def test_verification_failure_degrades_to_original_text_without_token() -> None:
     """§10.3 档一：数字或判别不过 → 原文片段 + 页码，明确"未形成结论"。"""
     hallucinated = (
-        '{"status":"answered","answer":"住宿费标准一般是 400 元[1]。",'
-        '"citations":[1],"claims":[{"text":"住宿费标准一般是 400 元","citations":[1]}]}'
+        '{"status":"answered","facts":[{"text":"住宿费标准一般是 400 元","evidence_ids":["ch_a"]}]}'
     )
     service = _service(
         _snapshot("pass", evidence=(_cand("ch_a"),)), llm=_StubLlm(hallucinated), judge=_Supported()
@@ -643,7 +681,7 @@ def test_audit_row_maps_pass_to_gate1_pass() -> None:
     assert outcome.audit.gate1_verdict == "pass"
     assert outcome.audit.gate2_verdict == "supported"
     assert outcome.audit.reject_reason is None
-    assert outcome.audit.answer == "住宿费标准为每人每天 500 元[1]。"
+    assert outcome.audit.answer == "住宿费标准为每人每天 500 元[1]"
     assert outcome.audit.citations
 
 
@@ -663,8 +701,7 @@ def test_audit_row_maps_partial_to_gate1_pass_with_uncovered_in_snapshot() -> No
 def test_audit_row_maps_unverifiable_to_pass_plus_reject_reason() -> None:
     """校验不过是"门控放行、校验拦住"：写进 reject_low 会污染低置信的统计。"""
     hallucinated = (
-        '{"status":"answered","answer":"一般是 400 元[1]。","citations":[1],'
-        '"claims":[{"text":"一般是 400 元","citations":[1]}]}'
+        '{"status":"answered","facts":[{"text":"一般是 400 元","evidence_ids":["ch_a"]}]}'
     )
     service = _service(
         _snapshot("pass", evidence=(_cand("ch_a"),)), llm=_StubLlm(hallucinated), judge=_Supported()

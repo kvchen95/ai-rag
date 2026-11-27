@@ -205,26 +205,21 @@ def test_negated_sentence_keeps_its_meaning_through_understand() -> None:
 # --- 时间（§5.3 + §6 的衔接）--------------------------------------------------
 
 
-def test_time_window_comes_out_normalised() -> None:
+def test_relative_time_is_unparsed_without_parser() -> None:
     plan = understand("去年差旅住宿标准", now=NOW)
-    assert plan.time.range is not None
-    assert plan.time.range.date_from == 20250101
-    assert plan.time.range.basis == "relative"
+    assert plan.time.range is None
+    assert "未限定时间" in (plan.time.note or "")
 
 
-def test_assumed_year_is_flagged_in_notes() -> None:
-    """§5.3：补了年份要在答案里注明，所以它必须出现在 plan 的 notes 里。"""
+def test_month_without_year_is_unparsed() -> None:
     plan = understand("三月的住宿标准", now=NOW)
-    assert plan.time.range is not None
-    assert plan.time.range.inferred is True
-    assert any("2026" in note for note in plan.notes)
+    assert plan.time.range is None
 
 
-def test_time_word_survives_rewriting() -> None:
-    """时间归一比改写先跑：词表里若有"上个月"这类词被替换掉，时间就认不出来了。"""
+def test_unparsed_time_word_survives_rewriting() -> None:
     plan = understand("上个月出差的餐补是多少", now=NOW)
-    assert plan.time.range is not None
-    assert plan.time.range.granularity == "month"
+    assert plan.time.range is None
+    assert "上个月" in plan.retrieval_text
 
 
 # --- 单/多跳判定（§6.3）------------------------------------------------------
@@ -332,7 +327,7 @@ def test_entities_empty_when_no_domain_term() -> None:
 
 
 def test_plan_carries_every_field_the_next_stage_needs() -> None:
-    plan = understand("去年差标的住宿费", previous_entities=None, now=NOW)
+    plan = understand("2025年3月15日差标的住宿费", previous_entities=None, now=NOW)
     assert isinstance(plan, QueryPlan)
     assert plan.retrieval_text and plan.original  # 改写产物与原文都在
     assert plan.entities

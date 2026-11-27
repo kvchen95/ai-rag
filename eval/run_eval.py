@@ -100,7 +100,7 @@ RED_LINE_DEFS = {
 }
 
 _CITE_MARK = re.compile(r"\[[0-9]{1,3}\]")
-_NUMBER = re.compile(r"[0-9]+(?:\.[0-9]+)?(?:%|％)?")
+_NUMBER = re.compile(r"[0-9][0-9,，]*(?:\.[0-9]+)?(?:%|％)?")
 _SENTENCE = re.compile(r"[^。！？!?\n]+")
 
 
@@ -185,17 +185,36 @@ def normalise(text: str) -> str:
     return unicodedata.normalize("NFKC", text or "").replace("\u200b", "").replace("\ufeff", "")
 
 
+_NOTICE = re.compile(
+    r"（(?:证据超出长度上限|以下问题本次未查到可验证依据|时间口径：|本次仅依据)[^）]*）"
+)
+
+
+def strip_system_notices(text: str) -> str:
+    """去掉系统陈述（超长说明/未覆盖/时间口径），它们不是模型事实主张。"""
+    return _NOTICE.sub("", text or "")
+
+
+def attach_trailing_citations(text: str) -> str:
+    """把 `。 [3]` 归并为 `[3]。`，避免切句器把角标拆成独立一句。"""
+    return re.sub(r"([。！？!?])\s*(\[[0-9]{1,3}\])", r"\2\1", text or "")
+
+
 def numbers_in(text: str) -> list[tuple[str, str]]:
-    """答案里的数值断言（去掉 [1] 这类角标；否则每条答案都会多出几个假数字）。"""
+    """答案里的数值断言（去掉角标/日期；否则每条答案都会多出几个假数字）。"""
     cleaned = _CITE_MARK.sub(" ", normalise(text))
+    cleaned = re.sub(r"\d{4}\s*[-/年]\s*\d{1,2}\s*[-/月]\s*\d{1,2}\s*日?", " ", cleaned)
     out: list[tuple[str, str]] = []
     for match in _NUMBER.finditer(cleaned):
         raw = match.group(0)
         unit = "%" if raw.endswith(("%", "％")) else ""
         body = raw[:-1] if unit else raw
         try:
-            value = Decimal(body.replace(",", "")).normalize()
+            value = Decimal(body.replace(",", "").replace("，", "")).normalize()
         except InvalidOperation:
+            continue
+        # 年份是查询范围/报告期，不是需要回查的数值指标。
+        if not unit and 1900 <= value <= 2999 and value == value.to_integral():
             continue
         out.append((format(value, "f"), unit))
     return out
@@ -494,8 +513,9 @@ def score_question(
     # 引用可点回
     resolved, resolved_rows = resolve_citations(citations, db)
 
-    # 数值断言：答案（去掉角标）里出现的每个数都必须能在被引证据中找到。
-    assertions = numbers_in(answer)
+    # 数值断言：答案（去掉角标/系统说明/年份）里出现的每个数都必须能在被引证据中找到。
+    checked_answer = strip_system_notices(attach_trailing_citations(answer))
+    assertions = numbers_in(checked_answer)
     evidence_text = ""
     if db is not None and citations:
         evidence_text = "\n".join(str(row["content_text"]) for row in db.chunks(
@@ -504,7 +524,12 @@ def score_question(
     if not evidence_text:
         evidence_text = "\n".join(str(item.get("snippet") or "") for item in citations)
     evidence_nums = set(evidence_numbers(evidence_text))
-    numeric_bad = [f"{value}{unit}" for value, unit in assertions if (value, unit) not in evidence_nums]
+    numeric_bad = [
+        f"{value}{unit}"
+        for value, unit in assertions
+        if (value, unit) not in evidence_nums
+        and not (unit and (value, "") in evidence_nums)
+    ]
     if not assertions:
         numeric = "none"
     elif db is None and not citations:
@@ -515,7 +540,7 @@ def score_question(
     # 忠实度：答案切句，非通知句必须有角标。通知是系统陈述（以"（"开头）， §9.3/§8.3/§5.3。
     uncited: list[str] = []
     if actual in ANSWERABLE_VERDICTS:
-        for sentence in _SENTENCE.findall(answer):
+        for sentence in _SENTENCE.findall(checked_answer):
             text = sentence.strip()
             if len(text) <= 4 or text.startswith("（"):
                 continue

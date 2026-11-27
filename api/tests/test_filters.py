@@ -28,6 +28,8 @@ from api.filters import (
     P_IS_PUBLIC,
     P_ROLES,
     P_STATUS,
+    P_REPORT_PERIOD_END,
+    P_REPORT_PERIOD_START,
     PgSource,
     RetrievalFilter,
     build_filter,
@@ -163,6 +165,63 @@ def test_year_window_uses_effective_year_and_allows_inferred_dates() -> None:
 
 
 # --- scope ------------------------------------------------------------------
+
+
+# --- report period 三层过滤 ------------------------------------------------------
+
+
+def _time_branches(flt: RetrievalFilter) -> list[object]:
+    qdrant_filter = flt.to_qdrant()
+    temporal = [
+        item
+        for item in qdrant_filter.must
+        if hasattr(item, "should") and not any(
+            getattr(sub, "key", None) == P_IS_PUBLIC for sub in item.should
+        )
+    ]
+    assert len(temporal) == 1, "时间条件必须是一个 should 组"
+    return list(temporal[0].should)
+
+
+def _branch_conditions(branch: object) -> dict[str, object]:
+    out: dict[str, object] = {}
+    for item in branch.must:  # type: ignore[union-attr]
+        if getattr(item, "is_null", None) is not None:
+            out[item.is_null.key] = ("is_null", True)  # type: ignore[union-attr]
+        else:
+            out[item.key] = _condition_value(item)
+    return out
+
+
+def _condition_value(condition: object) -> object:
+    rng = getattr(condition, "range", None)
+    if rng is not None:
+        return (rng.gte, rng.lte)
+    match = getattr(condition, "match", None)
+    if match is not None:
+        return match
+    if getattr(condition, "is_null", None) is not None:
+        return ("is_null", condition.is_null)  # type: ignore[union-attr]
+    raise AssertionError("condition has neither range nor match nor is_null")
+
+
+Q3_REPORT = TimeRange(20260701, 20260930, "quarter", "2026 Q3", "explicit", use_report_period=True)
+
+
+def test_report_period_filter_uses_three_temporal_branches() -> None:
+    branches = _time_branches(RetrievalFilter(identity=ADMIN, time_range=Q3_REPORT))
+    assert len(branches) == 3
+    exact = _branch_conditions(branches[0])
+    assert exact[P_REPORT_PERIOD_START] == (20260701, 20260930)
+    assert exact[P_REPORT_PERIOD_END] == (20260701, 20260930)
+    for branch in branches[1:]:
+        conditions = _branch_conditions(branch)
+        assert conditions[P_REPORT_PERIOD_START] == ("is_null", True)
+        assert conditions[P_REPORT_PERIOD_END] == ("is_null", True)
+    fallback_date = _branch_conditions(branches[1])
+    assert P_EFFECTIVE_DATE in fallback_date or P_PUBLICATION_DATE in fallback_date
+    fallback_year = _branch_conditions(branches[2])
+    assert P_EFFECTIVE_YEAR in fallback_year
 
 
 def test_scope_adds_doc_key_any() -> None:

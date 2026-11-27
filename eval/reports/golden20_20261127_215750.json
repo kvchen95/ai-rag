@@ -1,0 +1,1313 @@
+{
+  "schema": "eval.redline.v1",
+  "generated_at": "2026-11-27T14:02:28.195780+00:00",
+  "started_at": "2026-11-27T13:57:51.383176+00:00",
+  "base_url": "http://127.0.0.1:8000",
+  "golden": "/app/eval/golden_questions_v1.jsonl",
+  "token_source": "api.identity.mint_dev_token（fixed_jwt）",
+  "args": {
+    "user_id": "eval_runner",
+    "depts": [
+      "fin"
+    ],
+    "roles": [
+      "staff"
+    ],
+    "only": "",
+    "category": ""
+  },
+  "precondition": {
+    "llm_configured": true,
+    "llm_model": "deepseek/deepseek-v4-flash-fast",
+    "db": "psycopg 已连接",
+    "tbd_questions": 0,
+    "corpus_empty": false,
+    "rubric": "eval/README.md §5（细化 §12.1）"
+  },
+  "counts": {
+    "documents": 6,
+    "active_versions": 6,
+    "chunks": 8195,
+    "active_chunks": 8195,
+    "qa_log": 157
+  },
+  "red_lines": [
+    {
+      "key": "RL1",
+      "name": "陷阱题拒答率",
+      "status": "NOT_MEASURABLE",
+      "value": "无陷阱题",
+      "threshold": "= 100%",
+      "numerator": 0,
+      "denominator": 0,
+      "note": "判别力闸：应答题中拿到证据/进入生成层的 19/20；库内 active 切片 8195 条"
+    },
+    {
+      "key": "RL2",
+      "name": "数值准确率",
+      "status": "FAIL",
+      "value": "14/15 = 93.3%",
+      "threshold": "≥ 96%",
+      "numerator": 14,
+      "denominator": 15,
+      "note": "口径：答案中每个数字（已去掉 [n] 角标）都必须出现在被引证据原文里；没有已答题或答案不含数字时不可测。"
+    },
+    {
+      "key": "RL3",
+      "name": "角标可点回率",
+      "status": "PASS",
+      "value": "27/27 = 100.0%",
+      "threshold": "≥ 98%",
+      "numerator": 27,
+      "denominator": 27,
+      "note": "逐条回查 PG：chunk_id 存在、doc_key/page_num/bbox 与库一致、切片与版本均 active。"
+    },
+    {
+      "key": "RL4",
+      "name": "忠实度优先于覆盖率",
+      "status": "FAIL",
+      "value": "15/16 = 93.8%",
+      "threshold": "= 100%（覆盖率单独报告，不得以覆盖率换忠实度）",
+      "numerator": 15,
+      "denominator": 16,
+      "note": "覆盖率 = 应答题得到答案/应答题总数 = 16/20 = 80.0%；0 题已答时忠实度不可测（不是通过）。"
+    }
+  ],
+  "verdict": "不通过（至少一条红线不达标）",
+  "summary": "题目 20 题（应答题 20，陷阱 0），应答题得到答案 16 题，单题均分 0.72；陷阱安全拒答 0/0。",
+  "questions": [
+    {
+      "qid": "G01",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "pass",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "hit",
+      "numeric": "ok",
+      "numeric_bad": [],
+      "citations_total": 2,
+      "citations_resolvable": 2,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": null,
+      "gate1": "pass",
+      "gate2": "supported",
+      "reject_reason": null,
+      "answer": "寒武纪2026年上半年营业收入为599,557.36万元（即5,995,573,619.61元）[3][6]。\n寒武纪2026年上半年营业收入较上年同期增长108.13%[3][6]。（证据超出长度上限，本次仅依据前 6 条证据作答）",
+      "citations": [
+        {
+          "n": 3,
+          "doc_key": "pdf_reports/han-wu-ji-26-ban-nian-bao",
+          "doc_name": "寒武纪26半年报.pdf",
+          "page_num": 10,
+          "bbox": [
+            [
+              0.151,
+              0.5173,
+              0.9015,
+              0.7239
+            ]
+          ],
+          "snippet": "2026年上半年，人工智能算力市场需求稳步攀升。公司依托人工智能芯片的核心竞争力，持 续加强与金融、互联网领域头部企业的深度合作。依托强大的产品能力及务实开放的合作模式， 以技术赋能场景落地，以规模化应用拉动市场拓展，营业收入增长显著。报…",
+          "chunk_id": "ch_2b25bb697d67"
+        },
+        {
+          "n": 6,
+          "doc_key": "pdf_reports/han-wu-ji-26-ban-nian-bao",
+          "doc_name": "寒武纪26半年报.pdf",
+          "page_num": 7,
+          "bbox": [
+            [
+              0.1514,
+              0.6468,
+              0.8924,
+              0.8831
+            ]
+          ],
+          "snippet": "营业收入（2026-01-01 至 2026-06-30）：5995573619.61 元 营业收入（2025-01-01 至 2025-06-30）：108.13 元",
+          "chunk_id": "ch_c849b93c775f"
+        }
+      ],
+      "fallback": null,
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 13623,
+        "hop_count": 0,
+        "verdict": "pass"
+      },
+      "latency_ms": 13641.7,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "G02",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "pass",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "hit",
+      "numeric": "ok",
+      "numeric_bad": [],
+      "citations_total": 1,
+      "citations_resolvable": 1,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": 0.995859,
+      "gate1": "pass",
+      "gate2": "supported",
+      "reject_reason": null,
+      "answer": "寒武纪2026年上半年归属于上市公司股东的净利润为231,091.21万元，同比增长122.61%[4]。（证据超出长度上限，本次仅依据前 7 条证据作答）",
+      "citations": [
+        {
+          "n": 4,
+          "doc_key": "pdf_reports/han-wu-ji-26-ban-nian-bao",
+          "doc_name": "寒武纪26半年报.pdf",
+          "page_num": 21,
+          "bbox": [
+            [
+              0.151,
+              0.5676,
+              0.8928,
+              0.6483
+            ]
+          ],
+          "snippet": "本报告期，公司实现营业收入599,557.36万元，较上年同期增加311,493.01万元，同比增 长108.13%；公司实现归属于上市公司股东的净利润为231,091.21万元，较上年同期增加 127,282.95万元，同比增长122.…",
+          "chunk_id": "ch_ca6f0767b424"
+        }
+      ],
+      "fallback": null,
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 12750,
+        "hop_count": 0,
+        "verdict": "pass"
+      },
+      "latency_ms": 12765.2,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "G03",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "pass",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "hit",
+      "numeric": "ok",
+      "numeric_bad": [],
+      "citations_total": 3,
+      "citations_resolvable": 3,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": 0.998261,
+      "gate1": "pass",
+      "gate2": "supported",
+      "reject_reason": null,
+      "answer": "寒武纪2026年上半年经营活动产生的现金流量净额为311,314,642.46元[5]。\n经营活动产生的现金流量净额同比减少65.83%，主要系本期对外采购及支付税金较上年同期增加所致[1][4]。（证据超出长度上限，本次仅依据前 7 条证据作答）",
+      "citations": [
+        {
+          "n": 5,
+          "doc_key": "pdf_reports/han-wu-ji-26-ban-nian-bao",
+          "doc_name": "寒武纪26半年报.pdf",
+          "page_num": 21,
+          "bbox": [
+            [
+              0.1514,
+              0.6901,
+              0.8915,
+              0.8813
+            ]
+          ],
+          "snippet": "单位：元 币种：人民币 科目: 营业收入 | 本期数: 5,995,573,619.61 | 上年同期数: 2,880,643,471.09 | 变动比例（%）: 108.13 科目: 营业成本 | 本期数: 2,682,984,830.…",
+          "chunk_id": "ch_51920ce130ca"
+        },
+        {
+          "n": 1,
+          "doc_key": "pdf_reports/han-wu-ji-26-ban-nian-bao",
+          "doc_name": "寒武纪26半年报.pdf",
+          "page_num": 8,
+          "bbox": [
+            [
+              0.151,
+              0.293,
+              0.9015,
+              0.5156
+            ]
+          ],
+          "snippet": "公司主要会计数据和财务指标的说明 √适用□不适用 （1）本期营业收入较上年同期增加311,493.01万元，同比增长108.13%，主要系本期公司 持续拓展市场，积极助力人工智能应用落地，报告期内收入较上年同期大幅增长。 （2）本期利润总…",
+          "chunk_id": "ch_e7617b7e68d3"
+        },
+        {
+          "n": 4,
+          "doc_key": "pdf_reports/han-wu-ji-26-ban-nian-bao",
+          "doc_name": "寒武纪26半年报.pdf",
+          "page_num": 22,
+          "bbox": [
+            [
+              0.151,
+              0.0924,
+              0.8827,
+              0.2019
+            ]
+          ],
+          "snippet": "营业成本变动原因说明:主要系营业收入增长带动营业成本增长所致。 财务费用变动原因说明:主要系本期汇兑收益较上年同期增加所致。 经营活动产生的现金流量净额变动原因说明:主要系本期对外采购及支付税金较上年同期增加所 致。 投资活动产生的现金流…",
+          "chunk_id": "ch_a7ecaaab0546"
+        }
+      ],
+      "fallback": null,
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 14979,
+        "hop_count": 0,
+        "verdict": "pass"
+      },
+      "latency_ms": 14996.0,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "G04",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "pass",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "hit",
+      "numeric": "ok",
+      "numeric_bad": [],
+      "citations_total": 3,
+      "citations_resolvable": 3,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": null,
+      "gate1": "pass",
+      "gate2": "supported",
+      "reject_reason": null,
+      "answer": "寒武纪2026年上半年研发投入合计为702,466,071.26元（即70,246.61万元）[2][7]。\n寒武纪2026年上半年研发投入较上年同期增长29.63%[2][1]。\n寒武纪2026年上半年研发投入总额占营业收入比例为11.72%[2][7]。",
+      "citations": [
+        {
+          "n": 2,
+          "doc_key": "pdf_reports/han-wu-ji-26-ban-nian-bao",
+          "doc_name": "寒武纪26半年报.pdf",
+          "page_num": 18,
+          "bbox": [
+            [
+              0.1514,
+              0.2291,
+              0.8924,
+              0.3459
+            ]
+          ],
+          "snippet": "单位：元 -: 费用化研发投入 | 本期数: 702,466,071.26 | 上年同期数: 541,895,478.65 | 变化幅度（%）: 29.63 -: 资本化研发投入 | 变化幅度（%）: / -: 研发投入合计 | 本期数:…",
+          "chunk_id": "ch_67f5907284b5"
+        },
+        {
+          "n": 7,
+          "doc_key": "pdf_reports/han-wu-ji-26-ban-nian-bao",
+          "doc_name": "寒武纪26半年报.pdf",
+          "page_num": 21,
+          "bbox": [
+            [
+              0.151,
+              0.0924,
+              0.9015,
+              0.3474
+            ]
+          ],
+          "snippet": "合毛利将与国家政策调整、市场竞争程度、全球供应链稳定等情况高度相关。若前述因素发生变 动，公司毛利率可能存在一定波动，进而影响经营成果和业绩表现。 2、存货跌价风险 公司根据客户订单需求以及对市场未来需求的预测情况制定采购计划，截至本期期…",
+          "chunk_id": "ch_44a9f9663e9b"
+        },
+        {
+          "n": 1,
+          "doc_key": "pdf_reports/han-wu-ji-26-ban-nian-bao",
+          "doc_name": "寒武纪26半年报.pdf",
+          "page_num": 11,
+          "bbox": [
+            [
+              0.151,
+              0.0924,
+              0.8928,
+              0.3151
+            ]
+          ],
+          "snippet": "行业，支撑了智慧商超数字化业务在客流统计识别、智慧巡检、门店防盗损等细分场景的人工智 能化升级，进一步拓宽了公司人工智能芯片产品的行业覆盖边界。 （二）坚持深耕研发，攻坚技术创新 公司自成立以来，始终将自主研发与技术创新视为核心战略。人工…",
+          "chunk_id": "ch_4790256a1919"
+        }
+      ],
+      "fallback": null,
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 17579,
+        "hop_count": 0,
+        "verdict": "pass"
+      },
+      "latency_ms": 17596.2,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "G05",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "pass",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "hit",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 1,
+      "citations_resolvable": 1,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": 0.99492,
+      "gate1": "pass",
+      "gate2": "supported",
+      "reject_reason": null,
+      "answer": "云端产品线中，智能整机是由公司自研云端智能芯片及板卡提供核心计算能力的服务器整机产品，主要提供计算集群中的单体服务器，不提供全集群搭建服务，主要面向有一定技术基础的商业客户群体[1]。\n边缘产品线提供边缘计算能力，在终端和云端之间的设备上配备适度的计算能力，可弥补终端设备计算能力不足，并缓解云计算场景下数据隐私、带宽与延时等潜在问题，推动智能制造、智能零售、智能教育、智能家居、智能电网等领域发展[1]。\nIP授权及软件产品线包括IP授权和基础系统软件平台：IP授权是将公司研发的智能处理器IP等知识产权授权给客户在其产品中使用；基础系统软件平台为云边端全系列智能芯片与处理器产品提供统一的平台级基础系统软件（包含软件开发工具链等），打破不同场景之间的软件开发壁垒，让同一人工智能应用程序便捷高效地运行在公司云边端系列化芯片与处理器产品之上[1]。\n智能计算集群系统业务是将公司自研的智能计算板卡或智能整机产品与合作伙伴提供的服务器设备、网络设备与存储设备结合，并配备公司的集群管理软件组成的数据中心集群，主要聚焦人工智能技术在数据中心的应用，为技术能力相对较弱的客户提供软硬件整体解决方案，以科学配置和管理集群软硬件、提升运行效率[1]。（证据超出长度上限，本次仅依据前 4 条证据作答）",
+      "citations": [
+        {
+          "n": 1,
+          "doc_key": "pdf_reports/han-wu-ji-26-ban-nian-bao",
+          "doc_name": "寒武纪26半年报.pdf",
+          "page_num": 10,
+          "bbox": [
+            [
+              0.151,
+              0.0924,
+              0.8928,
+              0.4283
+            ]
+          ],
+          "snippet": "人工智能应用程序提供高计算密度、高能效的硬件计算资源，支撑该类场景下复杂度和数据吞吐 量高速增长的人工智能处理任务。 公司的智能整机是由公司自研云端智能芯片及板卡提供核心计算能力的服务器整机产品。公 司的智能整机产品与智能计算集群系统业务…",
+          "chunk_id": "ch_dbec1f237837"
+        }
+      ],
+      "fallback": null,
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 16530,
+        "hop_count": 0,
+        "verdict": "pass"
+      },
+      "latency_ms": 16550.2,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "G06",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "unverifiable",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题未得到答案（verdict=unverifiable）"
+      ],
+      "top1": null,
+      "gate1": "pass",
+      "gate2": "skipped",
+      "reject_reason": "unverifiable",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "unverifiable",
+        "message": "本次不作结论，附原文",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/hai-guang-xin-xi-26-ban-nian-bao",
+            "doc_name": "海光信息26半年报.pdf",
+            "page_num": 56,
+            "snippet": "项目: 一、营业总收入 | 2026年半年度: 9,099,020,774.81 | 2025年半年度: 5,464,235,057.15 项目: 其中：营业收入 | 附注: 七、61 | 2026年半年度: 9,099,020,774.…"
+          },
+          {
+            "doc_key": "pdf_reports/hai-guang-xin-xi-26-ban-nian-bao",
+            "doc_name": "海光信息26半年报.pdf",
+            "page_num": 25,
+            "snippet": "营业收入（2025-01-01 至 2025-06-30）：5464235057.15"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 8513,
+        "hop_count": 0,
+        "verdict": "unverifiable",
+        "code": "unverifiable"
+      },
+      "latency_ms": 8530.4,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "G07",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "reject_none",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题拒答（verdict=reject_none）"
+      ],
+      "top1": null,
+      "gate1": "reject_none",
+      "gate2": null,
+      "reject_reason": "no_evidence",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "no_evidence",
+        "message": "未找到可验证依据",
+        "docs": []
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 7906,
+        "hop_count": 0,
+        "verdict": "reject_none",
+        "code": "no_evidence",
+        "uncovered": [
+          "归属于上市公司股东的净利润的金额的2026年上半年？",
+          "归属于上市公司股东的净利润的同比增长率的2026年上半年？"
+        ]
+      },
+      "latency_ms": 7920.2,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "G08",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "pass",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "hit",
+      "numeric": "ok",
+      "numeric_bad": [],
+      "citations_total": 3,
+      "citations_resolvable": 3,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": null,
+      "gate1": "pass",
+      "gate2": "supported",
+      "reject_reason": null,
+      "answer": "海光信息2026年上半年经营活动产生的现金流量净额为-427,541,001.36元[2]。\n经营活动产生的现金流量净额同比下降，主要系为匹配市场销售规划，保障供货能力、抢抓市场机会，公司根据经营策略加大备货储备规模，原材料、经营性采购支出同比明显增多，导致经营活动现金流净额同比减少[4][7]。（证据超出长度上限，本次仅依据前 8 条证据作答）",
+      "citations": [
+        {
+          "n": 2,
+          "doc_key": "pdf_reports/hai-guang-xin-xi-26-ban-nian-bao",
+          "doc_name": "海光信息26半年报.pdf",
+          "page_num": 59,
+          "bbox": [
+            [
+              0.1419,
+              0.3045,
+              0.9019,
+              0.9074
+            ]
+          ],
+          "snippet": "项目: 一、经营活动产生的现金流量： 项目: 销售商品、提供劳务收到的现金 | 2026年半年度: 8,689,963,420.64 | 2025年半年度: 7,516,995,653.31 项目: 客户存款和同业存放款项净增加额 项目:…",
+          "chunk_id": "ch_2aac3b0d7732"
+        },
+        {
+          "n": 4,
+          "doc_key": "pdf_reports/hai-guang-xin-xi-26-ban-nian-bao",
+          "doc_name": "海光信息26半年报.pdf",
+          "page_num": 25,
+          "bbox": [
+            [
+              0.151,
+              0.5424,
+              0.8928,
+              0.6733
+            ]
+          ],
+          "snippet": "增加。 经营活动产生的现金流量净额变动原因说明:主要系为匹配市场销售规划，保障供货能力、抢抓市 场机会，公司根据经营策略加大备货储备规模，原材料、经营性采购支出同比明显增多，导致经 营活动现金流净额同比减少。 投资活动产生的现金流量净额变…",
+          "chunk_id": "ch_f326096e995d"
+        },
+        {
+          "n": 7,
+          "doc_key": "pdf_reports/hai-guang-xin-xi-26-ban-nian-bao",
+          "doc_name": "海光信息26半年报.pdf",
+          "page_num": 8,
+          "bbox": [
+            [
+              0.151,
+              0.5822,
+              0.9015,
+              0.801
+            ]
+          ],
+          "snippet": "公司主要会计数据和财务指标的说明 √适用□不适用 1.报告期内，公司营业收入、利润总额、归属于上市公司股东的净利润、归属于上市公司股 东的扣除非经常性损益的净利润同比实现较快增长，主要受人工智能快速发展、国产芯片需求增 长迅速等因素影响，…",
+          "chunk_id": "ch_da3ef9bacaef"
+        }
+      ],
+      "fallback": null,
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 16213,
+        "hop_count": 0,
+        "verdict": "pass"
+      },
+      "latency_ms": 16233.1,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "G09",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "pass",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "hit",
+      "numeric": "bad",
+      "numeric_bad": [
+        "7",
+        "1",
+        "9",
+        "30"
+      ],
+      "citations_total": 1,
+      "citations_resolvable": 1,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "数值无据：['7', '1', '9', '30']"
+      ],
+      "top1": null,
+      "gate1": "pass",
+      "gate2": "supported",
+      "reject_reason": null,
+      "answer": "海光信息2026年第三季度（2026-07-01至2026-09-30）营业收入为5,855,689,454.32元[9]。\n海光信息2026年第三季度营业收入同比增长45.46%[9]。（证据超出长度上限，本次仅依据前 9 条证据作答）",
+      "citations": [
+        {
+          "n": 9,
+          "doc_key": "pdf_reports/hai-guang-xin-xi-26-san-ji-bao",
+          "doc_name": "海光信息26三季报.pdf",
+          "page_num": 1,
+          "bbox": [
+            [
+              0.1076,
+              0.635,
+              0.8924,
+              0.8996
+            ]
+          ],
+          "snippet": "营业收入（2026-07-01 至 2026-09-30）：5855689454.32 营业收入（2025-07-01 至 2025-09-30）：45.46",
+          "chunk_id": "ch_aa31b4d35af5"
+        }
+      ],
+      "fallback": null,
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 16967,
+        "hop_count": 0,
+        "verdict": "pass"
+      },
+      "latency_ms": 16980.6,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "G10",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "pass",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "hit",
+      "numeric": "ok",
+      "numeric_bad": [],
+      "citations_total": 1,
+      "citations_resolvable": 1,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": null,
+      "gate1": "pass",
+      "gate2": "supported",
+      "reject_reason": null,
+      "answer": "海光信息2026年第三季度研发投入占营业收入的比例为31.08%[5]。\n该比例比上年同期增加0.68个百分点[5]。（证据超出长度上限，本次仅依据前 9 条证据作答）",
+      "citations": [
+        {
+          "n": 5,
+          "doc_key": "pdf_reports/hai-guang-xin-xi-26-san-ji-bao",
+          "doc_name": "海光信息26三季报.pdf",
+          "page_num": 2,
+          "bbox": [
+            [
+              0.1076,
+              0.0909,
+              0.8924,
+              0.3353
+            ]
+          ],
+          "snippet": "项目: 研发投入合计 | 本报告期: 1,819,662,147.21 | 本报告期比 上年同期增 减变动幅度 (%): 48.68 | 年初至报告期末: 4,472,044,952.74 | 年初至报告期 末比上年同期 增减变动幅度 (…",
+          "chunk_id": "ch_633b82849127"
+        }
+      ],
+      "fallback": null,
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 14862,
+        "hop_count": 0,
+        "verdict": "pass"
+      },
+      "latency_ms": 14879.9,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "G11",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "unverifiable",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题未得到答案（verdict=unverifiable）"
+      ],
+      "top1": null,
+      "gate1": "pass",
+      "gate2": "skipped",
+      "reject_reason": "unverifiable",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "unverifiable",
+        "message": "本次不作结论，附原文",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/zhang-xin-ke-ji-26-ban-nian-bao",
+            "doc_name": "长鑫科技26半年报.pdf",
+            "page_num": 182,
+            "snippet": "于2026年1月1日至6月30日止期间(未经审计)，占本集团营业收入10%以上的客户的营业收 入合计人民币80,148,504,993.62元，占本集团营业收入总额的53.32%。"
+          },
+          {
+            "doc_key": "pdf_reports/zhang-xin-ke-ji-26-ban-nian-bao",
+            "doc_name": "长鑫科技26半年报.pdf",
+            "page_num": 66,
+            "snippet": "单位：元币种：人民币 项目: 一、营业总收入 | 2026年半年度: 150,310,076,758.00 | 2025年半年度: 15,437,924,611.51 项目: 其中：营业收入 | 附注: 七、62 | 2026年半年度: …"
+          },
+          {
+            "doc_key": "pdf_reports/zhang-xin-ke-ji-26-ban-nian-bao",
+            "doc_name": "长鑫科技26半年报.pdf",
+            "page_num": 26,
+            "snippet": "营业收入（2026-01-01 至 2026-06-30）：150310076758.00 元 营业收入（2025-01-01 至 2025-06-30）：15437924611.51 元"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 8456,
+        "hop_count": 0,
+        "verdict": "unverifiable",
+        "code": "unverifiable"
+      },
+      "latency_ms": 8474.2,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "G12",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "pass",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "hit",
+      "numeric": "ok",
+      "numeric_bad": [],
+      "citations_total": 1,
+      "citations_resolvable": 1,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": 0.998477,
+      "gate1": "pass",
+      "gate2": "supported",
+      "reject_reason": null,
+      "answer": "长鑫科技2026年上半年归属于上市公司股东的净利润为77,605,227,520.00元[8]。",
+      "citations": [
+        {
+          "n": 8,
+          "doc_key": "pdf_reports/zhang-xin-ke-ji-26-ban-nian-bao",
+          "doc_name": "长鑫科技26半年报.pdf",
+          "page_num": 9,
+          "bbox": [
+            [
+              0.1514,
+              0.2521,
+              0.8924,
+              0.4569
+            ]
+          ],
+          "snippet": "单位：元币种：人民币 主要会计数据: 营业收入 | 本报告期 （1－6月）: 150,310,076,758.00 | 上年同期: 15,437,924,611.51 | 本报告期比上年同 期增减(%): 873.64 主要会计数据: 利…",
+          "chunk_id": "ch_0cbe428d3132"
+        }
+      ],
+      "fallback": null,
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 14065,
+        "hop_count": 0,
+        "verdict": "pass"
+      },
+      "latency_ms": 14078.8,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "G13",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "pass",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "hit",
+      "numeric": "ok",
+      "numeric_bad": [],
+      "citations_total": 1,
+      "citations_resolvable": 1,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": 0.999281,
+      "gate1": "pass",
+      "gate2": "supported",
+      "reject_reason": null,
+      "answer": "长鑫科技2026年第三季度毛利率约为89.53%[1]。\n长鑫科技2026年第三季度毛利率较上季度增长约1.94个百分点[1]。（证据超出长度上限，本次仅依据前 9 条证据作答）",
+      "citations": [
+        {
+          "n": 1,
+          "doc_key": "pdf_reports/zhang-xin-ke-ji-26-san-ji-bao",
+          "doc_name": "长鑫科技26三季报.pdf",
+          "page_num": 2,
+          "bbox": [
+            [
+              0.1072,
+              0.4198,
+              0.9015,
+              0.5665
+            ]
+          ],
+          "snippet": "注：“本报告期”指本季度初至本季度末3个月期间，下同。 公司2026年第三季度（7-9月）实现营业收入约1,187.14亿元，环比增长约19.30%；实现净利润 约889.83亿元，环比增长约19.38%；实现归属于上市公司股东的净利润约…",
+          "chunk_id": "ch_56426c0f1aa2"
+        }
+      ],
+      "fallback": null,
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 9296,
+        "hop_count": 0,
+        "verdict": "pass"
+      },
+      "latency_ms": 9310.2,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "G14",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "pass",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "hit",
+      "numeric": "ok",
+      "numeric_bad": [],
+      "citations_total": 2,
+      "citations_resolvable": 2,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": 0.999639,
+      "gate1": "pass",
+      "gate2": "supported",
+      "reject_reason": null,
+      "answer": "长鑫科技2026年第三季度营业收入为118,714,029,752.18元[5]。\n长鑫科技2026年第三季度营业收入环比增长约19.30%[1]。（证据超出长度上限，本次仅依据前 9 条证据作答）",
+      "citations": [
+        {
+          "n": 5,
+          "doc_key": "pdf_reports/zhang-xin-ke-ji-26-san-ji-bao",
+          "doc_name": "长鑫科技26三季报.pdf",
+          "page_num": 1,
+          "bbox": [
+            [
+              0.1076,
+              0.7313,
+              0.8924,
+              0.8818
+            ]
+          ],
+          "snippet": "项目: 营业收入 | 本报告期: 118,714,029,752.18 | 本报告期比 上年同期增 减变动幅度 (%): 613.18 | 年初至报告期末: 269,024,106,510.18 | 年初至报告期 末比上年同期 增减变动幅…",
+          "chunk_id": "ch_8c172e16688c"
+        },
+        {
+          "n": 1,
+          "doc_key": "pdf_reports/zhang-xin-ke-ji-26-san-ji-bao",
+          "doc_name": "长鑫科技26三季报.pdf",
+          "page_num": 2,
+          "bbox": [
+            [
+              0.1072,
+              0.4198,
+              0.9015,
+              0.5665
+            ]
+          ],
+          "snippet": "注：“本报告期”指本季度初至本季度末3个月期间，下同。 公司2026年第三季度（7-9月）实现营业收入约1,187.14亿元，环比增长约19.30%；实现净利润 约889.83亿元，环比增长约19.38%；实现归属于上市公司股东的净利润约…",
+          "chunk_id": "ch_56426c0f1aa2"
+        }
+      ],
+      "fallback": null,
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 14583,
+        "hop_count": 0,
+        "verdict": "pass"
+      },
+      "latency_ms": 14596.7,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "G15",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "pass",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "hit",
+      "numeric": "ok",
+      "numeric_bad": [],
+      "citations_total": 1,
+      "citations_resolvable": 1,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": null,
+      "gate1": "pass",
+      "gate2": "supported",
+      "reject_reason": null,
+      "answer": "长鑫科技按出货量和销售额统计，已成为中国第一、全球第四的DRAM厂商[7]。\n根据Omdia数据，全球DRAM市场规模有望从2025年的1,505亿美元增长至2030年的7,638亿美元，年均复合增长率为38.39%[7]。",
+      "citations": [
+        {
+          "n": 7,
+          "doc_key": "pdf_reports/zhang-xin-ke-ji-26-ban-nian-bao",
+          "doc_name": "长鑫科技26半年报.pdf",
+          "page_num": 11,
+          "bbox": [
+            [
+              0.151,
+              0.3304,
+              0.901,
+              0.55
+            ]
+          ],
+          "snippet": "近年来，新兴技术场景持续涌现，数据总量呈现爆发式增长，广泛的数据读写与传输需求驱动全 球DRAM市场规模快速扩大。长期来看，全球DRAM市场仍有广阔的增长空间。2025年下半年以来， 受全球算力需求持续增长、全球主要厂商产能调配等因素影响…",
+          "chunk_id": "ch_317df1f62590"
+        }
+      ],
+      "fallback": null,
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 27053,
+        "hop_count": 0,
+        "verdict": "pass"
+      },
+      "latency_ms": 27066.1,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "G16",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "pass",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "hit",
+      "numeric": "ok",
+      "numeric_bad": [],
+      "citations_total": 1,
+      "citations_resolvable": 1,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": 0.99518,
+      "gate1": "pass",
+      "gate2": "supported",
+      "reject_reason": null,
+      "answer": "宇树科技2026年第三季度单季度营业收入为665,044,497.90元，同比增长69.93%[6]。",
+      "citations": [
+        {
+          "n": 6,
+          "doc_key": "pdf_reports/yu-shu-ke-ji-26-san-ji-bao",
+          "doc_name": "宇树科技26三季报.pdf",
+          "page_num": 1,
+          "bbox": [
+            [
+              0.1076,
+              0.685,
+              0.8924,
+              0.9108
+            ]
+          ],
+          "snippet": "单位：元币种：人民币 项目: 营业收入 | 本报告期: 665,044,497.90 | 本报告期比 上年同期增 减变动幅度 (%): 69.93 | 年初至报告期末: 1,817,290,048.48 | 年初至报告期 末比上年同期 增…",
+          "chunk_id": "ch_da205365c9b3"
+        }
+      ],
+      "fallback": null,
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 8190,
+        "hop_count": 0,
+        "verdict": "pass"
+      },
+      "latency_ms": 8203.7,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "G17",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "pass",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "hit",
+      "numeric": "ok",
+      "numeric_bad": [],
+      "citations_total": 2,
+      "citations_resolvable": 2,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": null,
+      "gate1": "pass",
+      "gate2": "supported",
+      "reject_reason": null,
+      "answer": "宇树科技2026年前三季度营业收入为1,817,290,048.48元[1]。\n宇树科技2026年前三季度营业收入同比增长55.71%[9]。",
+      "citations": [
+        {
+          "n": 1,
+          "doc_key": "pdf_reports/yu-shu-ke-ji-26-san-ji-bao",
+          "doc_name": "宇树科技26三季报.pdf",
+          "page_num": 9,
+          "bbox": [
+            [
+              0.1078,
+              0.4195,
+              0.8922,
+              0.8846
+            ]
+          ],
+          "snippet": "单位：元币种：人民币审计类型：未经审计 项目: 一、营业总收入 | 2026年前三季度 （1-9月）: 1,817,290,048.48 | 2025年前三季度 （1-9月）: 1,167,090,043.63 项目: 其中：营业收入 |…",
+          "chunk_id": "ch_9730d7c8c37e"
+        },
+        {
+          "n": 9,
+          "doc_key": "pdf_reports/yu-shu-ke-ji-26-san-ji-bao",
+          "doc_name": "宇树科技26三季报.pdf",
+          "page_num": 3,
+          "bbox": [
+            [
+              0.1076,
+              0.7424,
+              0.8924,
+              0.8935
+            ]
+          ],
+          "snippet": "项目名称: 营业收入_本报告期 | 变动比例（%）: 69.93 | 主要原因: 主要系公司持续推进产品创新与业务拓展，不断丰富 产品矩阵，更好地满足客户需求，带动收入增长。 项目名称: 营业收入_年初至报告期 末 | 变动比例（%）: …",
+          "chunk_id": "ch_a465e7840a43"
+        }
+      ],
+      "fallback": null,
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 14944,
+        "hop_count": 0,
+        "verdict": "pass"
+      },
+      "latency_ms": 14962.9,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "G18",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "unverifiable",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "miss",
+      "numeric": "none",
+      "numeric_bad": [],
+      "citations_total": 0,
+      "citations_resolvable": 0,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "应答题未得到答案（verdict=unverifiable）"
+      ],
+      "top1": 0.980515,
+      "gate1": "pass",
+      "gate2": "skipped",
+      "reject_reason": "unverifiable",
+      "answer": "",
+      "citations": [],
+      "fallback": {
+        "type": "fallback",
+        "code": "unverifiable",
+        "message": "本次不作结论，附原文",
+        "docs": [
+          {
+            "doc_key": "pdf_reports/yu-shu-ke-ji-26-san-ji-bao",
+            "doc_name": "宇树科技26三季报.pdf",
+            "page_num": 11,
+            "snippet": "本期发生同一控制下企业合并的，被合并方在合并前实现的净利润为：0.00元,上期被合并方实现的净 利润为：0.00元。 注：上述2025年前三季度（1-9月）数据与公司2026年3月招股说明书（申报稿）所披露数据存在 小额差异，系由于上述2…"
+          }
+        ]
+      },
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 7248,
+        "hop_count": 0,
+        "verdict": "unverifiable",
+        "code": "unverifiable"
+      },
+      "latency_ms": 7264.7,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "G19",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "pass",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "hit",
+      "numeric": "ok",
+      "numeric_bad": [],
+      "citations_total": 2,
+      "citations_resolvable": 2,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 1.0,
+      "fail_reasons": [],
+      "top1": 0.945959,
+      "gate1": "pass",
+      "gate2": "supported",
+      "reject_reason": null,
+      "answer": "宇树科技2026年第三季度研发投入为127,039,943.97元，同比增长249.58%[1][3]。",
+      "citations": [
+        {
+          "n": 1,
+          "doc_key": "pdf_reports/yu-shu-ke-ji-26-san-ji-bao",
+          "doc_name": "宇树科技26三季报.pdf",
+          "page_num": 2,
+          "bbox": [
+            [
+              0.1076,
+              0.0909,
+              0.8924,
+              0.3365
+            ]
+          ],
+          "snippet": "基本每股收益（元/股） 0.30 -20.32 1.05 265.82 稀释每股收益（元/股） 0.30 -20.32 1.05 265.82 加权平均净资产收益率 （%） 2.30 减少3.47 个百分点 11.19 增加5.19个百 …",
+          "chunk_id": "ch_368d7ea8623e"
+        },
+        {
+          "n": 3,
+          "doc_key": "pdf_reports/yu-shu-ke-ji-26-san-ji-bao",
+          "doc_name": "宇树科技26三季报.pdf",
+          "page_num": 4,
+          "bbox": [
+            [
+              0.1076,
+              0.0909,
+              0.8924,
+              0.4116
+            ]
+          ],
+          "snippet": "经营活动产生的现金流量 净额_年初至报告期末 -54.69 主要系随着公司营业收入的增长，购买商品、接受劳 务支付的现金、支付给职工及为职工支付的现金，以 及支付的销售费用、研发费用等金额增长所致。 基本每股收益_年初至报 告期末 265…",
+          "chunk_id": "ch_c947b1886104"
+        }
+      ],
+      "fallback": null,
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 10309,
+        "hop_count": 0,
+        "verdict": "pass"
+      },
+      "latency_ms": 10322.3,
+      "top1_source": "qa_log"
+    },
+    {
+      "qid": "G20",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "partial",
+      "status": 200,
+      "verdict_ok": false,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "hit",
+      "numeric": "ok",
+      "numeric_bad": [],
+      "citations_total": 2,
+      "citations_resolvable": 2,
+      "uncited_sentences": [],
+      "contract_violations": [],
+      "score": 0.5,
+      "fail_reasons": [],
+      "top1": null,
+      "gate1": "pass",
+      "gate2": "supported",
+      "reject_reason": null,
+      "answer": "宇树科技2026年前三季度经营活动产生的现金流量净额为193,707,344.45元[8]。\n经营活动产生的现金流量净额同比下降54.69%，主要系随着公司营业收入的增长，购买商品、接受劳务支付的现金、支付给职工及为职工支付的现金，以及支付的销售费用、研发费用等金额增长所致[3]。（以下问题本次未查到可验证依据：宇树科技经营活动产生的现金流量净额同比下降的主要原因？）",
+      "citations": [
+        {
+          "n": 8,
+          "doc_key": "pdf_reports/yu-shu-ke-ji-26-san-ji-bao",
+          "doc_name": "宇树科技26三季报.pdf",
+          "page_num": 12,
+          "bbox": [
+            [
+              0.1076,
+              0.091,
+              0.8924,
+              0.903
+            ]
+          ],
+          "snippet": "向中央银行借款净增加额: 向其他金融机构拆入资金净增加额 向中央银行借款净增加额: 收到原保险合同保费取得的现金 向中央银行借款净增加额: 收到再保业务现金净额 向中央银行借款净增加额: 保户储金及投资款净增加额 向中央银行借款净增加额:…",
+          "chunk_id": "ch_61d10c04320b"
+        },
+        {
+          "n": 3,
+          "doc_key": "pdf_reports/yu-shu-ke-ji-26-san-ji-bao",
+          "doc_name": "宇树科技26三季报.pdf",
+          "page_num": 4,
+          "bbox": [
+            [
+              0.1076,
+              0.0909,
+              0.8924,
+              0.4116
+            ]
+          ],
+          "snippet": "经营活动产生的现金流量 净额_年初至报告期末 -54.69 主要系随着公司营业收入的增长，购买商品、接受劳 务支付的现金、支付给职工及为职工支付的现金，以 及支付的销售费用、研发费用等金额增长所致。 基本每股收益_年初至报 告期末 265…",
+          "chunk_id": "ch_c947b1886104"
+        }
+      ],
+      "fallback": null,
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 21694,
+        "hop_count": 0,
+        "verdict": "partial",
+        "uncovered": [
+          "宇树科技经营活动产生的现金流量净额同比下降的主要原因？"
+        ]
+      },
+      "latency_ms": 21707.7,
+      "top1_source": "qa_log"
+    }
+  ]
+}

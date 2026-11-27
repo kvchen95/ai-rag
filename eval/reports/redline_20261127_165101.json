@@ -1,0 +1,139 @@
+{
+  "schema": "eval.redline.v1",
+  "generated_at": "2026-11-27T08:51:01.565757+00:00",
+  "started_at": "2026-11-27T08:50:38.267948+00:00",
+  "base_url": "http://127.0.0.1:8000",
+  "golden": "/app/eval/golden_questions_v1.jsonl",
+  "token_source": "api.identity.mint_dev_token（fixed_jwt）",
+  "args": {
+    "user_id": "eval_runner",
+    "depts": [
+      "fin"
+    ],
+    "roles": [
+      "staff"
+    ],
+    "only": "G01",
+    "category": ""
+  },
+  "precondition": {
+    "llm_configured": true,
+    "llm_model": "deepseek/deepseek-v4-flash-fast",
+    "db": "psycopg 已连接",
+    "tbd_questions": 0,
+    "corpus_empty": false,
+    "rubric": "eval/README.md §5（细化 §12.1）"
+  },
+  "counts": {
+    "documents": 6,
+    "active_versions": 6,
+    "chunks": 8195,
+    "active_chunks": 8195,
+    "qa_log": 102
+  },
+  "red_lines": [
+    {
+      "key": "RL1",
+      "name": "陷阱题拒答率",
+      "status": "NOT_MEASURABLE",
+      "value": "无陷阱题",
+      "threshold": "= 100%",
+      "numerator": 0,
+      "denominator": 0,
+      "note": "判别力闸：应答题中拿到证据/进入生成层的 1/1；库内 active 切片 8195 条"
+    },
+    {
+      "key": "RL2",
+      "name": "数值准确率",
+      "status": "FAIL",
+      "value": "0/1 = 0.0%",
+      "threshold": "≥ 96%",
+      "numerator": 0,
+      "denominator": 1,
+      "note": "口径：答案中每个数字（已去掉 [n] 角标）都必须出现在被引证据原文里；没有已答题或答案不含数字时不可测。"
+    },
+    {
+      "key": "RL3",
+      "name": "角标可点回率",
+      "status": "PASS",
+      "value": "1/1 = 100.0%",
+      "threshold": "≥ 98%",
+      "numerator": 1,
+      "denominator": 1,
+      "note": "逐条回查 PG：chunk_id 存在、doc_key/page_num/bbox 与库一致、切片与版本均 active。"
+    },
+    {
+      "key": "RL4",
+      "name": "忠实度优先于覆盖率",
+      "status": "FAIL",
+      "value": "0/1 = 0.0%",
+      "threshold": "= 100%（覆盖率单独报告，不得以覆盖率换忠实度）",
+      "numerator": 0,
+      "denominator": 1,
+      "note": "覆盖率 = 应答题得到答案/应答题总数 = 1/1 = 100.0%；0 题已答时忠实度不可测（不是通过）。"
+    }
+  ],
+  "verdict": "不通过（至少一条红线不达标）",
+  "summary": "题目 1 题（应答题 1，陷阱 0），应答题得到答案 1 题，单题均分 0.00；陷阱安全拒答 0/0。",
+  "questions": [
+    {
+      "qid": "G01",
+      "category": "basic_table",
+      "expected": "pass",
+      "actual": "pass",
+      "status": 200,
+      "verdict_ok": true,
+      "trap_safe": null,
+      "must_not_violation": [],
+      "evidence_hit": "hit",
+      "numeric": "bad",
+      "numeric_bad": [
+        "5"
+      ],
+      "citations_total": 1,
+      "citations_resolvable": 1,
+      "uncited_sentences": [
+        "2026年上半年公司实现营业收入599,557.36万元，较上年同期增长108.13%"
+      ],
+      "contract_violations": [],
+      "score": 0.0,
+      "fail_reasons": [
+        "有 1 句没有角标",
+        "数值无据：['5']"
+      ],
+      "top1": null,
+      "gate1": "pass",
+      "gate2": "supported",
+      "reject_reason": null,
+      "answer": "2026年上半年公司实现营业收入599,557.36万元，较上年同期增长108.13%。[3]（证据超出长度上限，本次仅依据前 5 条证据作答）",
+      "citations": [
+        {
+          "n": 3,
+          "doc_key": "pdf_reports/han-wu-ji-26-ban-nian-bao",
+          "doc_name": "寒武纪26半年报.pdf",
+          "page_num": 10,
+          "bbox": [
+            [
+              0.151,
+              0.5173,
+              0.9015,
+              0.7239
+            ]
+          ],
+          "snippet": "2026年上半年，人工智能算力市场需求稳步攀升。公司依托人工智能芯片的核心竞争力，持 续加强与金融、互联网领域头部企业的深度合作。依托强大的产品能力及务实开放的合作模式， 以技术赋能场景落地，以规模化应用拉动市场拓展，营业收入增长显著。报…",
+          "chunk_id": "ch_2b25bb697d67"
+        }
+      ],
+      "fallback": null,
+      "clarify": null,
+      "done": {
+        "type": "done",
+        "latency_ms": 22907,
+        "hop_count": 0,
+        "verdict": "pass"
+      },
+      "latency_ms": 22924.3,
+      "top1_source": "qa_log"
+    }
+  ]
+}

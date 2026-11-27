@@ -26,23 +26,22 @@ from api.generate.llm import (
 
 def test_plain_json_is_parsed() -> None:
     draft = parse_draft(
-        '{"status":"answered","answer":"每人每天 500 元[1]。","citations":[1],'
-        '"claims":[{"text":"每人每天 500 元","citations":[1]}]}'
+        '{"status":"answered","answer":"每人每天 500 元[1]。","facts":[{"text":"每人每天 500 元","evidence_ids":["1"]}]}'
     )
     assert draft.status == "answered"
-    assert draft.citations == (1,)
-    assert draft.claims[0].text == "每人每天 500 元"
+    assert draft.facts[0].evidence_ids == ("1",)
+    assert draft.facts[0].text == "每人每天 500 元"
     assert draft.unwrapped is False
 
 
 def test_code_fence_is_unwrapped_once() -> None:
-    draft = parse_draft('```json\n{"status":"unknown","answer":"未找到。","citations":[]}\n```')
+    draft = parse_draft('```json\n{"status":"unknown","answer":"未找到。","facts":[]}\n```')
     assert draft.status == "unknown"
     assert draft.unwrapped is True, "拨过围栏要留痕：模型总在包围栏是提示词退化的信号"
 
 
 def test_surrounding_prose_is_ignored_only_after_unwrapping() -> None:
-    draft = parse_draft('以下是 JSON：\n```json\n{"status":"unknown","answer":"x","citations":[]}\n```')
+    draft = parse_draft('以下是 JSON：\n```json\n{"status":"unknown","answer":"x","facts":[]}\n```')
     assert draft.status == "unknown"
 
 
@@ -56,21 +55,21 @@ def test_missing_status_is_a_format_error() -> None:
         parse_draft('{"answer":"x","citations":[1]}')
 
 
-def test_missing_citations_field_is_a_format_error() -> None:
-    """§9.2："缺 status 或 citations → 降级，不重试"。补一个空数组就毁掉第二道校验。"""
+def test_missing_facts_field_is_a_format_error() -> None:
+    """§9.2：缺 facts → 降级，不重试。"""
     with pytest.raises(DraftFormatError):
         parse_draft('{"status":"answered","answer":"500 元[1]。"}')
 
 
 def test_answered_with_empty_answer_is_a_format_error() -> None:
     with pytest.raises(DraftFormatError):
-        parse_draft('{"status":"answered","answer":"   ","citations":[1]}')
+        parse_draft('{"status":"answered","facts":[{"text":"   ","evidence_ids":["1"]}]}')
 
 
-def test_answered_without_citations_parses_and_is_left_to_the_checker() -> None:
-    """没有引用的"已作答"是**校验失败**，不是格式失败——两者处置不同。"""
-    draft = parse_draft('{"status":"answered","answer":"500 元。","citations":[],"claims":[]}')
-    assert draft.citations == ()
+def test_answered_without_evidence_ids_is_a_format_error() -> None:
+    """缺 evidence_ids 的 answered 输出被判定为格式错误。"""
+    with pytest.raises(DraftFormatError):
+        parse_draft('{"status":"answered","facts":[{"text":"500 元。","evidence_ids":[]}]}')
 
 
 def test_out_of_range_citation_is_left_to_the_first_check() -> None:
@@ -79,42 +78,41 @@ def test_out_of_range_citation_is_left_to_the_first_check() -> None:
     解析层不知道证据范围，所以它必须放行——在这里自己判等于把第一道校验做进解析器，
     而那样第一道就永远不会被执行到（它会被"已经拦过"的理由跳过）。
     """
-    draft = parse_draft('{"status":"answered","answer":"x[9]。","citations":[9]}')
-    assert draft.citations == (9,)
+    draft = parse_draft('{"status":"answered","facts":[{"text":"x[9]。","evidence_ids":["9"]}]}')
+    assert draft.facts[0].evidence_ids == ("9",)
 
 
 def test_bool_is_not_accepted_as_a_citation_number() -> None:
     """`True` 是 int 的子类：不排除 bool 的话 `[true]` 会变成 `[1]`。"""
     with pytest.raises(DraftFormatError):
-        parse_draft('{"status":"answered","answer":"x[1]","citations":[true]}')
+        parse_draft('{"status":"answered","facts":[{"text":"x[1]","evidence_ids":[true]}]}')
 
 
 def test_citation_strings_that_are_digits_are_accepted() -> None:
     """模型偶尔把编号写成字符串；语义明确，认。"""
-    draft = parse_draft('{"status":"answered","answer":"x[1]","citations":["1"]}')
-    assert draft.citations == (1,)
+    draft = parse_draft('{"status":"answered","facts":[{"text":"x[1]","evidence_ids":["1"]}]}')
+    assert draft.facts[0].evidence_ids == ("1",)
 
 
 def test_duplicate_citations_are_deduplicated_in_order() -> None:
-    draft = parse_draft('{"status":"answered","answer":"x[1][2]","citations":[2,1,2]}')
-    assert draft.citations == (2, 1)
+    draft = parse_draft('{"status":"answered","facts":[{"text":"x[1][2]","evidence_ids":[2,1,2]}]}')
+    assert draft.facts[0].evidence_ids == ("2", "1")
 
 
-def test_claims_are_optional() -> None:
-    draft = parse_draft('{"status":"answered","answer":"x[1]","citations":[1]}')
-    assert draft.claims == ()
+def test_facts_are_optional_for_unknown() -> None:
+    draft = parse_draft('{"status":"unknown","answer":"未找到。","facts":[]}')
+    assert draft.facts == ()
 
 
-def test_claim_without_citations_is_kept_for_the_second_check() -> None:
-    draft = parse_draft(
-        '{"status":"answered","answer":"x[1]","citations":[1],'
-        '"claims":[{"text":"有引用[1]","citations":[1]},{"text":"没引用","citations":[]}]}'
-    )
-    assert [c.citations for c in draft.claims] == [(1,), ()]
+def test_fact_without_evidence_ids_is_a_format_error() -> None:
+    with pytest.raises(DraftFormatError):
+        parse_draft(
+            '{"status":"answered","facts":[{"text":"没引用","evidence_ids":[]}]}'
+        )
 
 
 def test_empty_draft_raw_is_kept_for_audit() -> None:
-    draft = parse_draft('{"status":"unknown","answer":"未找到。","citations":[]}')
+    draft = parse_draft('{"status":"unknown","answer":"未找到。","facts":[]}')
     assert draft.raw
 
 
@@ -125,7 +123,8 @@ def test_generation_prompt_keeps_the_three_hard_constraints() -> None:
     """附录 D："三条不可弱化：只用证据、无证据说不知道、每句带引用。" """
     assert "只使用证据包内容" in GENERATION_SYSTEM_PROMPT
     assert "status=unknown" in GENERATION_SYSTEM_PROMPT
-    assert "[n]" in GENERATION_SYSTEM_PROMPT
+    assert "facts" in GENERATION_SYSTEM_PROMPT
+    assert "evidence_ids" in GENERATION_SYSTEM_PROMPT
     assert '"status":"answered|unknown"' in GENERATION_SYSTEM_PROMPT
 
 

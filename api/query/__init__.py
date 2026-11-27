@@ -30,9 +30,9 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Literal, Sequence
 
-from api.llm_json import parse_json_object
 from api.observability import get_logger, log_event
 from api.query import lexicon
+from api.temporal import TemporalScope, build_temporal_scope
 from api.time_range import TimeNormalisation, normalise_time
 from api.trace import trace as trace_event
 
@@ -115,6 +115,8 @@ class QueryPlan:
     # 超范围的问句不检索（§6.3 边界表）：门控直接用 reject_none 收口。
     out_of_scope: bool = False
     notes: tuple[str, ...] = field(default_factory=tuple)
+    # 结构化时间：文档有效时间与内容目标时间分离。
+    temporal: TemporalScope | None = None
 
     @property
     def entities_or_text(self) -> tuple[str, ...]:
@@ -217,39 +219,6 @@ def rewrite(text: str) -> tuple[str, tuple[RewriteStep, ...]]:
             out.append(text[pos])
             pos += 1
     return "".join(out), tuple(steps)
-
-
-def rewrite_with_llm(text: str, client: Any) -> str:
-    """让 LLM 只追加同义词，不改写原问句。
-
-    输出约定为 {"expansion": "..."}；原问句始终完整保留，从结构上避免公司名、
-    数字、否定含义被模型改掉。
-    """
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "你是企业知识库检索扩展器。保留用户原问句不变，只额外给出少量"
-                "同义词或财报口径词，例如“本报告期”“季度财务报表”。"
-                "不要重复原问句，不要修改公司名、数字、否定含义，不要添加事实。"
-                '只输出 JSON：{"expansion":"..."}。'
-            ),
-        },
-        {"role": "user", "content": text},
-    ]
-    try:
-        content = client.complete(messages, temperature=0.0)
-        data = parse_json_object(content)
-        expansion = (data or {}).get("expansion")
-        if not isinstance(expansion, str) or not expansion.strip():
-            return text
-        if re.search(r"\d", expansion):
-            return text
-        if any(marker in expansion for marker in lexicon.NEGATION_MARKERS):
-            return text
-        return f"{text} {expansion.strip()}"
-    except Exception:  # noqa: BLE001
-        return text
 
 
 def _join_without_overlap(out: list[str], target: str) -> str:
@@ -397,16 +366,8 @@ def understand(
     if time_result.range is not None and time_result.range.note:
         notes.append(time_result.range.note)
 
-    # 3. 同义 / 缩写 / 口语。
+    # 3. 同义 / 缩写 / 口语。只走确定性词表；不做 LLM 扩展。
     rewritten, steps = rewrite(operated)
-    if time_llm is not None:
-        expanded = rewrite_with_llm(rewritten, time_llm)
-        if expanded != rewritten:
-            rewritten = expanded
-            steps = (
-                *steps,
-                RewriteStep(kind="synonym", source=operated, target=expanded, position=0),
-            )
     trace.extend(steps)
 
     # 4. 实体与跳数。
@@ -433,6 +394,7 @@ def understand(
         entities=entities,
         coverage_terms=coverage_terms,
         time=time_result,
+        temporal=build_temporal_scope(time_result),
         mode=mode,
         trace=tuple(trace),
         original=original,

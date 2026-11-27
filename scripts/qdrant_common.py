@@ -109,6 +109,9 @@ PAYLOAD_INDEXES: dict[str, str] = {
     "effective_year": "integer",
     "effective_date": "integer",
     "date_confidence": "keyword",
+    "report_period_start": "integer",
+    "report_period_end": "integer",
+    "publication_date": "integer",
     "page_num": "integer",
 }
 
@@ -153,6 +156,12 @@ def build_payload(row: dict[str, Any], status: str | None = None) -> dict[str, A
         payload["effective_year"] = int(row["effective_year"])
     if row.get("effective_date") is not None:
         payload["effective_date"] = int(row["effective_date"])
+    if row.get("report_period_start") is not None:
+        payload["report_period_start"] = int(str(row["report_period_start"]).replace("-", ""))
+    if row.get("report_period_end") is not None:
+        payload["report_period_end"] = int(str(row["report_period_end"]).replace("-", ""))
+    if row.get("publication_date") is not None:
+        payload["publication_date"] = int(str(row["publication_date"]).replace("-", ""))
     if row.get("parent_id"):
         payload["parent_id"] = row["parent_id"]
     return payload

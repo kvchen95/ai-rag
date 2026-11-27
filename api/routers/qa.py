@@ -40,6 +40,7 @@ from api.generate.llm import LlmClient
 from api.observability import get_logger, log_event
 from api.qa.orchestrator import QaOutcome, QaService
 from api.retrieval.pipeline import build_pipeline
+from api.temporal.repository import TemporalFactRepository
 from api.time_range import TimeRange
 from api.trace import trace as trace_event
 
@@ -123,7 +124,11 @@ def build_service(request: Request, settings: Settings) -> QaService:
 
     代价是每请求一次 TCP 握手。对 30 秒预算的问答链路来说，这点开销在噪声里。
     """
-    pipeline = build_pipeline(settings, request.app.state.pg, llm=llm_client(settings))
+    pipeline = build_pipeline(
+        settings,
+        request.app.state.pg,
+        llm=llm_client(settings, timeout_s=min(float(settings.llm_timeout_s), 5.0)),
+    )
     return QaService(
         pipeline=pipeline,
         llm=llm_client(settings),
@@ -132,23 +137,29 @@ def build_service(request: Request, settings: Settings) -> QaService:
         token_chunk_chars=settings.sse_token_chunk_chars,
         qa_budget_s=settings.qa_budget_s,
         model_name=settings.llm_model,
+        temporal_repo=TemporalFactRepository(request.app.state.pg),
     )
 
 
-def llm_client(settings: Settings) -> LlmClient | None:
+def llm_client(settings: Settings, *, timeout_s: float | None = None) -> LlmClient | None:
     """没配 `LLM_BASE_URL`/`LLM_MODEL` 时返回 None：那次问答走"系统异常"档，
     而不是启动失败。服务要能起来——检索与审计在没有生成模型时仍然有价值
-    （没有它，评测与门控标定根本跑不起来）。"""
+    （没有它，评测与门控标定根本跑不起来）。
+
+    `timeout_s` 只给时间归一这种短任务用：它失败有规则兜底，不能占用生成预算。
+    """
     if not settings.llm_base_url.strip() or not settings.llm_model.strip():
         return None
+    resolved_timeout = float(timeout_s if timeout_s is not None else settings.llm_timeout_s)
+    retry_budget = min(float(settings.llm_retry_budget_s), max(1.0, resolved_timeout * 2))
     return LlmClient(
         base_url=settings.llm_base_url,
         model=settings.llm_model,
         api_key=settings.llm_api_key.get_secret_value(),
-        timeout_s=settings.llm_timeout_s,
+        timeout_s=resolved_timeout,
         max_attempts=settings.llm_max_attempts,
         retry_backoff_s=settings.llm_retry_backoff_s,
-        retry_budget_s=settings.llm_retry_budget_s,
+        retry_budget_s=retry_budget,
     )
 
 

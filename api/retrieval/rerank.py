@@ -178,6 +178,10 @@ def clip_for_rerank(text: str, max_chars: int | None) -> str:
     `max_chars=None`（未配置）时原样返回，保留纯逻辑用例与非 pipeline 调用方
     的旧行为；配置值来自 `RERANK_TEXT_MAX_CHARS`，不在代码里写业务数字。
     """
+    # 精排只吃相关性信号：PDF 表格文本里大量换行/空格会把"归属于上市公司股东的净
+    # 利润"拆成"净 利润"，交叉编码器对这种碎片化文本打分偏低。证据包仍用原文，
+    # 这里只把空白规整成单空格，不让排版碎片影响相关性。
+    text = "".join((text or "").split())
     if max_chars is None or max_chars <= 0 or len(text) <= max_chars:
         return text
     return text[:max_chars]

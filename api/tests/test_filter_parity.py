@@ -286,7 +286,7 @@ IDENTITIES = {
 def test_pg_and_qdrant_return_the_same_ids(
     seeded_pg: PgDatabase, qdrant_guarded_ids, name: str
 ) -> None:
-    flt = RetrievalFilter(identity=IDENTITIES[name])
+    flt = RetrievalFilter(identity=IDENTITIES[name], doc_keys=(DOC_KEY,))
     pg_ids, qd_ids = _both_after_guard(seeded_pg, qdrant_guarded_ids, flt)
     assert pg_ids == qd_ids, f"{name}: PG 与 Qdrant 过滤结果不一致"
 
@@ -299,7 +299,7 @@ def test_pg_and_qdrant_return_the_same_ids(
 def test_no_depts_sees_only_public(seeded_pg: PgDatabase, qdrant_guarded_ids) -> None:
     """§5.2：无部门 = 空集 = 只能看公开。不能是"看到全部"，也不是"什么都没看到"。"""
     pg_ids, qd_ids = _both_after_guard(
-        seeded_pg, qdrant_guarded_ids, RetrievalFilter(identity=IDENTITIES["no_depts"])
+        seeded_pg, qdrant_guarded_ids, RetrievalFilter(identity=IDENTITIES["no_depts"], doc_keys=(DOC_KEY,))
     )
     # 公开的活跃切片：ch_public / ch_feb / ch_inferred / ch_no_date（无时间条件时都在）
     expected = {"ch_public", "ch_feb", "ch_inferred", "ch_no_date"}
@@ -314,7 +314,7 @@ def test_multi_depts_is_union_not_intersection(
     pg_ids, qd_ids = _both_after_guard(
         seeded_pg,
         qdrant_guarded_ids,
-        RetrievalFilter(identity=IDENTITIES["multi_depts"]),
+        RetrievalFilter(identity=IDENTITIES["multi_depts"], doc_keys=(DOC_KEY,)),
     )
     expected = {"ch_public", "ch_feb", "ch_inferred", "ch_no_date", "ch_fin", "ch_corp"}
     assert set(pg_ids) == expected, f"PG 少了 {expected - set(pg_ids)}"
@@ -328,7 +328,7 @@ def test_dept_and_role_are_both_honoured(
     pg_ids, qd_ids = _both_after_guard(
         seeded_pg,
         qdrant_guarded_ids,
-        RetrievalFilter(identity=IDENTITIES["dept_and_role"]),
+        RetrievalFilter(identity=IDENTITIES["dept_and_role"], doc_keys=(DOC_KEY,)),
     )
     expected = {"ch_public", "ch_feb", "ch_inferred", "ch_no_date", "ch_hr", "ch_staff"}
     assert set(pg_ids) == expected and set(qd_ids) == expected
@@ -338,7 +338,7 @@ def test_admin_sees_every_active_chunk(
     seeded_pg: PgDatabase, qdrant_guarded_ids
 ) -> None:
     pg_ids, qd_ids = _both_after_guard(
-        seeded_pg, qdrant_guarded_ids, RetrievalFilter(identity=IDENTITIES["admin"])
+        seeded_pg, qdrant_guarded_ids, RetrievalFilter(identity=IDENTITIES["admin"], doc_keys=(DOC_KEY,))
     )
     assert pg_ids == qd_ids
     assert set(pg_ids) == ACTIVE_ROW_IDS
@@ -356,7 +356,7 @@ def test_unprivileged_chunk_never_appears(
         "dept_and_role",
     ):
         pg_ids, qd_ids = _both_after_guard(
-            seeded_pg, qdrant_guarded_ids, RetrievalFilter(identity=IDENTITIES[name])
+            seeded_pg, qdrant_guarded_ids, RetrievalFilter(identity=IDENTITIES[name], doc_keys=(DOC_KEY,))
         )
         assert (
             "ch_none" not in pg_ids and "ch_none" not in qd_ids
@@ -374,7 +374,7 @@ def test_time_window_is_month_precise_on_both_sides(
 ) -> None:
     """这条专门防"Qdrant 只有 effective_year"的退化：若向量库侧按整年过滤，
     ch_feb（二月）会被多召回。"""
-    flt = RetrievalFilter(identity=IDENTITIES["admin"], time_range=MARCH)
+    flt = RetrievalFilter(identity=IDENTITIES["admin"], doc_keys=(DOC_KEY,), time_range=MARCH)
     pg_ids, qd_ids = _both_after_guard(seeded_pg, qdrant_guarded_ids, flt)
     assert pg_ids == qd_ids, f"时间过滤不一致：PG={pg_ids} Qdrant={qd_ids}"
     assert "ch_feb" not in pg_ids, "二月切片不该落在三月的窗口里"
@@ -385,7 +385,7 @@ def test_inferred_dates_are_excluded_from_time_filter(
     seeded_pg: PgDatabase, qdrant_guarded_ids
 ) -> None:
     """§5.2：时间过滤只认 explicit。ch_inferred 有日期但置信度是 inferred。"""
-    flt = RetrievalFilter(identity=IDENTITIES["admin"], time_range=MARCH)
+    flt = RetrievalFilter(identity=IDENTITIES["admin"], doc_keys=(DOC_KEY,), time_range=MARCH)
     pg_ids, qd_ids = _both_after_guard(seeded_pg, qdrant_guarded_ids, flt)
     assert "ch_inferred" not in pg_ids and "ch_inferred" not in qd_ids
 
@@ -394,7 +394,7 @@ def test_no_time_filter_keeps_inferred_and_undated(
     seeded_pg: PgDatabase, qdrant_guarded_ids
 ) -> None:
     """反方向：不加时间条件时，推断日期与无日期的切片都该在（证明上一条不是"永远排除"）。"""
-    flt = RetrievalFilter(identity=IDENTITIES["admin"])
+    flt = RetrievalFilter(identity=IDENTITIES["admin"], doc_keys=(DOC_KEY,))
     pg_ids, qd_ids = _both_after_guard(seeded_pg, qdrant_guarded_ids, flt)
     assert {"ch_inferred", "ch_no_date"} <= set(pg_ids)
     assert {"ch_inferred", "ch_no_date"} <= set(qd_ids)
@@ -446,6 +446,6 @@ def test_parity_detects_year_granularity_regression(
     assert "ch_feb" in degraded_ids, "降级后二月切片必须被错误召回，否则守卫无效"
 
     pg_ids = select_ids(
-        seeded_pg, RetrievalFilter(identity=IDENTITIES["admin"], time_range=MARCH)
+        seeded_pg, RetrievalFilter(identity=IDENTITIES["admin"], doc_keys=(DOC_KEY,), time_range=MARCH)
     )
     assert pg_ids != degraded_ids, "对拍没有发现整年退化"

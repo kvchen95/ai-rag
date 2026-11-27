@@ -40,24 +40,84 @@ Status = Literal["answered", "unknown"]
 # 附录 D.1 的提示词逐字落地。三条不可弱化：只用证据、无证据说不知道、每句带引用。
 # 改动只能加约束、不能删约束——所以这里的文本是一个常量，不是模板。
 # 需要区别的只有证据包与问题，它们在最后两段拼接。
-GENERATION_SYSTEM_PROMPT = """你是企业知识库问答助手，只能依据【证据包】回答。
+GENERATION_SYSTEM_PROMPT = """你是财报问答助手，只能依据【证据包】回答。
 规则：
-1) 只使用证据包内容，禁止外部知识、常识补全、推断。
-2) 每个事实句末标注引用编号 [n]，编号必须在证据包内。
-3) 证据不足时 status=unknown，answer 明确说明未找到可验证依据。
-4) 不得输出证据中不存在的数字、日期、金额、名称、因果关系。
-5) 只输出 JSON：{"status":"answered|unknown","answer":"...","citations":[1],"claims":[{"text":"...","citations":[1]}]}
-6) claims 可以是空数组；如果输出 claims，每条都必须带非空 citations，且 citations 必须能对应 answer 里的角标。不要把一句拆成多条无引用的 claim。
-7) 引用数字时不要额外补证据里没有的单位或页码；证据已写“单位：元”时，数字可直接按证据原文写出，必要时只写数字。
+1) 只使用证据包内容，禁止外部知识、常识补全、推断；允许基于证据做透明的四则计算和对比分析。
+2) 每个事实单独作为一个 fact，用 evidence_ids 绑定证据包内真实 chunk_id；不要手写 [n]，系统会按 evidence_ids 渲染角标。分号连接的多个事实必须拆成不同 fact；每个 fact 只引用直接包含该事实的 chunk，不得把叙述性 chunk 用作表格数值的引用。
+3) 数字、金额、日期、百分比、名称必须与证据原文一致，不得四舍五入、补单位、换算；计算得到的派生值不受此限，但必须按规则 4 展示。
+4) 开放性问题和对比问题可以计算：派生结论必须在同一 fact 写出“输入值 + 运算符 + 结果”，输入值只能来自被引证据，单位与期间必须一致；多步计算拆成多个 fact；四舍五入时用“约/≈”。不得把派生值说成报告直接披露。
+5) 表格按“列名 = 语义”理解：`本报告期` 对应用户所问的单个报告期；`年初至报告期末/年初至报告期初` 是累计值，不能替代单期值；表头“（%）”“变动幅度（%）”声明该列为百分比。
+6) 用户问句中的公司、年份、季度是检索范围，不是需要从证据重新证明的事实。
+7) 证据缺少用户所问事实或计算输入时，status=unknown，不得用相邻期间、其他指标或外部假设替代。
+8) answered 时 facts 非空，且每个 fact 至少一个 evidence_id；evidence_id 必须来自证据包的 chunk_id。
+8) 只输出 JSON：{"status":"answered|unknown","facts":[{"kind":"fact|analysis|calculation","text":"...","evidence_ids":["chunk_id"],"name":"","expression":"","result":""}]}。calculation 必须填 name/expression/result；expression 只能用被引证据中的数值与四则运算，result 由系统/模型展示，但必须能被 evidence 复算。
+9) 引用数字时不要额外补证据里没有的单位或页码；证据已写“单位：元”时，数字可直接按证据原文写出，必要时只写数字。
+10) 回答先直接给结论，再给必要的期间/口径限定；可以综合多个证据分析趋势、结构和差异，但要区分“原文事实”与“基于原文的计算/判断”，不写报告未披露的原因，不评价投资价值。
+11) 对开放性问题，先拆成可检索的子问题，再综合：每个分析结论必须能回溯到 facts 或 calculations；如果只能部分回答，明确说明未覆盖部分。
+
+好问题与好回答示例（示例 chunk_id 只演示格式，实际必须使用证据包里的真实 chunk_id，不得照抄）：
+
+示例 A：明确单季度与指标口径
+问题：海光信息2026年第三季度（单季度）营业收入和归属于上市公司股东的净利润分别是多少？同比增幅是多少？
+证据要点：单位：元；本报告期营业收入 5,855,689,454.32，同比 45.46%；本报告期归属于上市公司股东的净利润 1,048,040,894.63，同比 37.90%。
+好回答：
+{"status":"answered","facts":[{"text":"海光信息2026年第三季度营业收入为5,855,689,454.32元，同比增长45.46%。","evidence_ids":["hg_2026q3_fin_revenue"]},{"text":"海光信息2026年第三季度归属于上市公司股东的净利润为1,048,040,894.63元，同比增长37.90%。","evidence_ids":["hg_2026q3_fin_profit"]}]}
+
+示例 B：区分单季度与累计值
+问题：宇树科技2026年第三季度营业收入和年初至报告期末营业收入分别是多少？
+证据要点：本报告期营业收入 665,044,497.90；年初至报告期末营业收入 1,817,290,048.48。
+好回答：
+{"status":"answered","facts":[{"text":"宇树科技2026年第三季度营业收入为665,044,497.90元。","evidence_ids":["unitree_2026q3_fin_q"]},{"text":"宇树科技2026年前三季度营业收入为1,817,290,048.48元。","evidence_ids":["unitree_2026q3_fin_ytd"]}]}
+
+示例 C：开放性问题用透明计算回答
+问题：海光信息2026年第三季度营业收入同比增速比归母净利润同比增速高多少个百分点？
+证据要点：本报告期营业收入同比45.46%；归属于上市公司股东的净利润同比37.90%。
+好回答：
+{"status":"answered","facts":[{"text":"营业收入同比增速比归母净利润同比增速高：45.46% - 37.90% = 7.56 个百分点。","evidence_ids":["hg_2026q3_fin_revenue","hg_2026q3_fin_profit"]}]}
+
+示例 D：证据没有直接披露或缺少计算输入时拒答
+问题：海光信息2026年第三季度毛利率是多少？
+证据要点：仅披露本报告期营业收入5,855,689,454.32元，没有披露营业成本，也没有直接披露毛利率。
+好回答：
+{"status":"unknown","facts":[]}
 """
 
 # 附录 D.4 忠实性判别。判别器只吃"问题 + 被引证据 + 答案"，不吃整库上下文
 # （避免它自己脑补）。这条在 `judge.py` 里靠"只传这三样"保证。
 JUDGE_SYSTEM_PROMPT = """判断【答案】是否完全由【证据】支持。
-SUPPORTED：每个事实都能从证据直接得到或明确蕴含，且无证据外信息；答案可以选择不计算未直接写出的比例、增长率或占比，并说明证据未直接给出。问句中明确限定的公司、报告期、年份、季度可作为检索范围重复，不能仅因证据未重复这些范围词而判不支持。
-NOT_SUPPORTED：包含证据未支持的事实、推断、数字，或与证据矛盾；把分子分母自行相除得到、但证据未直接写出的比例或增长率也算证据外数字。
-答案里的 [n] 与“第 N 页”是引用元数据，不算事实内容；不要因为证据原文里没有这些标记就判不支持。
+
+SUPPORTED 必须同时满足：
+1. 每个数字、金额、日期、百分比、名称都能在对应 [n] 证据中直接找到，或能由证据中直接可定位的数值按答案展示的公式复算；公式、输入值和结果必须在同一 answer/fact 中可检查；
+2. “本报告期”与“年初至报告期末/年初至报告期初”没有被混淆；
+3. 表头“（%）”“变动幅度（%）”声明的列按百分比理解；
+4. 答案覆盖了问题的每个事实子问题；
+5. 没有证据外推断、未经披露的假设、常识补全或因果关系；派生值必须明确标为计算结果。
+
+NOT_SUPPORTED：
+任一事实无直接证据、引用不匹配、期间错误、单位错误、漏答子问题、出现证据外数字，或公式/输入值/结果无法核实。
+
+问句中的公司、年份、季度是检索范围，可作为答案范围重复。
+答案里的 [n] 与“第 N 页”是引用元数据，不算事实内容。
 只输出 JSON：{"verdict":"SUPPORTED|NOT_SUPPORTED","reason":"..."}
+
+判定示例：
+SUPPORTED：
+问题：海光信息2026年第三季度（单季度）营业收入同比增速比归母净利润同比增速高多少个百分点？
+证据：[1] 本报告期营业收入同比45.46%；[2] 归属于上市公司股东的净利润同比37.90%。
+答案：营业收入同比增速比归母净利润同比增速高：45.46% - 37.90% = 7.56 个百分点。[1][2]
+判定：{"verdict":"SUPPORTED","reason":"输入值和公式可由证据直接核实，运算正确。"}
+
+SUPPORTED：
+问题：海光信息2026年第三季度（单季度）营业收入是多少？
+证据：[1] 本报告期营业收入 5,855,689,454.32；单位：元。
+答案：海光信息2026年第三季度营业收入为5,855,689,454.32元。[1]
+判定：{"verdict":"SUPPORTED","reason":"期间、指标和金额均与证据直接一致。"}
+
+NOT_SUPPORTED：
+问题：海光信息2026年第三季度（单季度）营业收入是多少？
+证据：[1] 本报告期营业收入 5,855,689,454.32；年初至报告期末营业收入 14,954,710,229.13；单位：元。
+答案：海光信息2026年第三季度营业收入为14,954,710,229.13元。[1]
+判定：{"verdict":"NOT_SUPPORTED","reason":"答案把年初至报告期末累计值当成第三季度单季度值，期间口径错误。"}
 """
 
 _CODE_FENCE = re.compile(r"^\s*```(?:json|JSON)?\s*|\s*```\s*$")
@@ -86,28 +146,33 @@ class DraftFormatError(RuntimeError):
 
 
 @dataclass(frozen=True, slots=True)
-class Claim:
-    """一条主张（§9.4）：`{"text": "...", "citations": [1]}`。
-
-    `citations` 允许为空——"没有引用的主张"是 §10.1 第二道要判失败的对象，
-    不是解析错误。在这里就把它当解析错误，就等于把第二道校验悄悄提前并做成了异常。
-    """
+class Fact:
+    """唯一事实单元：事实文本 + 证据 chunk_id 列表。"""
 
     text: str
-    citations: tuple[int, ...] = ()
+    evidence_ids: tuple[str, ...] = ()
+    kind: str = "fact"
+    name: str = ""
+    expression: str = ""
+    result: str = ""
 
     def as_dict(self) -> dict[str, Any]:
-        return {"text": self.text, "citations": list(self.citations)}
+        return {
+            "text": self.text,
+            "evidence_ids": list(self.evidence_ids),
+            "kind": self.kind,
+            "name": self.name,
+            "expression": self.expression,
+            "result": self.result,
+        }
 
 
 @dataclass(frozen=True, slots=True)
 class Draft:
-    """一份草稿（§9.4）。它还不能给用户看，要过 §10 的五道校验。"""
+    """一份草稿：facts 是唯一事实源；answer/citations 由渲染层生成，不是持久字段。"""
 
     status: Status
-    answer: str
-    citations: tuple[int, ...]
-    claims: tuple[Claim, ...]
+    facts: tuple[Fact, ...] = ()
     raw: str = ""
     model: str = ""
     temperature: float = 0.0
@@ -117,16 +182,18 @@ class Draft:
     extra: dict[str, Any] = field(default_factory=dict)
 
     @property
+    def answer(self) -> str:
+        return "\n".join(fact.text for fact in self.facts)
+
+    @property
     def answered(self) -> bool:
         return self.status == "answered"
 
     def as_audit(self) -> dict[str, Any]:
-        """审计口径：草稿全文进审计（§11.2 的"草稿"字段），但**不进**响应体。"""
+        """审计口径：草稿 facts 进审计，answer/citations 由渲染层生成。"""
         return {
             "status": self.status,
-            "answer": self.answer,
-            "citations": list(self.citations),
-            "claims": [claim.as_dict() for claim in self.claims],
+            "facts": [fact.as_dict() for fact in self.facts],
             "model": self.model,
             "temperature": self.temperature,
             "unwrapped": self.unwrapped,
@@ -202,49 +269,63 @@ def parse_draft(payload: str, *, model: str = "") -> Draft:
     status = data.get("status")
     if status not in ("answered", "unknown"):
         raise DraftFormatError(f"status 缺失或非法: {status!r}", raw=body)
-    if "citations" not in data:
-        raise DraftFormatError("缺少 citations 字段", raw=body)
+    if "facts" not in data:
+        raise DraftFormatError("缺少 facts 字段", raw=body)
 
-    # `status=answered` 却没有引用编号：这里放行，交给 §10.1 第二道判失败。
-    # 在解析层判它等于把一个内容问题伪装成格式问题，而两者处置不同
-    # （校验失败要拒答并附原文，格式失败可以宽松解析一次）。
-    citations = _int_list(data.get("citations"), field_name="citations")
-    answer = data.get("answer")
-    if answer is None:
-        answer = ""
-    if not isinstance(answer, str):
-        raise DraftFormatError(f"answer 必须是字符串，实际 {type(answer).__name__}", raw=body)
-    answer = answer.strip()
-
-    if status == "answered" and not answer:
-        # §9.2 表格最后两行：answered 但空答案 = 失败。不能当成 unknown 放过去——
-        # 那会让"模型什么都没说"看起来像一次正常的拒答，而拒答率是要被统计的。
-        raise DraftFormatError("status=answered 但 answer 为空", raw=body)
-
-    raw_claims = data.get("claims")
-    claims: list[Claim] = []
-    if raw_claims is not None:
-        if not isinstance(raw_claims, (list, tuple)):
-            raise DraftFormatError(f"claims 必须是数组，实际 {type(raw_claims).__name__}", raw=body)
-        for item in raw_claims:
-            if not isinstance(item, dict):
-                raise DraftFormatError(f"claim 不是对象: {item!r}", raw=body)
-            text = item.get("text")
-            if not isinstance(text, str):
-                raise DraftFormatError(f"claim.text 必须是字符串: {item!r}", raw=body)
-            claims.append(
-                Claim(
-                    text=text.strip(),
-                    citations=_int_list(item.get("citations"), field_name="claim.citations"),
-                )
+    facts: list[Fact] = []
+    raw_facts = data.get("facts")
+    if raw_facts is None:
+        raw_facts = []
+    if not isinstance(raw_facts, (list, tuple)):
+        raise DraftFormatError(f"facts 必须是数组，实际 {type(raw_facts).__name__}", raw=body)
+    for item in raw_facts:
+        if not isinstance(item, dict):
+            raise DraftFormatError(f"fact 不是对象: {item!r}", raw=body)
+        kind = str(item.get("kind") or "fact").strip().lower()
+        if kind not in ("fact", "analysis", "calculation"):
+            raise DraftFormatError(f"fact.kind 非法: {kind!r}", raw=body)
+        text = item.get("text")
+        if isinstance(text, str):
+            text = text.strip()
+        else:
+            text = ""
+        name = str(item.get("name") or "").strip()
+        expression = str(item.get("expression") or "").strip()
+        result = str(item.get("result") or "").strip()
+        if kind == "calculation":
+            if not name or not expression or not result:
+                raise DraftFormatError("calculation 缺少 name/expression/result", raw=body)
+            if not text:
+                text = f"{name}：{expression} = {result}"
+        if status == "answered" and not text:
+            raise DraftFormatError("status=answered 但 fact.text 为空", raw=body)
+        evidence_ids = item.get("evidence_ids")
+        if evidence_ids is None:
+            evidence_ids = item.get("citations")
+        if evidence_ids is None:
+            evidence_ids = []
+        evidence_ids = _str_list(evidence_ids, field_name="fact.evidence_ids")
+        if status == "answered" and not evidence_ids:
+            raise DraftFormatError("status=answered 但 fact 缺少 evidence_ids", raw=body)
+        facts.append(
+            Fact(
+                text=text,
+                evidence_ids=evidence_ids,
+                kind=kind,
+                name=name,
+                expression=expression,
+                result=result,
             )
+        )
 
-    known = {"status", "answer", "citations", "claims"}
+    if status == "answered" and not facts:
+        raise DraftFormatError("status=answered 但 facts 为空", raw=body)
+
+    raw = data.get("raw", body)
+    known = {"status", "facts", "citations", "claims", "answer"}
     return Draft(
         status=status,  # type: ignore[arg-type]
-        answer=answer,
-        citations=citations,
-        claims=tuple(claims),
+        facts=tuple(facts),
         raw=body[:4000],
         model=model,
         temperature=0.0,
@@ -433,8 +514,27 @@ def generate_draft(
     return draft
 
 
+def _str_list(value: Any, *, field_name: str) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, (list, tuple)):
+        raise DraftFormatError(f"{field_name} 必须是数组，实际是 {type(value).__name__}")
+    out: list[str] = []
+    for item in value:
+        if isinstance(item, bool):
+            raise DraftFormatError(f"{field_name} 里有非字符串元素: {item!r}")
+        if isinstance(item, str):
+            out.append(item)
+            continue
+        if isinstance(item, int):
+            out.append(str(item))
+            continue
+        raise DraftFormatError(f"{field_name} 里有非字符串元素: {item!r}")
+    return tuple(dict.fromkeys(out))
+
+
 __all__ = [
-    "Claim",
+    "Fact",
     "Draft",
     "DraftFormatError",
     "GENERATION_SYSTEM_PROMPT",

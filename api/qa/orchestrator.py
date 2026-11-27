@@ -55,6 +55,9 @@ from api.qa import events as ev
 from api.qa.events import SseEvent
 from api.retrieval.pipeline import RetrievalPipeline, RetrievalSnapshot
 from api.retrieval.texts import doc_names, fetch_texts
+from api.temporal.context import merge_evidence, temporal_evidence
+from api.temporal.query import resolve_fact_query
+from api.temporal.repository import TemporalFactRepository
 from api.verify.checks import VerificationReport, verify_draft
 
 logger = get_logger("api.qa.orchestrator")
@@ -123,6 +126,7 @@ class QaService:
     token_chunk_chars: int = 2
     qa_budget_s: float = 30.0
     model_name: str = ""
+    temporal_repo: TemporalFactRepository | None = None
 
     # --- 对外入口 -------------------------------------------------------------
 
@@ -254,6 +258,7 @@ class QaService:
 
         # --- pass / partial：进生成 ---
         pack = self._build_pack(snapshot)
+        pack = self._augment_temporal_graph(question, snapshot, pack)
         outcome.evidence = pack
         trace_event("qa.evidence_pack", n_items=pack.n_items, **pack.as_audit())
         if not pack:
@@ -333,7 +338,7 @@ class QaService:
         send(ev.citations([item.as_citation() for item in report.cited_evidence]))
         outcome.detail = (
             f"checks={len(report.checks_run)} judge={report.gate2_verdict} "
-            f"evidence={pack.n_items} claims={len(draft.claims)}"
+            f"evidence={pack.n_items} facts={len(draft.facts)}"
         )
         log_event(
             logger,
@@ -471,6 +476,42 @@ class QaService:
             max_chars=self.evidence_max_chars,
             cap=self.pipeline.rerank_top_n_max,
         )
+
+    def _augment_temporal_graph(
+        self,
+        question: str,
+        snapshot: RetrievalSnapshot,
+        pack: EvidencePack,
+    ) -> EvidencePack:
+        """命中时序图时补充跨期事实；未命中保持原证据包。"""
+        if self.temporal_repo is None or pack is None:
+            return pack
+        try:
+            graph = self.temporal_repo.load()
+            query = resolve_fact_query(question, graph, snapshot.plan.temporal)
+            if query is None:
+                return pack
+            extra = temporal_evidence(
+                graph,
+                query,
+                self.pipeline.pg,
+                start_n=len(pack.items) + 1,
+            )
+            merged = merge_evidence(pack, extra)
+            trace_event(
+                "qa.temporal_graph",
+                query=query.as_dict(),
+                added=len(merged.items) - len(pack.items),
+            )
+            return merged
+        except Exception as exc:  # noqa: BLE001 - 图补充失败不能击穿原问答链路
+            log_event(
+                logger,
+                "temporal_graph_failed",
+                level=30,
+                error=f"{type(exc).__name__}: {str(exc)[:200]}",
+            )
+            return pack
 
     def _notices(self, pack: EvidencePack, snapshot: RetrievalSnapshot) -> tuple[str, ...]:
         """系统陈述，写在被校验正文之外（见模块头第 2 条）。

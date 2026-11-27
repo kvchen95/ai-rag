@@ -125,6 +125,19 @@ def test_bare_number_without_unit_is_kept_but_never_matches_a_united_one() -> No
     assert missing
 
 
+def test_table_cell_bare_number_can_use_claim_unit() -> None:
+    """表格 content_text 丢表头单位时，数值完全一致仍应通过。"""
+    evidence = (
+        "主要会计数据: 营业收入 | 本报告期（1－6月）: 9,099,020,774.81 | "
+        "上年同期: 5,464,235,057.15 | 本报告期比上年同期增减(%): 66.52"
+    )
+    missing, _ = locate_quantities(
+        "海光信息2026年上半年营业收入为9,099,020,774.81元，同比增长66.52%。",
+        evidence,
+    )
+    assert missing == ()
+
+
 # --- 专名 ---------------------------------------------------------------------
 
 
@@ -169,6 +182,14 @@ def test_chinese_and_arabic_values_are_compared_after_normalisation() -> None:
     """同一属性的中文数字与阿拉伯数字必须被判成冲突（归一后才可比）。"""
     conflicts = find_value_conflicts(["住宿费限额为五百元", "住宿费限额为 800 元"])
     assert conflicts and {conflicts[0][2], conflicts[0][3]} == {"500", "800"}
+
+
+def test_different_years_are_not_a_value_conflict() -> None:
+    claims = [
+        "2026年上半年营业收入为9,099,020,774.81元。",
+        "2025年上半年营业收入为5,464,235,057.15元。",
+    ]
+    assert find_value_conflicts(claims) == ()
 
 
 def test_attributes_are_stripped_of_quantity_prefixes() -> None:

@@ -267,7 +267,7 @@ def test_pipeline_run_traces_full_retrieval_path(trace_path, monkeypatch):
 
 
 def test_qa_service_traces_generation_verification_and_exit(trace_path, monkeypatch):
-    from api.generate.llm import Draft
+    from api.generate.llm import Draft, Fact
     from api.identity import IdentitySnapshot
     from api.qa import orchestrator as O
     from api.query import understand
@@ -345,9 +345,7 @@ def test_qa_service_traces_generation_verification_and_exit(trace_path, monkeypa
         "generate_draft",
         lambda *a, **k: Draft(
             status="answered",
-            answer="住宿费每人每天 500 元",
-            citations=(1,),
-            claims=(),
+            facts=(Fact(text="住宿费每人每天 500 元", evidence_ids=("1",)),),
         ),
     )
     monkeypatch.setattr(
@@ -377,7 +375,17 @@ def test_qa_service_traces_generation_verification_and_exit(trace_path, monkeypa
     assert outcome.verdict == "pass"
     assert got["qa.retrieval_done"]["verdict"] == "pass"
     assert got["qa.evidence_pack"]["n_items"] == 1
-    assert got["qa.draft"]["answer"] == "住宿费每人每天 500 元"
+    # fact 审计口径固定六字段（§9.4）：kind/name/expression/result 对普通事实为空串。
+    assert got["qa.draft"]["facts"] == [
+        {
+            "text": "住宿费每人每天 500 元",
+            "evidence_ids": ["1"],
+            "kind": "fact",
+            "name": "",
+            "expression": "",
+            "result": "",
+        }
+    ]
     assert got["qa.verify"]["passed"] is True
     assert got["qa.exit"]["verdict"] == "pass"
     assert got["qa.exit"]["answer"] == "住宿费每人每天 500 元"

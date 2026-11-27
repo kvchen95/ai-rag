@@ -379,6 +379,7 @@ def _version_filter(version_id: str) -> dict[str, Any]:
 SELECT_CHUNKS_SQL = """
 SELECT chunk_id, doc_key, version_id, chunk_type, parent_id, page_num,
        content_text, effective_date, effective_year, date_confidence,
+       report_period_start, report_period_end, publication_date,
        is_public, allowed_depts, allowed_roles, status
 FROM chunks
 WHERE version_id = %s

@@ -58,6 +58,7 @@ UNIT_TABLE: dict[str, tuple[str, Decimal]] = {
     "页": ("页", Decimal(1)),
     "项": ("项", Decimal(1)),
     "倍": ("倍", Decimal(1)),
+    "个百分点": ("百分点", Decimal(1)),
     "%": ("%", Decimal(1)),
     "％": ("%", Decimal(1)),
     "成": ("%", Decimal(10)),
@@ -271,28 +272,14 @@ def extract_quantities(text: str) -> tuple[Quantity, ...]:
     return tuple(unique)
 
 
-def _declared_units(text: str) -> set[str]:
-    """表格切片里声明的全局单位（如“单位：元”“币种：人民币”）。"""
-    units: set[str] = set()
-    for match in re.finditer(r"单位[:：]\s*([元万元亿元%％]|万元)", text or ""):
-        unit = match.group(1)
-        if unit in UNIT_TABLE:
-            units.add(UNIT_TABLE[unit][0])
-    if re.search(r"[（(]\s*[%％]\s*[）)]", text or ""):
-        units.add("%")
-    if "币种" in (text or "") and "人民币" in (text or ""):
-        units.add("元")
-    return units
-
-
 def locate_quantities(
     claim: str, evidence_text: str
 ) -> tuple[tuple[Quantity, ...], tuple[Quantity, ...]]:
     """返回 (claim 里定位不到的, claim 里的全部)。空的第一项 = 全部定位成功。
 
     比对口径：**数值相等且规范单位一致**（§10.2 原话"要求数值相等且单位一致"）。
-    表格切片的 `table_md` 会把“单位：元”写在表头；单元格数字本身没有紧跟单位，
-    因此允许证据中声明的全局单位补足这个缺口，避免把表头单位误判为无证据。
+    表格切片的 `content_text` 常只保留单元格、不带“单位：元”表头；因此证据侧
+    数值完全一致且无单位时，允许按 claim 的单位解释，避免把表头单位误判为无证据。
 
     年份属于查询/报告期范围，不由这道数值校验处理；它应由时间过滤与判别器校验。
     """
@@ -301,16 +288,17 @@ def locate_quantities(
         return (), ()
     evidence_items = extract_quantities(evidence_text)
     known = {item.as_key() for item in evidence_items}
-    declared_units = _declared_units(evidence_text)
     missing = []
     for item in claim_items:
         if item.unit == "年" and 1900 <= int(item.value) <= 2999:
             continue
         if item.as_key() in known:
             continue
-        if item.unit in declared_units and any(
+        if any(
             value.value == item.value and value.unit == "" for value in evidence_items
         ):
+            # 表格 content_text 往往只保留单元格，不带“单位：元”表头；
+             # 数值完全一致且证据侧无单位时，允许按 claim 的单位解释。
             continue
         missing.append(item)
     return tuple(missing), claim_items
@@ -434,9 +422,9 @@ def extract_in_context(text: str) -> tuple[QuantityInContext, ...]:
             # “同一属性两个值”，而是两个不同期间的合法数值。_ATTR 只吃中文，
             # 会把年份吃掉，所以这里把属性名前的四位年份补回冲突键。
             if attr_match:
-                year_match = re.search(r"(\d{4})\s*$", head[: attr_match.start()])
+                year_match = re.search(r"(?:19|20)\d{2}", head[: attr_match.start()])
                 if year_match:
-                    attribute = f"{year_match.group(1)}{attribute}"
+                    attribute = f"{year_match.group(0)}{attribute}"
             out.append(QuantityInContext(attribute=attribute, quantity=quantities[0]))
     return tuple(out)
 
