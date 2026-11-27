@@ -14,13 +14,13 @@
 | `概要设计.md` | 目标、边界、原则、技术栈、评测口径 |
 | `详细设计.md` | 12 章 + 7 附录：对象、摄取、存储、检索、门控、生成、校验、权限、验收 |
 
-**改代码前先读 `详细设计.md` 第 2 章**（四个对象）与第 10.5 节（事件流约定）。
+**改代码前先读 `详细设计.md` 第 2 章**（五个对象）与第 10.5 节（事件流约定）。
 
 ## 快速开始
 
 ```bash
 cp .env.example .env          # 填 LLM_BASE_URL / LLM_API_KEY / LLM_MODEL
-docker compose up -d          # 7 个服务：PG / Qdrant / embedding / rerank / api / worker / web
+docker compose up -d          # 9 个服务：PG / Qdrant / embedding / rerank / api / worker / ingest-worker / web / stub-llm
 docker compose ps             # 等全部 healthy（首次启动要下模型，约 2 分钟）
 
 make scan                     # 扫 samples/，建待转正版本

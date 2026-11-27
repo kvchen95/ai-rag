@@ -574,7 +574,7 @@ OCR 开了就真出片且 `source:ocr` 进了库。
 
 ```
 query/__init__.py      §6 改写（同义/缩写/口语）+ 指代消解 + 时间归一 + 单多跳预判
-query/lexicon.py       三张词表 + 一张禁止表（启动期自检）
+resources/lexicon.py   三张词表 + 一张禁止表（启动期自检）
 retrieval/hybrid.py    §7.1/§7.2 两路 prefetch（同一个 filter 对象）+ RRF + 父片去重
 retrieval/rerank.py    §7.3 精排（≤32/批、共享 deadline、三种降级原因）
 retrieval/gate.py      §8.1/§8.2/§8.4 三段门控 + 五态 verdict + 澄清选项
