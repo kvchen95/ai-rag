@@ -31,6 +31,8 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from api.resources import messages as msg
+
 SseEventName = Literal[
     "step", "clarify", "token", "citations", "fallback", "done"
 ]
@@ -116,9 +118,13 @@ def clarify(question: str, options: Sequence[dict[str, Any]]) -> SseEvent:
             "question": question,
             "options": [
                 {
-                    "label": str(option.get("label") or ""),
+                    "label": str(
+                        option.get("label") if option.get("label") else ""
+                    ),
                     "value": str(
-                        option.get("doc_key") or option.get("value") or ""
+                        option.get("doc_key") or option.get("value")
+                        if option.get("doc_key") or option.get("value")
+                        else ""
                     ),
                     **{k: v for k, v in option.items() if k not in ("label",)},
                 }
@@ -184,7 +190,7 @@ def chunk_text(text: str, size: int) -> Iterable[str]:
     `delta: ""`，那会让前端进入"逐字中"却没有可显示的内容。
     """
     if size <= 0:
-        raise ValueError(f"chunk size 必须 > 0，实际 {size}")
+        raise ValueError(msg.CHUNK_SIZE_INVALID.format(size=size))
     if not text:
         return ()
     return tuple(

@@ -31,6 +31,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from api.resources import messages as msg
 from api.retrieval.hybrid import Candidate
 from api.retrieval.texts import ChunkText
 
@@ -74,7 +75,11 @@ class Evidence:
     def source_line(self) -> str:
         """§9.1 第 5 条：一行来源标记，供模型引用时抄。."""
         return _clip(
-            f"《{self.doc_name}》第 {self.page_num} 页 · {self.chunk_id}",
+            msg.SOURCE_LINE.format(
+                doc_name=self.doc_name,
+                page_num=self.page_num,
+                chunk_id=self.chunk_id,
+            ),
             SOURCE_LINE_CHARS,
         )
 
@@ -85,7 +90,9 @@ class Evidence:
         最常犯的格式错就是抄成「第1条」。让证据里出现的形式与要求输出的形式一
         致，能少一类可避免的失败。
         """
-        return f"[{self.n}] 来源：{self.source_line()}\n{self.text}"
+        return msg.PROMPT_BLOCK.format(
+            n=self.n, source=self.source_line(), text=self.text
+        )
 
     def as_citation(self) -> dict[str, Any]:
         """附录 C.2 的 `citations.items[]` 各字段。.
@@ -152,7 +159,7 @@ class EvidencePack:
         """
         if not self.truncated:
             return None
-        return f"（证据超出长度上限，本次仅依据前 {self.n_items} 条证据作答）"
+        return msg.TRUNCATION_NOTICE.format(count=self.n_items)
 
     def render(self) -> str:
         """提示词里的【证据包】整段。."""
@@ -183,7 +190,7 @@ class EvidencePack:
 
 def _clip(text: str, limit: int) -> str:
     """Run _clip."""
-    text = " ".join((text or "").split())
+    text = " ".join(((text if text else "")).split())
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
@@ -246,14 +253,16 @@ def build_evidence_pack(
     只受 6000 字约束——那是"没配上限"，不是"不限"。
     """
     if max_chars <= 0:
-        raise ValueError(f"max_chars 必须 > 0，实际 {max_chars}")
+        raise ValueError(
+            msg.EVIDENCE_MAX_CHARS_INVALID.format(value=max_chars)
+        )
 
     # 取不到正文的候选直接跳过：空证据在提示词里等于一条什么都支持不了的引用，
     # 而它还会占掉一个编号，让角标指向空白。
     usable = [c for c in candidates if c.chunk_id in texts]
     if cap is not None:
         if cap < 0:
-            raise ValueError(f"cap 必须 >= 0，实际 {cap}")
+            raise ValueError(msg.EVIDENCE_CAP_INVALID.format(value=cap))
         usable = usable[:cap]
 
     merged: list[tuple[Candidate, tuple[str, ...], str, ChunkText]] = []
@@ -303,7 +312,7 @@ def build_evidence_pack(
             doc_key=primary.doc_key,
             doc_name=primary.doc_name,
             page_num=primary.page_num,
-            bbox=list(primary.bbox or []),
+            bbox=list(primary.bbox if primary.bbox else []),
             text=body,
             chunk_type=primary.chunk_type,
             rerank_score=representative.rerank_score,

@@ -8,6 +8,11 @@ from __future__ import annotations
 
 import os
 
+if __package__:
+    from .resources.b2_explain_cleanup_msgs import MESSAGES as M
+else:  # run as a script: python3 scripts/b2_explain_cleanup.py
+    from resources.b2_explain_cleanup_msgs import MESSAGES as M
+
 import psycopg
 
 from scripts.b2_explain_seed import DOC_KEY
@@ -19,8 +24,9 @@ TEMP_INDEXES = ("ix_tmp_pub", "ix_tmp_depts", "ix_tmp_roles")
 
 
 def main() -> int:
+    """Run main."""
     if not DSN:
-        print("ERROR: DATABASE_URL 未设置")
+        print(M["PRINT_01"])
         return 2
     with psycopg.connect(DSN, autocommit=True) as conn:
         for name in TEMP_INDEXES:
@@ -29,7 +35,7 @@ def main() -> int:
         conn.execute("DELETE FROM doc_versions WHERE doc_key = %s", (DOC_KEY,))
         conn.execute("DELETE FROM documents WHERE doc_key = %s", (DOC_KEY,))
         left = conn.execute("SELECT count(*) FROM chunks").fetchone()[0]
-    print(f"cleaned: 剩余 chunks {left} 行，临时索引已删")
+    print(f"{M['PRINT_02']}{left}{M['PRINT_03']}")
     return 0
 
 

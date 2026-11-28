@@ -35,6 +35,7 @@ from typing import Any, Protocol
 
 from api.parse.geometry import Rect
 from api.parse.model import FigureData
+from api.prompts import figures as figures_prompts
 
 # 饼图/占比求和的容差（§3.4：99 到 101）。
 PERCENT_SUM_MIN = 99.0
@@ -47,36 +48,14 @@ NUMBER_MATCH_TOLERANCE = 0.01
 # 提示词版本：改动必须递增，审计里记它（否则"这条转译是哪版提示词出的"说不清）。
 TRANSCRIBE_PROMPT_VERSION = "figure-transcribe-v1"
 
-STAT_TRANSCRIBE_PROMPT = (
-    "读取图中坐标轴名称、单位、刻度，以及每个数据点的类别与数值。\n"
-    "多条曲线逐条列出并注明图例。\n"
-    "无法确定的数值写 null，不要估算。\n"
-    "输出 Markdown 表格，不解释。"
-)
+STAT_TRANSCRIBE_PROMPT = figures_prompts.STAT_TRANSCRIBE_PROMPT
 
-STRUCTURE_TRANSCRIBE_PROMPT = (
-    "列出图中节点（名称、类型：系统/模块/外部服务）。\n"
-    "列出连线（起点、终点、方向、连线文字）。\n"
-    '看不清的节点写"无法识别"，不要补全。\n'
-    "输出两段：节点表、关系表。"
-)
+STRUCTURE_TRANSCRIBE_PROMPT = figures_prompts.STRUCTURE_TRANSCRIBE_PROMPT
 
-# 让模型在 Markdown 之外再给一段结构化 JSON：Markdown 给人看/进 content_text，
-# JSON 给对账用。硬要求"只输出 JSON"会让 content_text 失去可读性；
-# 只输出 Markdown 又没法可靠对账（要再解析一次表格）。
-_TRANSCRIBE_SCHEMA = (
-    '{"kind":"bar|line|pie|structure|table|photo",'
-    '"axes":{"x":{"label":..,"unit":..,"min":..,"max":..},'
-    '"y":{...}},"series":[{"name":..,"unit":..,"points":'
-    '[{"label":..,"value":..}]}],"legend_missing":false}'
-)
+# 结构化 JSON 骨架与后缀见 api/prompts/figures.py。
+_TRANSCRIBE_SCHEMA = figures_prompts.TRANSCRIBE_SCHEMA
 
-TRANSCRIBE_PROMPT_SUFFIX = (
-    "\n先输出 Markdown 表格，然后输出一行以 `JSON:` 开头的结构化结果：\n"
-    + _TRANSCRIBE_SCHEMA
-    + "\n数值必须来自图上的刻度与标签；"
-    "无法确定写 null，不要估算，不要补全。"
-)
+TRANSCRIBE_PROMPT_SUFFIX = figures_prompts.TRANSCRIBE_PROMPT_SUFFIX
 
 
 class VLMClient(Protocol):
@@ -114,6 +93,7 @@ class CheckFailure:
 @dataclass(frozen=True, slots=True)
 class ReconciliationResult:
     """ReconciliationResult."""
+
     ok: bool
     failures: tuple[CheckFailure, ...] = ()
     stats: dict[str, Any] = field(default_factory=dict)
@@ -137,7 +117,8 @@ class Transcript:
         """Run values."""
         out: list[float] = []
         for curve in self.series:
-            for point in curve.get("points") or ():
+            points = curve.get("points")
+            for point in points if points else ():
                 value = point.get("value")
                 if isinstance(value, int | float):
                     out.append(float(value))
@@ -147,7 +128,8 @@ class Transcript:
         """Run labels."""
         out: list[str] = []
         for curve in self.series:
-            for point in curve.get("points") or ():
+            points = curve.get("points")
+            for point in points if points else ():
                 label = point.get("label")
                 if isinstance(label, str) and label.strip():
                     out.append(label.strip())
@@ -424,11 +406,13 @@ def _is_percentile(transcript: Transcript, kinds: Sequence[str]) -> bool:
     if any(token in transcript.kind.lower() for token in kinds):
         return True
     for curve in transcript.series:
-        unit = str(curve.get("unit") or "").strip()
+        unit = str(curve.get("unit") if curve.get("unit") else "").strip()
         if unit in {"%", "％", "percent"}:
             return True
     for axis in transcript.axes.values():
-        if isinstance(axis, dict) and str(axis.get("unit") or "").strip() in {
+        if isinstance(axis, dict) and str(
+            axis.get("unit") if axis.get("unit") else ""
+        ).strip() in {
             "%",
             "％",
             "percent",

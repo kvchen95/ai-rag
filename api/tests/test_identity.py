@@ -1,4 +1,4 @@
-"""身份解析（§5.1）：四种取值 + 三种边界，每种都验正反两个方向。
+"""身份解析（§5.1）：四种取值 + 三种边界，每种都验正反两个方向。.
 
 要点：
 - 无部门/多部门/管理员是卡片点名的三条，各自验"能通过"与"行为不同"；
@@ -31,6 +31,7 @@ SECRET = "unit-test-secret"
 
 
 def _settings(**overrides: object) -> Settings:
+    """Run _settings."""
     values: dict[str, object] = {
         "AUTH_JWT_SECRET": SECRET,
         "AUTH_MODE": "fixed_jwt",
@@ -40,7 +41,7 @@ def _settings(**overrides: object) -> Settings:
 
 
 def _token(settings: Settings, **claims: object) -> str:
-    """手搓 token：测试要能造出"缺 exp""admin 是字符串"这类畸形凭证。"""
+    """手搓 token：测试要能造出"缺 exp""admin 是字符串"这类畸形凭证。."""
     payload: dict[str, object] = {
         "iat": int(time.time()),
         "exp": int(time.time()) + 600,
@@ -57,6 +58,7 @@ def _token(settings: Settings, **claims: object) -> str:
 
 
 def test_no_depts_means_public_only() -> None:
+    """Run test_no_depts_means_public_only."""
     settings = _settings()
     resolver = IdentityResolver(settings)
     token = _token(settings, sub="u_new", user_depts=[], user_roles=[])
@@ -68,6 +70,7 @@ def test_no_depts_means_public_only() -> None:
 
 
 def test_multiple_depts_and_roles_are_kept_as_sets() -> None:
+    """Run test_multiple_depts_and_roles_are_kept_as_sets."""
     settings = _settings()
     resolver = IdentityResolver(settings)
     token = _token(
@@ -85,7 +88,7 @@ def test_multiple_depts_and_roles_are_kept_as_sets() -> None:
 
 
 def test_depts_as_comma_string_is_accepted() -> None:
-    """上游塞逗号串比塞数组常见得多；两种都收，但都要归一成同一形状。"""
+    """上游塞逗号串比塞数组常见得多；两种都收，但都要归一成同一形状。."""
     settings = _settings()
     resolver = IdentityResolver(settings)
     token = _token(settings, sub="u_str", user_depts="fin, corp")
@@ -94,6 +97,7 @@ def test_depts_as_comma_string_is_accepted() -> None:
 
 
 def test_admin_is_marked_for_audit() -> None:
+    """Run test_admin_is_marked_for_audit."""
     settings = _settings()
     resolver = IdentityResolver(settings)
     token = _token(settings, sub="u_admin", user_depts=[], admin=True)
@@ -106,6 +110,7 @@ def test_admin_is_marked_for_audit() -> None:
 
 
 def test_non_admin_has_no_audit_flag() -> None:
+    """Run test_non_admin_has_no_audit_flag."""
     settings = _settings()
     token = _token(settings, sub="u_norm", user_depts=["fin"])
     snap = IdentityResolver(settings).resolve(
@@ -116,7 +121,7 @@ def test_non_admin_has_no_audit_flag() -> None:
 
 @pytest.mark.parametrize("value", ["false", "0", "no", "", None, 0])
 def test_admin_flag_is_not_truthy_coerced(value: object) -> None:
-    """`bool("false")` 是 True。
+    """`bool("false")` 是 True。.
 
     上游把 admin 写成字符串 "false" 时，用真值转换会把所有人变成管理员，
     所以只认布尔与明确的写法。
@@ -131,6 +136,7 @@ def test_admin_flag_is_not_truthy_coerced(value: object) -> None:
 @pytest.mark.parametrize("value", [True, "true", "1", "yes", "TRUE"])
 def test_admin_flag_accepts_explicit_true(value: object) -> None:
     # 反方向：真值必须被认出来，否则上面那条用例可以靠"永远返回 False"通过。
+    """Run test_admin_flag_accepts_explicit_true."""
     settings = _settings()
     snap = IdentityResolver(settings).resolve(
         authorization=f"Bearer {_token(settings, sub='u_x', admin=value)}"
@@ -142,6 +148,7 @@ def test_admin_flag_accepts_explicit_true(value: object) -> None:
 
 
 def test_missing_authorization_is_401() -> None:
+    """Run test_missing_authorization_is_401."""
     resolver = IdentityResolver(_settings())
     with pytest.raises(AppError) as excinfo:
         resolver.resolve(authorization=None)
@@ -161,6 +168,7 @@ def test_missing_authorization_is_401() -> None:
 def test_malformed_authorization_scheme_is_401(
     authorization: str, needle: str
 ) -> None:
+    """Run test_malformed_authorization_scheme_is_401."""
     resolver = IdentityResolver(_settings())
     with pytest.raises(AppError) as excinfo:
         resolver.resolve(authorization=authorization)
@@ -169,6 +177,7 @@ def test_malformed_authorization_scheme_is_401(
 
 
 def test_expired_token_is_401() -> None:
+    """Run test_expired_token_is_401."""
     settings = _settings()
     token = _token(settings, sub="u_x", exp=int(time.time()) - 10)
     with pytest.raises(AppError) as excinfo:
@@ -178,7 +187,7 @@ def test_expired_token_is_401() -> None:
 
 
 def test_token_without_exp_is_401() -> None:
-    """没有 exp 的 token 永不过期 = 一张长期通行证。必须拒。"""
+    """没有 exp 的 token 永不过期 = 一张长期通行证。必须拒。."""
     settings = _settings()
     token = jwt.encode(
         {"sub": "u_x"},
@@ -191,6 +200,7 @@ def test_token_without_exp_is_401() -> None:
 
 
 def test_wrong_signature_is_401() -> None:
+    """Run test_wrong_signature_is_401."""
     settings = _settings()
     forged = jwt.encode(
         {"sub": "u_x", "exp": int(time.time()) + 600},
@@ -203,7 +213,7 @@ def test_wrong_signature_is_401() -> None:
 
 
 def test_algorithm_mismatch_is_401() -> None:
-    """Alg 只认配置里那一个：按 token 头部自选 alg 是算法混淆漏洞。"""
+    """Alg 只认配置里那一个：按 token 头部自选 alg 是算法混淆漏洞。."""
     settings = _settings()
     signed = jwt.encode(
         {"sub": "u_x", "exp": int(time.time()) + 600}, SECRET, algorithm="HS512"
@@ -214,6 +224,7 @@ def test_algorithm_mismatch_is_401() -> None:
 
 
 def test_unsigned_token_is_401() -> None:
+    """Run test_unsigned_token_is_401."""
     settings = _settings()
     unsigned = jwt.encode(
         {"sub": "u_x", "exp": int(time.time()) + 600}, None, algorithm="none"
@@ -224,6 +235,7 @@ def test_unsigned_token_is_401() -> None:
 
 
 def test_missing_user_id_claim_is_401() -> None:
+    """Run test_missing_user_id_claim_is_401."""
     settings = _settings()
     with pytest.raises(AppError) as excinfo:
         IdentityResolver(settings).resolve(
@@ -234,7 +246,7 @@ def test_missing_user_id_claim_is_401() -> None:
 
 @pytest.mark.parametrize("claim_value", [[1, 2], {"fin": True}, 42])
 def test_non_string_claim_elements_are_401(claim_value: object) -> None:
-    """静默把 dict/数字当成“没有部门”最危险。
+    """静默把 dict/数字当成“没有部门”最危险。.
 
     用户以为只是权限小，其实凭证坏了。
     """
@@ -248,7 +260,7 @@ def test_non_string_claim_elements_are_401(claim_value: object) -> None:
 
 
 def test_numeric_sub_is_rejected_by_rfc_string_rule() -> None:
-    """`sub` 按 RFC 7519 必须是字符串。
+    """`sub` 按 RFC 7519 必须是字符串。.
 
     PyJWT 在解码阶段就拒，比我们更早。这条不是缺陷而是标准行为——数字
     主键的 IdP 要配 `AUTH_JWT_USER_ID_CLAIM=uid` 之类的自定义 claim
@@ -263,7 +275,7 @@ def test_numeric_sub_is_rejected_by_rfc_string_rule() -> None:
 
 
 def test_numeric_custom_claim_is_coerced() -> None:
-    """自定义 claim 不带 RFC 校验，数字主键在这一路归一成字符串。"""
+    """自定义 claim 不带 RFC 校验，数字主键在这一路归一成字符串。."""
     settings = _settings(AUTH_JWT_USER_ID_CLAIM="uid")
     snap = IdentityResolver(settings).resolve(
         authorization=f"Bearer {_token(settings, uid=1024)}"
@@ -275,23 +287,26 @@ def test_numeric_custom_claim_is_coerced() -> None:
 
 
 def test_snapshot_rejects_blank_user_id() -> None:
+    """Run test_snapshot_rejects_blank_user_id."""
     with pytest.raises(ValueError):
         IdentitySnapshot(user_id="   ")
 
 
 def test_snapshot_is_frozen() -> None:
+    """Run test_snapshot_is_frozen."""
     snap = IdentitySnapshot(user_id="u_x")
     with pytest.raises(ValueError):
         snap.admin = True  # type: ignore[misc]
 
 
 def test_snapshot_forbids_extra_fields() -> None:
-    """§5.1：四个字段之外不再扩展——多一个字段要在三处同步改。"""
+    """§5.1：四个字段之外不再扩展——多一个字段要在三处同步改。."""
     with pytest.raises(ValueError):
         IdentitySnapshot(user_id="u_x", tenant="t1")  # type: ignore[call-arg]
 
 
 def test_to_audit_matches_qa_log_columns() -> None:
+    """Run test_to_audit_matches_qa_log_columns."""
     snap = IdentitySnapshot(
         user_id="u_x", depts=("fin",), roles=("staff",), admin=False
     )
@@ -307,6 +322,7 @@ def test_to_audit_matches_qa_log_columns() -> None:
 
 
 def test_mock_header_mode_reads_identity_from_headers() -> None:
+    """Run test_mock_header_mode_reads_identity_from_headers."""
     settings = _settings(
         AUTH_MODE="mock_header", AUTH_MOCK_USER_ID="", AUTH_MOCK_DEPTS=""
     )
@@ -325,6 +341,7 @@ def test_mock_header_mode_reads_identity_from_headers() -> None:
 
 
 def test_mock_header_mode_requires_user_header() -> None:
+    """Run test_mock_header_mode_requires_user_header."""
     resolver = IdentityResolver(_settings(AUTH_MODE="mock_header"))
     with pytest.raises(AppError) as excinfo:
         resolver.resolve(headers={HEADER_DEPTS: "fin"})
@@ -335,6 +352,7 @@ def test_mock_header_mode_requires_user_header() -> None:
 
 
 def test_mint_dev_token_round_trips() -> None:
+    """Run test_mint_dev_token_round_trips."""
     settings = _settings()
     token = mint_dev_token(
         settings, user_id="u_dev", depts=("fin",), roles=("staff",), admin=True
@@ -349,18 +367,19 @@ def test_mint_dev_token_round_trips() -> None:
 
 
 def test_mint_dev_token_refuses_in_prod() -> None:
-    """签发能力留在生产进程里 = 一个谁都能当的入口。"""
+    """签发能力留在生产进程里 = 一个谁都能当的入口。."""
     with pytest.raises(RuntimeError, match="生产"):
         mint_dev_token(_settings(APP_ENV="prod"), user_id="u_dev")
 
 
 def test_mint_dev_token_refuses_in_mock_mode() -> None:
+    """Run test_mint_dev_token_refuses_in_mock_mode."""
     with pytest.raises(RuntimeError, match="fixed_jwt"):
         mint_dev_token(_settings(AUTH_MODE="mock_header"), user_id="u_dev")
 
 
 def test_claims_are_configurable() -> None:
-    """Claim 名走配置：换 IdP 不该改代码。"""
+    """Claim 名走配置：换 IdP 不该改代码。."""
     settings = _settings(
         AUTH_JWT_USER_ID_CLAIM="uid",
         AUTH_JWT_DEPTS_CLAIM="dept_codes",

@@ -10,10 +10,10 @@ import html
 import re
 from typing import Any
 
+from api.resources import parsing
+
 _TERMINAL = ("。", "！", "？", "；", ".", "!", "?", ";", "）", ")")
-_LIST_RE = re.compile(
-    r"^(?:[●⚫•\-–\*]\s+|\d+[.)]\s+|[（(]?[一二三四五六七八九十]+[、.)]\s*)"
-)
+_LIST_RE = parsing.LIST_ITEM_PREFIX
 
 
 def _strip_tags(value: str) -> str:
@@ -55,7 +55,11 @@ def html_table_to_markdown(html_text: str) -> str:
 def _repair_table(block: dict[str, Any]) -> tuple[str, list[str]]:
     """Run _repair_table."""
     repairs: list[str] = []
-    source = str(block.get("table_body") or block.get("text") or "").strip()
+    source = str(
+        block.get("table_body") or block.get("text")
+        if block.get("table_body") or block.get("text")
+        else ""
+    ).strip()
     if "<table" in source.lower():
         markdown = html_table_to_markdown(source)
         if markdown != source:
@@ -120,7 +124,9 @@ def repair_blocks(raw_blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if block.get("type") == "table":
             text, repairs = _repair_table(block)
         else:
-            text, repairs = _clean_text(str(block.get("text") or ""))
+            text, repairs = _clean_text(
+                str(block.get("text") if block.get("text") else "")
+            )
         block["text"] = text
         block["repairs"] = repairs
         level = _heading_level(block)
@@ -149,7 +155,9 @@ def repair_blocks(raw_blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
             and repaired
             and repaired[-1].get("type") not in {"header", "table"}
             and not repaired[-1].get("is_list_item")
-            and not str(repaired[-1].get("text") or "")
+            and not str(
+                repaired[-1].get("text") if repaired[-1].get("text") else ""
+            )
             .rstrip()
             .endswith(_TERMINAL)
             and not str(text).lstrip().startswith(("●", "⚫", "-", "1.", "2."))

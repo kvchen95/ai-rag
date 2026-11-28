@@ -38,6 +38,9 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
+from api.resources import messages as msg
+from api.resources import parsing
+
 CHUNK = 1 << 20
 
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -63,33 +66,7 @@ MAX_PINYIN_SYLLABLES = 8
 #      只写"数字+可选月日"会漏掉 `年3月`（月后面没有日）。
 #   2. 修饰词既可能是裸的（`-副本`）也可能被括号包住（`(副本)`）。带括号的必须
 #      整组匹配，否则 `制度(副本)` 会被剥成 `制度(副本` 这种半截。
-_TAIL_PATTERNS: tuple[re.Pattern[str], ...] = (
-    # -v2 / _v2.1 / v3
-    re.compile(r"[-_\s]*v\d+(?:[.\-]\d+)*$", re.IGNORECASE),
-    # 20250301 / 2025-03-01 / 2025_03 / 2025年3月 / 2025年3月1日 / 2025
-    re.compile(
-        r"[-_\s]*\d{4}"
-        r"(?:[-_.年]\d{1,2}(?:[-_.月]\d{1,2}日?|月)?)?"
-        r"(?:版|年度?)?$"
-    ),
-    # 第2版 / 第2稿 / 2版 / 二稿
-    re.compile(r"[-_\s]*(?:第\s*\d+\s*[版稿次]|[二三四五六七八九十]+稿)$"),
-    # 修订 / 修订版 / 终版 / 定稿 / final / draft
-    re.compile(
-        r"[-_\s]*(?:修订版?|终版?|正式版?|定稿版?|最新版?|final|draft)$",
-        re.IGNORECASE,
-    ),
-    # 副本 / 拷贝 / copy / 备份，裸写或被括号包住（括号整组匹配，不留半截）
-    re.compile(
-        r"[-_\s]*(?:副本|拷贝|备份|copy|副本拷贝)$"
-        r"|[-_\s]*[\(（\[【](?:副本|拷贝|备份|copy)[\)）\]】]$",
-        re.IGNORECASE,
-    ),
-    # (2) / （2） / [2]
-    re.compile(r"[-_\s]*[\(（\[【]\s*\d+\s*[\)）\]】]$"),
-    # 纯序号段尾：-2 / _2
-    re.compile(r"[-_\s]+\d{1,2}$"),
-)
+_TAIL_PATTERNS: tuple[re.Pattern[str], ...] = parsing.FILE_TAIL_PATTERNS
 
 # 空白统一成单个连字符：文件名里"差旅 管理 办法"与"差旅管理 办法"不该是
 # 两个 key。
@@ -146,11 +123,7 @@ def _to_ascii_slug(text: str) -> str:
     except ImportError as exc:  # pragma: no cover - 只在裁剪过的部署里发生
         if os.environ.get("AI_RAG_ALLOW_CJK_DOC_KEY") == "1":
             return text.lower()
-        raise DocKeyNeedsPinyinError(
-            "doc_key 生成需要 pypinyin 把中文转成 ASCII 标识符"
-            "（pip install pypinyin）。"
-            "若确实要接受中文 doc_key，设 AI_RAG_ALLOW_CJK_DOC_KEY=1。"
-        ) from exc
+        raise DocKeyNeedsPinyinError(msg.DOC_KEY_NEEDS_PINYIN) from exc
     # 标点（`，`、`：`、`（）`、`——`）不是音节，拼音化后仍会留在串里，
     # 让 key 变成 `...ti-sheng-，`。先按"非字母数字非中文"切开，只取有内容的段。
     cleaned = re.sub(r"[^0-9A-Za-z\u3400-\u4dbf\u4e00-\u9fff]+", " ", text)

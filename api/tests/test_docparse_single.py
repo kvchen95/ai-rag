@@ -1,4 +1,4 @@
-"""单文件解析入口：付费闸门与阶段产物（不花真实 API token）。"""
+"""单文件解析入口：付费闸门与阶段产物（不花真实 API token）。."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from api.docparse.single import GateError, run_single
 
 
 def test_cli_exposes_only_single_subcommand():
+    """Run test_cli_exposes_only_single_subcommand."""
     parser = build_parser()
     sub = next(
         action
@@ -25,6 +26,7 @@ def test_cli_exposes_only_single_subcommand():
 
 
 def test_dry_run_never_creates_a_paid_client(monkeypatch, tmp_path):
+    """Run test_dry_run_never_creates_a_paid_client."""
     from api.docparse import single
 
     source = tmp_path / "doc.pdf"
@@ -32,6 +34,7 @@ def test_dry_run_never_creates_a_paid_client(monkeypatch, tmp_path):
     monkeypatch.setattr(single, "local_page_count", lambda path: 7)
 
     def no_client(*_args, **_kwargs):
+        """Run no_client."""
         raise AssertionError("dry-run 不允许构造付费客户端")
 
     monkeypatch.setattr(single, "_default_client", no_client)
@@ -47,6 +50,7 @@ def test_dry_run_never_creates_a_paid_client(monkeypatch, tmp_path):
 
 
 def test_missing_max_pages_refuses_before_network(monkeypatch, tmp_path):
+    """Run test_missing_max_pages_refuses_before_network."""
     from api.docparse import single
 
     source = tmp_path / "doc.pdf"
@@ -54,6 +58,7 @@ def test_missing_max_pages_refuses_before_network(monkeypatch, tmp_path):
     monkeypatch.setattr(single, "local_page_count", lambda path: 7)
 
     def no_client(*_args, **_kwargs):
+        """Run no_client."""
         raise AssertionError("没有 --max-pages 时不允许发请求")
 
     monkeypatch.setattr(single, "_default_client", no_client)
@@ -64,6 +69,7 @@ def test_missing_max_pages_refuses_before_network(monkeypatch, tmp_path):
 
 
 def test_single_writes_mineru_stage_and_manifest(monkeypatch, tmp_path):
+    """Run test_single_writes_mineru_stage_and_manifest."""
     from api.docparse import single
 
     source = tmp_path / "demo.pdf"
@@ -79,14 +85,18 @@ def test_single_writes_mineru_stage_and_manifest(monkeypatch, tmp_path):
     zip_bytes = buffer.getvalue()
 
     class FakeClient:
+        """FakeClient."""
         def submit_local(self, path, data_id):
+            """Run submit_local."""
             assert data_id
             return "batch-1"
 
         def wait_result(self, batch_id):
+            """Run wait_result."""
             return "https://cdn.example/result.zip"
 
         def download(self, url):
+            """Run download."""
             return zip_bytes
 
     out = tmp_path / "out"
@@ -110,12 +120,15 @@ def test_single_writes_mineru_stage_and_manifest(monkeypatch, tmp_path):
 
 
 def test_download_retry_raises_clean_error(monkeypatch):
+    """Run test_download_retry_raises_clean_error."""
     from api.docparse import single
 
     calls = 0
 
     class Flaky:
+        """Flaky."""
         def download(self, url):
+            """Run download."""
             nonlocal calls
             calls += 1
             raise OSError("network down")
@@ -127,6 +140,7 @@ def test_download_retry_raises_clean_error(monkeypatch):
 
 
 def test_result_origin_url_maps_cdn_to_oss():
+    """Run test_result_origin_url_maps_cdn_to_oss."""
     from api.docparse.mineru_client import result_origin_url
 
     url = "https://cdn-mineru.openxlab.org.cn/pdf/2026-11-25/result.zip"
@@ -137,12 +151,14 @@ def test_result_origin_url_maps_cdn_to_oss():
 
 
 def test_download_falls_back_to_origin(monkeypatch):
+    """Run test_download_falls_back_to_origin."""
     from api.docparse.mineru_client import MineruClient, MineruError
 
     client = MineruClient("https://mineru.net/api/v4", "token")
     calls: list[str] = []
 
     def fake_get(url):
+        """Run fake_get."""
         calls.append(url)
         if url.startswith("https://cdn-"):
             raise MineruError("ssl eof")
@@ -160,6 +176,7 @@ def test_download_falls_back_to_origin(monkeypatch):
 
 
 def test_full_single_writes_all_stage_files(tmp_path):
+    """Run test_full_single_writes_all_stage_files."""
     from api.docparse import stages
 
     source = tmp_path / "doc.pdf"
@@ -183,16 +200,21 @@ def test_full_single_writes_all_stage_files(tmp_path):
     zip_bytes = buffer.getvalue()
 
     class FakeClient:
+        """FakeClient."""
         def submit_local(self, path, data_id):
+            """Run submit_local."""
             return "batch-1"
 
         def wait_result(self, batch_id):
+            """Run wait_result."""
             return "https://cdn.example/result.zip"
 
         def download(self, url):
+            """Run download."""
             return zip_bytes
 
     def fake_runner(pdf_path):
+        """Run fake_runner."""
         return [
             {
                 "page_num": 1,
@@ -235,6 +257,7 @@ def test_full_single_writes_all_stage_files(tmp_path):
 
 
 def test_resume_download_never_resubmits_paid_task(tmp_path):
+    """Run test_resume_download_never_resubmits_paid_task."""
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
         archive.writestr(
@@ -254,16 +277,20 @@ def test_resume_download_never_resubmits_paid_task(tmp_path):
     )
 
     class FakeClient:
+        """FakeClient."""
         poll_interval_s = 3.0
         poll_timeout_s = 900.0
 
         def submit_local(self, path, data_id):
+            """Run submit_local."""
             raise AssertionError("恢复下载不允许重新提交任务")
 
         def wait_result(self, batch_id):
+            """Run wait_result."""
             raise AssertionError("已有 zip_url 时不需要再轮询")
 
         def download(self, url):
+            """Run download."""
             return buffer.getvalue()
 
     summary = run_single(

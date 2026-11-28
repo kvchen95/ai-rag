@@ -1,4 +1,4 @@
-"""时序图查询解析与证据合并。"""
+"""时序图查询解析与证据合并。."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from api.time_range import TimeRange
 
 
 def _fact(metric: str, year: int, value: str, unit: str = "元") -> TemporalFact:
+    """Run _fact."""
     return TemporalFact(
         fact_id=f"tf_{metric}_{year}",
         subject="寒武纪",
@@ -32,6 +33,7 @@ def _fact(metric: str, year: int, value: str, unit: str = "元") -> TemporalFact
 
 
 def test_resolve_query_from_scope() -> None:
+    """Run test_resolve_query_from_scope."""
     graph = TemporalKnowledgeGraph(
         [
             _fact("研发投入合计", 2026, "702466071.26"),
@@ -63,6 +65,7 @@ def test_resolve_query_from_scope() -> None:
 
 
 def test_revenue_query_does_not_pull_rd_ratio() -> None:
+    """Run test_revenue_query_does_not_pull_rd_ratio."""
     graph = TemporalKnowledgeGraph(
         [
             replace(
@@ -88,6 +91,7 @@ def test_revenue_query_does_not_pull_rd_ratio() -> None:
 
 
 def test_resolve_query_returns_none_without_metric() -> None:
+    """Run test_resolve_query_returns_none_without_metric."""
     graph = TemporalKnowledgeGraph(
         [_fact("研发投入合计", 2026, "702466071.26")]
     )
@@ -95,6 +99,7 @@ def test_resolve_query_returns_none_without_metric() -> None:
 
 
 def test_resolve_query_uses_previous_quarter_for_qoq() -> None:
+    """Run test_resolve_query_uses_previous_quarter_for_qoq."""
     graph = TemporalKnowledgeGraph(
         [
             replace(
@@ -125,6 +130,7 @@ def test_resolve_query_uses_previous_quarter_for_qoq() -> None:
 
 
 def test_temporal_evidence_merges_periods_from_same_chunk(monkeypatch) -> None:
+    """Run test_temporal_evidence_merges_periods_from_same_chunk."""
     graph = TemporalKnowledgeGraph(
         [
             _fact("研发投入合计", 2026, "702466071.26"),
@@ -146,6 +152,7 @@ def test_temporal_evidence_merges_periods_from_same_chunk(monkeypatch) -> None:
     assert query is not None
 
     class _Chunk:
+        """_Chunk."""
         chunk_id = "ch_shared"
         doc_key = "reports/cambricon-2026-h1"
         doc_name = "寒武纪2026半年报.pdf"
@@ -154,6 +161,7 @@ def test_temporal_evidence_merges_periods_from_same_chunk(monkeypatch) -> None:
         chunk_type = "table"
 
     def _fetch(_pg, _ids):
+        """Run _fetch."""
         return {"ch_shared": _Chunk()}
 
     monkeypatch.setattr("api.temporal.context.fetch_texts", _fetch)
@@ -164,6 +172,7 @@ def test_temporal_evidence_merges_periods_from_same_chunk(monkeypatch) -> None:
 
 
 def test_merge_evidence_renumbers_and_deduplicates() -> None:
+    """Run test_merge_evidence_renumbers_and_deduplicates."""
     base = EvidencePack(
         items=(Evidence(1, "ch_a", ("ch_a",), "d", "n", 1, [], "x", "text"),)
     )
@@ -179,6 +188,7 @@ def test_merge_evidence_renumbers_and_deduplicates() -> None:
 def test_qa_service_appends_graph_evidence_when_query_matches(
     monkeypatch,
 ) -> None:
+    """Run test_qa_service_appends_graph_evidence_when_query_matches."""
     graph = TemporalKnowledgeGraph(
         [
             _fact("研发投入合计", 2026, "702466071.26"),
@@ -187,7 +197,9 @@ def test_qa_service_appends_graph_evidence_when_query_matches(
     )
 
     class _Repo:
+        """_Repo."""
         def load(self):
+            """Run load."""
             return graph
 
     service = QaService(

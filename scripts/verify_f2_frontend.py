@@ -36,8 +36,17 @@ import urllib.error
 import urllib.request
 from typing import Any
 
+if __package__:
+    from .resources.verify_f2_frontend_msgs import MESSAGES as M
+else:  # run as a script: python3 scripts/verify_f2_frontend.py
+    from resources.verify_f2_frontend_msgs import MESSAGES as M
+
 # 演示样本：覆盖"有证据作答 / 有权限但库外问题 / 多实体"三种出口。
-DEMO_QUESTIONS = ("住宿标准是多少", "报销标准是多少", "差旅和报销的区别")
+DEMO_QUESTIONS = (
+    M["DEMO_QUESTIONS_01"],
+    M["DEMO_QUESTIONS_02"],
+    M["DEMO_QUESTIONS_03"],
+)
 
 CITE_RE = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\]")
 
@@ -53,6 +62,7 @@ CHECKS: list[tuple[str, bool, str]] = []
 
 
 def check(name: str, ok: bool, detail: str = "") -> None:
+    """Run check."""
     CHECKS.append((name, ok, detail))
     print(
         f"  [{'PASS' if ok else 'FAIL'}] {name}"
@@ -111,6 +121,7 @@ def _request(
     body: dict[str, Any] | None = None,
     timeout: float = 60.0,
 ) -> tuple[int, dict[str, str], bytes]:
+    """Run _request."""
     data = json.dumps(body).encode("utf-8") if body is not None else None
     request = urllib.request.Request(f"{api}{path}", data=data, method=method)
     if token:
@@ -133,6 +144,7 @@ def _request(
 
 
 def parse_sse(text: str) -> list[tuple[str, dict[str, Any]]]:
+    """Run parse_sse."""
     frames: list[tuple[str, dict[str, Any]]] = []
     for block in text.split("\n\n"):
         block = block.strip()
@@ -159,20 +171,27 @@ def parse_sse(text: str) -> list[tuple[str, dict[str, Any]]]:
 def check_event_order(
     label: str, frames: list[tuple[str, dict[str, Any]]]
 ) -> None:
+    """Run check_event_order."""
     names = [name for name, _ in frames]
-    check(f"{label}: 有事件", bool(names), f"{len(names)} frame(s)")
+    check(f"{label}{M['CHECK_01']}", bool(names), f"{len(names)} frame(s)")
     if not names:
         return
     check(
-        f"{label}: done 是最后一帧", names[-1] == "done", f"最后是 {names[-1:]}"
+        f"{label}{M['CHECK_02']}",
+        names[-1] == "done",
+        f"{M['CHECK_03']}{names[-1:]}",
     )
-    check(f"{label}: step 打头", names[0] == "step", f"第一帧 {names[:1]}")
+    check(
+        f"{label}{M['CHECK_04']}",
+        names[0] == "step",
+        f"{M['CHECK_05']}{names[:1]}",
+    )
     if any(name in {"clarify", "fallback"} for name in names):
         # §10.4：拒答路径只有进度与收尾，没有逐字。
-        check(f"{label}: 拒答路径无 token", "token" not in names, f"{names}")
+        check(f"{label}{M['CHECK_06']}", "token" not in names, f"{names}")
     if "citations" in names:
         check(
-            f"{label}: citations 先于 done",
+            f"{label}{M['CHECK_07']}",
             names.index("citations") < names.index("done"),
         )
 
@@ -180,6 +199,7 @@ def check_event_order(
 def check_citation_fields(
     label: str, frames: list[tuple[str, dict[str, Any]]]
 ) -> None:
+    """Run check_citation_fields."""
     items: list[dict[str, Any]] = []
     text = ""
     for name, payload in frames:
@@ -188,11 +208,11 @@ def check_citation_fields(
         elif name == "token":
             text += str(payload.get("delta") or "")
     if not items:
-        check(f"{label}: 本轮无引用（无需检查角标）", True)
+        check(f"{label}{M['CHECK_08']}", True)
         return
     required = ("n", "doc_key", "doc_name", "page_num", "snippet", "chunk_id")
     missing = sorted({k for item in items for k in required if k not in item})
-    check(f"{label}: 引用字段齐", not missing, f"缺 {missing}")
+    check(f"{label}{M['CHECK_09']}", not missing, f"{M['CHECK_10']}{missing}")
 
     referenced: set[int] = set()
     for match in CITE_RE.finditer(text):
@@ -202,13 +222,13 @@ def check_citation_fields(
     known = {int(item["n"]) for item in items}
     orphans = sorted(referenced - known)
     check(
-        f"{label}: 角标全部可点回",
+        f"{label}{M['CHECK_11']}",
         not orphans,
-        f"正文 {sorted(referenced)} / citations {sorted(known)} / "
-        f"点不动 {orphans}",
+        f"{M['CHECK_12']}{sorted(referenced)} / citations "
+        f"{sorted(known)}{M['CHECK_13']}{orphans}",
     )
     check(
-        f"{label}: bbox 是数组或缺省（缺省即降级展示）",
+        f"{label}{M['CHECK_14']}",
         all(
             isinstance(item.get("bbox"), list) or item.get("bbox") is None
             for item in items
@@ -218,14 +238,20 @@ def check_citation_fields(
 
 
 def check_no_leak(leaks: list[tuple[str, str]]) -> None:
+    """Run check_no_leak."""
     for label, text in leaks:
         hits = [
             pattern.pattern for pattern in LEAK_PATTERNS if pattern.search(text)
         ]
-        check(f"不泄露：{label}", not hits, f"命中 {hits}" if hits else "")
+        check(
+            f"{M['CHECK_15']}{label}",
+            not hits,
+            f"{M['CHECK_16']}{hits}" if hits else "",
+        )
 
 
 def main() -> int:
+    """Run main."""
     parser = argparse.ArgumentParser(description="F2 frontend acceptance probe")
     parser.add_argument("--api", default="http://127.0.0.1:8000")
     parser.add_argument("--secret", default="dev-only-change-me")
@@ -239,7 +265,7 @@ def main() -> int:
 
     print("=" * 78)
     print(
-        f"F2 验收：SSE 顺序 / 角标可点回 / 样本四态 / 错误体不泄露  (api={api})"
+        f"{M['PRINT_01']}{api})"
     )
     print("=" * 78)
 
@@ -254,41 +280,41 @@ def main() -> int:
         )
         body = raw.decode("utf-8", "replace")
         frames = parse_sse(body)
-        print(f"\n问：{question}（HTTP {status}）")
-        print(f"  事件序列：{[name for name, _ in frames]}")
+        print(f"{M['PRINT_02']}{question}（HTTP {status}）")
+        print(f"{M['PRINT_03']}{[name for name, _ in frames]}")
         for name, payload in frames:
             if name in ("fallback", "done", "citations"):
                 print(
                     f"  {name}: {json.dumps(payload, ensure_ascii=False)[:220]}"
                 )
-        check(f"{question}: 流式响应 200", status == 200, f"{status}")
+        check(f"{question}{M['CHECK_17']}", status == 200, f"{status}")
         check_event_order(question, frames)
         check_citation_fields(question, frames)
-        leaks.append((f"问答流「{question}」", body))
+        leaks.append((f"{M['APPEND_01']}{question}」", body))
 
-    print("\n[接口四态]")
+    print(M["PRINT_04"])
     four = (
-        ("/api/v1/samples/policy/travel-cn.pdf", None, 401, "样本：无凭证 401"),
-        ("/api/v1/samples/policy/travel-cn.pdf", fin, 200, "样本：有权限 200"),
+        ("/api/v1/samples/policy/travel-cn.pdf", None, 401, M["FOUR_01"]),
+        ("/api/v1/samples/policy/travel-cn.pdf", fin, 200, M["FOUR_02"]),
         (
             "/api/v1/samples/policy/travel-cn.pdf",
             stranger,
             403,
-            "样本：无权限 403",
+            M["FOUR_03"],
         ),
         (
             "/api/v1/samples/policy/does-not-exist.pdf",
             fin,
             404,
-            "样本：不存在 404",
+            M["FOUR_04"],
         ),
         (
             "/api/v1/chunks/ch_fig_f2_1/figure",
             stranger,
             403,
-            "切片图：无权限 403",
+            M["FOUR_05"],
         ),
-        ("/api/v1/chunks/no_such_chunk/figure", fin, 404, "切片图：不存在 404"),
+        ("/api/v1/chunks/no_such_chunk/figure", fin, 404, M["FOUR_06"]),
     )
     for path, token, expect, label in four:
         status, headers, raw = _request(api, path, token=token)
@@ -299,7 +325,7 @@ def main() -> int:
                 "image/webp" if path.endswith("/figure") else "application/pdf"
             )
             check(
-                f"{label}：content-type 是 {expect_type}",
+                f"{label}{M['CHECK_18']}{expect_type}",
                 content_type.startswith(expect_type),
                 content_type,
             )
@@ -315,15 +341,15 @@ def main() -> int:
         token="not-a-jwt",
         body={"question": "x"},
     )
-    check("问答：坏凭证 401", bad_status == 401, f"{bad_status}")
-    leaks.append(("坏凭证 401", bad_raw.decode("utf-8", "replace")))
+    check(M["CHECK_19"], bad_status == 401, f"{bad_status}")
+    leaks.append((M["APPEND_02"], bad_raw.decode("utf-8", "replace")))
 
-    print("\n[不泄露]")
+    print(M["PRINT_05"])
     check_no_leak(leaks)
 
     failed = [name for name, ok, _ in CHECKS if not ok]
     print("\n" + "=" * 78)
-    print(f"判据 {len(CHECKS)} 条，失败 {len(failed)} 条")
+    print(f"{M['PRINT_06']}{len(CHECKS)}{M['PRINT_07']}{len(failed)}{M['PRINT_08']}")
     for name in failed:
         print(f"  FAIL {name}")
     print("=" * 78)

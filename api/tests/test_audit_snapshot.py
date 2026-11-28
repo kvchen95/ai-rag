@@ -1,4 +1,4 @@
-"""审计快照（§11.2 的 `score_snapshot`）必须真的装得下它声明的东西。
+"""审计快照（§11.2 的 `score_snapshot`）必须真的装得下它声明的东西。.
 
 这个文件只钉一件事：**同名字段不许互相覆盖**。B3 的 `score_snapshot()` 里
 `"rerank"` 键写了两遍，前一个（精排分数列表）被后一个（降级审计 dict）静默覆盖，
@@ -20,6 +20,7 @@ from api.retrieval.rerank import RerankOutcome
 def _cand(
     chunk_id: str, score: float | None, *, dense: float = 0.5
 ) -> Candidate:
+    """Run _cand."""
     return Candidate(
         chunk_id=chunk_id,
         doc_key="policy/travel",
@@ -37,6 +38,7 @@ def _cand(
 def _snapshot(
     candidates: list[Candidate], *, degraded: bool = False
 ) -> RetrievalSnapshot:
+    """Run _snapshot."""
     return RetrievalSnapshot(
         plan=understand("住宿标准是多少"),
         decision=GateDecision(
@@ -58,7 +60,7 @@ def _snapshot(
 
 
 def _dict_keys_unique_in_source() -> None:
-    """元判据：`score_snapshot()` 的源码里不许出现重复的字典键。
+    """元判据：`score_snapshot()` 的源码里不许出现重复的字典键。.
 
     这是唯一能在"键被覆盖"这件事**发生前**拦住它的地方——一旦字典构造完成，
     重复键在运行时已经不可见（`{"a": 1, "a": 2}` 就是一个 `{"a": 2}`）。
@@ -87,11 +89,12 @@ def _dict_keys_unique_in_source() -> None:
 
 
 def test_score_snapshot_source_has_no_duplicate_keys() -> None:
+    """Run test_score_snapshot_source_has_no_duplicate_keys."""
     _dict_keys_unique_in_source()
 
 
 def test_score_snapshot_keeps_the_rerank_score_distribution() -> None:
-    """分数分布必须留在审计里：它是"这次为什么判成弱相关"的第一个依据。"""
+    """分数分布必须留在审计里：它是"这次为什么判成弱相关"的第一个依据。."""
     snapshot = _snapshot([_cand("ch_a", 0.62), _cand("ch_b", 0.41)])
     audit: dict[str, Any] = snapshot.score_snapshot()
     assert audit["rerank_scores"] == [0.62, 0.41]
@@ -100,6 +103,7 @@ def test_score_snapshot_keeps_the_rerank_score_distribution() -> None:
 
 
 def test_degraded_snapshot_records_both_scores_and_the_degrade_reason() -> None:
+    """Run test_degraded_snapshot_records_both_scores_and_the_degrade_reason."""
     snapshot = _snapshot(
         [_cand("ch_a", None), _cand("ch_b", None)], degraded=True
     )
@@ -110,7 +114,7 @@ def test_degraded_snapshot_records_both_scores_and_the_degrade_reason() -> None:
 
 
 def test_score_snapshot_has_no_evidence_text() -> None:
-    """§11.2：审计只存编号与分数摘要，不存完整原文。"""
+    """§11.2：审计只存编号与分数摘要，不存完整原文。."""
     snapshot = _snapshot([_cand("ch_a", 0.62)])
     dumped = str(snapshot.score_snapshot())
     assert "ch_a" in dumped

@@ -4,6 +4,11 @@ import json
 import os
 from datetime import UTC, datetime
 
+if __package__:
+    from .resources.devops_report_gen_msgs import MESSAGES as M
+else:  # run as a script: python3 eval/_devops_report_gen.py
+    from resources.devops_report_gen_msgs import MESSAGES as M
+
 ROOT = (
     "/app/eval/reports/"
     if os.path.isdir("/app/eval/reports")
@@ -46,11 +51,11 @@ for fn, window in rounds:
             "coverage": next(
                 (
                     r["note"]
-                    .split("覆盖率 = 应答题得到答案/应答题总数 = ", 1)[1]
+                    .split(M['COVERAGE_01'], 1)[1]
                     .split("；")[0]
                     for r in d["red_lines"]
                     if r["key"] == "RL4"
-                    and "覆盖率 = 应答题得到答案/应答题总数 = " in r["note"]
+                    and M['COVERAGE_01'] in r["note"]
                 ),
                 None,
             ),

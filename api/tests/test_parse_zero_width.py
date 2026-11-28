@@ -1,4 +1,4 @@
-"""零宽字符与字宽兜底（§3.2 的隐含前提：坐标得能用）。
+"""零宽字符与字宽兜底（§3.2 的隐含前提：坐标得能用）。.
 
 **这一组是被真实样本逼出来的**：`scripts/make_samples.py` 生成的三份制度
 文件用标准 Helvetica 但没写 `/Widths`，pdfplumber 照实报每个字符 `w=0.00`
@@ -45,6 +45,7 @@ pytestmark = pytest.mark.skipif(
 def _char(
     text: str, *, x: float, top: float, height: float = 11.0, width: float = 0.0
 ) -> dict:
+    """Run _char."""
     return {
         "text": text,
         "x0": x,
@@ -59,7 +60,7 @@ def _char(
 
 
 def test_real_samples_have_zero_width_chars() -> None:
-    """先确认这个坑真实存在，否则后面的兜底测试是在测一个不存在的问题。
+    """先确认这个坑真实存在，否则后面的兜底测试是在测一个不存在的问题。.
 
     这条前提**只对 `make_samples.py` 造的样本成立**：它用标准 Helvetica 且不写
     `/Widths`，pdfplumber 照实报 `w=0.00`。真实财报/研报
@@ -81,7 +82,7 @@ def test_real_samples_have_zero_width_chars() -> None:
 
 
 def test_fallback_restores_spaces_and_line_width() -> None:
-    """`Travel Expense Policy (CN)` 不能被压成 `TravelExpensePolicy(CN)`。
+    """`Travel Expense Policy (CN)` 不能被压成 `TravelExpensePolicy(CN)`。.
 
     宽度也不能是 0。
     """
@@ -95,7 +96,7 @@ def test_fallback_restores_spaces_and_line_width() -> None:
 
 
 def test_fallback_keeps_the_words_separated_across_the_document() -> None:
-    """整份文档的每一行都该有空格（不是只有第一行）。"""
+    """整份文档的每一行都该有空格（不是只有第一行）。."""
     with pdfplumber.open(str(PORTRAIT)) as pdf:
         space = PageSpace.from_display(pdf.pages[0])
         lines = extract_lines(reading_chars(pdf.pages[0], space), 1)
@@ -105,7 +106,7 @@ def test_fallback_keeps_the_words_separated_across_the_document() -> None:
 
 
 def test_fallback_is_proportional_to_font_size() -> None:
-    """估算宽度按字号走：11pt 的字按 0.5em = 5.5pt 宽。
+    """估算宽度按字号走：11pt 的字按 0.5em = 5.5pt 宽。.
 
     硬编码一个固定像素宽会在不同字号的页上让 bbox 全部失真——而字号差一倍的
     标题/正文在同一页上很常见。
@@ -126,7 +127,7 @@ def test_fallback_is_proportional_to_font_size() -> None:
 
 
 def test_fallback_uses_full_em_for_cjk() -> None:
-    """中文按 1 em：汉字是方块字，用 0.5em 会让行宽只有一半。"""
+    """中文按 1 em：汉字是方块字，用 0.5em 会让行宽只有一半。."""
     chars = fill_missing_widths([_char("住", x=100.0, top=10.0, height=12.0)])
     assert chars[0]["x1"] - chars[0]["x0"] == pytest.approx(
         12.0 * FALLBACK_CJK_EM
@@ -134,6 +135,7 @@ def test_fallback_uses_full_em_for_cjk() -> None:
 
 
 def test_fallback_uses_a_narrow_space() -> None:
+    """Run test_fallback_uses_a_narrow_space."""
     chars = fill_missing_widths([_char(" ", x=100.0, top=10.0, height=10.0)])
     assert chars[0]["x1"] - chars[0]["x0"] == pytest.approx(
         10.0 * FALLBACK_SPACE_EM
@@ -141,7 +143,7 @@ def test_fallback_uses_a_narrow_space() -> None:
 
 
 def test_fallback_advances_the_cursor_within_a_line() -> None:
-    """同一行里字符必须依次排开，而不是全叠在同一个 x 上。
+    """同一行里字符必须依次排开，而不是全叠在同一个 x 上。.
 
     `x0` 全相同的 PDF 里只给宽度不推进游标，拼出来的行宽还是 0。
     """
@@ -160,7 +162,7 @@ def test_fallback_advances_the_cursor_within_a_line() -> None:
 
 
 def test_fallback_keeps_different_lines_independent() -> None:
-    """游标按 `top` 分开：上一行的游标不能把下一行推到右边去。"""
+    """游标按 `top` 分开：上一行的游标不能把下一行推到右边去。."""
     chars = fill_missing_widths(
         [_char("a", x=72.0, top=10.0), _char("b", x=72.0, top=30.0)]
     )
@@ -168,13 +170,14 @@ def test_fallback_keeps_different_lines_independent() -> None:
 
 
 def test_fallback_leaves_valid_widths_untouched() -> None:
-    """有真实字宽的 PDF 不能被改写（那会把准确的坐标换成估算值）。"""
+    """有真实字宽的 PDF 不能被改写（那会把准确的坐标换成估算值）。."""
     valid = _char("a", x=72.0, top=10.0, width=6.0)
     out = fill_missing_widths([valid])
     assert (out[0]["x0"], out[0]["x1"]) == (72.0, 78.0)
 
 
 def test_fallback_does_not_mutate_the_input() -> None:
+    """Run test_fallback_does_not_mutate_the_input."""
     original = _char("a", x=72.0, top=10.0)
     snapshot = dict(original)
     fill_missing_widths([original])
@@ -188,7 +191,7 @@ def test_fallback_does_not_mutate_the_input() -> None:
     "path", [PORTRAIT, LANDSCAPE], ids=lambda p: Path(p).stem
 )
 def test_zero_width_sample_produces_complete_chunks(path: Path) -> None:
-    """零宽样本也必须产出**通过六项校验**的切片。
+    """零宽样本也必须产出**通过六项校验**的切片。.
 
     这是"字段缺失被校验拦截"的另一面：如果兜底没做，`parse_document` 会直接抛
     `IncompleteChunk`（bbox 无效），整份文档一条切片都不出——那是比"bbox 略偏"
@@ -209,7 +212,7 @@ def test_zero_width_sample_produces_complete_chunks(path: Path) -> None:
 
 
 def test_zero_width_sample_bbox_covers_the_text() -> None:
-    """行宽估算之后，切片的 bbox 必须是一个**落在页面内、有实际宽度**的矩形。
+    """行宽估算之后，切片的 bbox 必须是一个**落在页面内、有实际宽度**的矩形。.
 
     判据只用两条硬边界（宽度 > 100pt 且 ≤ 页面宽）：再往上加"等于多少 pt"就是在
     断言估算系数的具体取值，而那是可以调的参数，不是正确性。

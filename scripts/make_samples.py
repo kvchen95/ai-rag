@@ -34,6 +34,11 @@ import argparse
 import sys
 from pathlib import Path
 
+if __package__:
+    from .resources.make_samples_msgs import MESSAGES as M
+else:  # run as a script: python3 scripts/make_samples.py
+    from resources.make_samples_msgs import MESSAGES as M
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # 每份样本：(相对路径, 每页正文)。正文用 ASCII + 中文都能写，但为了不依赖字体嵌
@@ -106,6 +111,7 @@ def build_pdf(pages: list[list[str]]) -> bytes:
     objects: list[bytes] = []
 
     def add(body: bytes) -> int:
+        """Run add."""
         objects.append(body)
         return len(objects)  # 对象号从 1 开始
 
@@ -127,7 +133,7 @@ def build_pdf(pages: list[list[str]]) -> bytes:
     font_id = 3
     assert objects[font_id - 1].startswith(
         b"<< /Type /Font"
-    ), "font 对象号位移了"
+    ), M["BUILD_PDF_01"]
 
     page_ids: list[int] = []
     for lines in pages:
@@ -195,13 +201,14 @@ def build_pdf(pages: list[list[str]]) -> bytes:
 
 
 def main() -> int:
+    """Run main."""
     ap = argparse.ArgumentParser(
         description="generate deterministic sample PDFs"
     )
     ap.add_argument(
-        "--root", default=str(REPO_ROOT / "samples"), help="samples 根目录"
+        "--root", default=str(REPO_ROOT / "samples"), help=M["HELP_01"]
     )
-    ap.add_argument("--force", action="store_true", help="覆盖已存在的样本")
+    ap.add_argument("--force", action="store_true", help=M["HELP_02"])
     args = ap.parse_args()
 
     root = Path(args.root)

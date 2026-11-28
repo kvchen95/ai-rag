@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from api.resources import messages as msg
+
 
 def _clean(text: str) -> str:
     """Run _clean."""
@@ -15,10 +17,10 @@ def render_final_markdown(blocks: list[dict[str, Any]]) -> str:
     """把富化后的块整合成一份可读的 Markdown 文档。."""
     lines: list[str] = []
     for block in blocks:
-        block_type = str(block.get("type") or "")
+        block_type = str(block.get("type") if block.get("type") else "")
         if block_type in {"header", "footer", "page_number", "page_footnote"}:
             continue
-        text = str(block.get("text") or "").strip()
+        text = str(block.get("text") if block.get("text") else "").strip()
         if not text:
             continue
         level = block.get("heading_level")
@@ -35,7 +37,7 @@ def render_final_markdown(blocks: list[dict[str, Any]]) -> str:
             lines.append("")
             continue
         if block_type == "chart":
-            lines.append("> [图表]")
+            lines.append(msg.CHART_PLACEHOLDER)
             lines.append("")
             continue
         lines.append(text)

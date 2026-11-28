@@ -34,6 +34,7 @@ import httpx
 
 from api.observability import get_logger, log_event
 from api.prompts.generate import GENERATION_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT
+from api.resources import messages as msg
 
 logger = get_logger("api.generate.llm")
 
@@ -145,7 +146,7 @@ def strip_code_fence(text: str) -> tuple[str, bool]:
     `changed=True` 只是"动过"，不代表围栏一定存在：这个标记进审计用来观察
     "模型是不是总在敷衍格式"，不要拿它当围栏检测器。
     """
-    original = text or ""
+    original = text if text else ""
     stripped = _CODE_FENCE.sub("", original).strip()
     unwrapped = stripped != original.strip()
     if not stripped:
@@ -167,7 +168,9 @@ def _int_list(value: Any, *, field_name: str) -> tuple[int, ...]:
         return ()
     if not isinstance(value, list | tuple):
         raise DraftFormatError(
-            f"{field_name} 必须是数组，实际是 {type(value).__name__}"
+            msg.FIELD_MUST_BE_LIST.format(
+                field=field_name, type_name=type(value).__name__
+            )
         )
     out: list[int] = []
     for item in value:
@@ -175,7 +178,9 @@ def _int_list(value: Any, *, field_name: str) -> tuple[int, ...]:
             if isinstance(item, str) and item.strip().isdigit():
                 out.append(int(item.strip()))
                 continue
-            raise DraftFormatError(f"{field_name} 里有非整数元素: {item!r}")
+            raise DraftFormatError(
+                msg.FIELD_BAD_INT_ITEM.format(field=field_name, item=item)
+            )
         out.append(int(item))
     return tuple(dict.fromkeys(out))
 
@@ -196,17 +201,20 @@ def parse_draft(payload: str, *, model: str = "") -> Draft:
     try:
         data = json.loads(body)
     except ValueError as exc:
-        raise DraftFormatError("模型输出不是 JSON", raw=body) from exc
+        raise DraftFormatError(msg.LLM_NOT_JSON, raw=body) from exc
     if not isinstance(data, dict):
         raise DraftFormatError(
-            f"模型输出不是对象: {type(data).__name__}", raw=body
+            msg.LLM_NOT_OBJECT.format(type_name=type(data).__name__),
+            raw=body,
         )
 
     status = data.get("status")
     if status not in ("answered", "unknown"):
-        raise DraftFormatError(f"status 缺失或非法: {status!r}", raw=body)
+        raise DraftFormatError(
+            msg.LLM_STATUS_INVALID.format(status=status), raw=body
+        )
     if "facts" not in data:
-        raise DraftFormatError("缺少 facts 字段", raw=body)
+        raise DraftFormatError(msg.LLM_FACTS_MISSING, raw=body)
 
     facts: list[Fact] = []
     raw_facts = data.get("facts")
@@ -214,30 +222,33 @@ def parse_draft(payload: str, *, model: str = "") -> Draft:
         raw_facts = []
     if not isinstance(raw_facts, list | tuple):
         raise DraftFormatError(
-            f"facts 必须是数组，实际 {type(raw_facts).__name__}", raw=body
+            msg.LLM_FACTS_NOT_LIST.format(type_name=type(raw_facts).__name__),
+            raw=body,
         )
     for item in raw_facts:
         if not isinstance(item, dict):
-            raise DraftFormatError(f"fact 不是对象: {item!r}", raw=body)
+            raise DraftFormatError(
+                msg.LLM_FACT_NOT_OBJECT.format(item=item), raw=body
+            )
         kind = str(item.get("kind") or "fact").strip().lower()
         if kind not in ("fact", "analysis", "calculation"):
-            raise DraftFormatError(f"fact.kind 非法: {kind!r}", raw=body)
+            raise DraftFormatError(
+                msg.LLM_FACT_KIND_INVALID.format(kind=kind), raw=body
+            )
         text = item.get("text")
         text = text.strip() if isinstance(text, str) else ""
-        name = str(item.get("name") or "").strip()
-        expression = str(item.get("expression") or "").strip()
-        result = str(item.get("result") or "").strip()
+        name = str(item.get("name") if item.get("name") else "").strip()
+        expression = str(
+            item.get("expression") if item.get("expression") else ""
+        ).strip()
+        result = str(item.get("result") if item.get("result") else "").strip()
         if kind == "calculation":
             if not name or not expression or not result:
-                raise DraftFormatError(
-                    "calculation 缺少 name/expression/result", raw=body
-                )
+                raise DraftFormatError(msg.LLM_CALC_INCOMPLETE, raw=body)
             if not text:
                 text = f"{name}：{expression} = {result}"
         if status == "answered" and not text:
-            raise DraftFormatError(
-                "status=answered 但 fact.text 为空", raw=body
-            )
+            raise DraftFormatError(msg.LLM_CALC_TEXT_EMPTY, raw=body)
         evidence_ids = item.get("evidence_ids")
         if evidence_ids is None:
             evidence_ids = item.get("citations")
@@ -245,9 +256,7 @@ def parse_draft(payload: str, *, model: str = "") -> Draft:
             evidence_ids = []
         evidence_ids = _str_list(evidence_ids, field_name="fact.evidence_ids")
         if status == "answered" and not evidence_ids:
-            raise DraftFormatError(
-                "status=answered 但 fact 缺少 evidence_ids", raw=body
-            )
+            raise DraftFormatError(msg.LLM_FACT_NO_EVIDENCE, raw=body)
         facts.append(
             Fact(
                 text=text,
@@ -260,7 +269,7 @@ def parse_draft(payload: str, *, model: str = "") -> Draft:
         )
 
     if status == "answered" and not facts:
-        raise DraftFormatError("status=answered 但 facts 为空", raw=body)
+        raise DraftFormatError(msg.LLM_ANSWERED_NO_FACTS, raw=body)
 
     data.get("raw", body)
     known = {"status", "facts", "citations", "claims", "answer"}
@@ -288,10 +297,8 @@ def build_generation_messages(
         {"role": "system", "content": GENERATION_SYSTEM_PROMPT},
         {
             "role": "user",
-            "content": (
-                f"【证据包】\n{evidence_block}\n\n"
-                f"【问题】\n{question.strip()}\n\n"
-                "只输出 JSON。"
+            "content": msg.GENERATION_USER_PROMPT.format(
+                evidence=evidence_block, question=question.strip()
             ),
         },
     ]
@@ -408,10 +415,15 @@ class LlmClient:
                     raise GenerationUnavailableError(
                         f"llm returned non-JSON: {exc}"
                     ) from exc
-                choices = (data or {}).get("choices") or []
+                data_body = data if data else {}
+                choices = data_body.get("choices")
+                if choices is None:
+                    choices = []
                 if not choices:
                     raise GenerationUnavailableError("llm returned no choices")
-                message = choices[0].get("message") or {}
+                message = choices[0].get("message")
+                if message is None:
+                    message = {}
                 content = message.get("content")
                 if not isinstance(content, str) or not content.strip():
                     raise GenerationUnavailableError(
@@ -487,19 +499,25 @@ def _str_list(value: Any, *, field_name: str) -> tuple[str, ...]:
         return ()
     if not isinstance(value, list | tuple):
         raise DraftFormatError(
-            f"{field_name} 必须是数组，实际是 {type(value).__name__}"
+            msg.FIELD_MUST_BE_LIST.format(
+                field=field_name, type_name=type(value).__name__
+            )
         )
     out: list[str] = []
     for item in value:
         if isinstance(item, bool):
-            raise DraftFormatError(f"{field_name} 里有非字符串元素: {item!r}")
+            raise DraftFormatError(
+                msg.FIELD_BAD_STR_ITEM.format(field=field_name, item=item)
+            )
         if isinstance(item, str):
             out.append(item)
             continue
         if isinstance(item, int):
             out.append(str(item))
             continue
-        raise DraftFormatError(f"{field_name} 里有非字符串元素: {item!r}")
+        raise DraftFormatError(
+            msg.FIELD_BAD_STR_ITEM.format(field=field_name, item=item)
+        )
     return tuple(dict.fromkeys(out))
 
 

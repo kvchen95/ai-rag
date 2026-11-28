@@ -1,4 +1,4 @@
-"""B4 集成夹具：真 PG + 真 Qdrant + 真 TEI 检索，生成/判别用可注入的替身。
+"""B4 集成夹具：真 PG + 真 Qdrant + 真 TEI 检索，生成/判别用可注入的替身。.
 
 为什么生成用替身而不是真模型：这台机器上**没有配置 LLM 网关**（`LLM_BASE_URL` /
 `LLM_MODEL` 都是空），所以"真模型生成"这一环在这里无法实测。诚实的做法是把它
@@ -60,7 +60,7 @@ FIN = IdentitySnapshot(user_id="u_fin", depts=("fin",), roles=("staff",))
 
 
 class ScriptedLlm(LlmClient):
-    """按脚本返回的 `LlmClient` 替身。
+    """按脚本返回的 `LlmClient` 替身。.
 
     两个方法分开配（生成 / 判别）：判别器的返回要与生成的对上才能验
     "第五道通过"，
@@ -69,12 +69,14 @@ class ScriptedLlm(LlmClient):
     """
 
     def __init__(self, *, generation: str, verdict: str = "SUPPORTED") -> None:  # noqa: D107
+        """Initialize the instance."""
         self.generation = generation
         self.verdict = verdict
         self.temperatures: list[float] = []
         self.prompts: list[str] = []
 
     def complete(self, messages, *, temperature: float = 0.0) -> str:  # type: ignore[override]
+        """Run complete."""
         self.temperatures.append(temperature)
         body = "\n".join(message["content"] for message in messages)
         self.prompts.append(body)
@@ -85,12 +87,13 @@ class ScriptedLlm(LlmClient):
 
 @pytest.fixture(scope="session")
 def b4_pg(b3_pg):  # noqa: F811 - 复用 B3 的真 PG（同一份 schema，同一个迁移入口）
+    """Run b4_pg."""
     return b3_pg
 
 
 @pytest.fixture(autouse=True)
 def _cleanup_b4_rows(pool) -> Iterator[None]:
-    """用例前后清掉 `b3test/` 命名空间里**本次留下的行**。
+    """用例前后清掉 `b3test/` 命名空间里**本次留下的行**。.
 
     为什么 B4 必须自己有一份：B3 的 `_cleanup_b3_rows` 只在
     `api/tests/b3/` 目录生效（`conftest.py` 的作用域是目录）。B4 复用
@@ -110,6 +113,7 @@ def _cleanup_b4_rows(pool) -> Iterator[None]:
 
 
 def _purge(pool) -> None:
+    """Run _purge."""
     with pool.connection() as connection:
         with connection.cursor() as cur:
             cur.execute(
@@ -145,7 +149,7 @@ def build_qa_service(
     reranker_client: Any,
     llm: LlmClient | None,
 ) -> QaService:
-    """按 B3 的真链路 + 给定的生成替身装一条问答链路。
+    """按 B3 的真链路 + 给定的生成替身装一条问答链路。.
 
     走 `build_pipeline(settings, pg)` 而不是自己 new 五个对象：装配只有一处，
     少传一个参数就会表现成"召回少了几条"而没有报错（见 `pipeline.build_pipeline`

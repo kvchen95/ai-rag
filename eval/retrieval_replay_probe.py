@@ -24,8 +24,13 @@ from api.retrieval.hybrid import HybridResult, HybridRetriever
 from api.retrieval.pipeline import build_pipeline
 from api.retrieval.rerank import Reranker
 
+if __package__:
+    from .resources.retrieval_replay_probe_msgs import MESSAGES as M
+else:  # run as a script: python3 eval/retrieval_replay_probe.py
+    from resources.retrieval_replay_probe_msgs import MESSAGES as M
+
 QUESTION = (
-    sys.argv[1] if len(sys.argv) > 1 else "东方证券给中芯国际的目标价是多少？"
+    sys.argv[1] if len(sys.argv) > 1 else M['QUESTION_01']
 )
 GOLDEN_CHUNK = os.environ.get("TARGET_CHUNK", "ch_f7237808607b")
 

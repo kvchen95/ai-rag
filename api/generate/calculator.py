@@ -10,6 +10,8 @@ import re
 from dataclasses import dataclass
 from decimal import Decimal
 
+from api.resources import messages as msg
+from api.resources.units import YEAR_UNIT
 from api.verify.numbers import Quantity, extract_quantities
 
 
@@ -41,13 +43,15 @@ def _tokens(expression: str) -> list[str]:
     if "%" in text:
         text = text.replace("%", "")
     if not text.strip() or not _ALLOWED.fullmatch(text):
-        raise CalculationError("表达式只能包含数字、括号和四则运算符")
+        raise CalculationError(msg.CALC_BAD_CHARS)
     tokens: list[str] = []
     pos = 0
     while pos < len(text):
         match = _TOKEN.match(text, pos)
         if not match:
-            raise CalculationError(f"无法解析表达式: {expression}")
+            raise CalculationError(
+                msg.CALC_UNPARSABLE.format(expression=expression)
+            )
         tokens.append(match.group("number") or match.group("op"))
         pos = match.end()
     return tokens
@@ -66,7 +70,7 @@ class _Parser:
         """Run parse."""
         value = self._expr()
         if self.pos != len(self.tokens):
-            raise CalculationError("表达式存在多余内容")
+            raise CalculationError(msg.CALC_TRAILING)
         return value
 
     def _peek(self) -> str | None:
@@ -77,7 +81,9 @@ class _Parser:
         """Run _take."""
         token = self._peek()
         if token is None or (expected is not None and token != expected):
-            raise CalculationError(f"表达式缺少 {expected or '操作数'}")
+            raise CalculationError(
+                msg.CALC_MISSING_TOKEN.format(expected=expected or msg.OPERAND)
+            )
         self.pos += 1
         return token
 
@@ -100,7 +106,7 @@ class _Parser:
                 value *= right
             else:
                 if right == 0:
-                    raise CalculationError("除数不能为 0")
+                    raise CalculationError(msg.CALC_DIV_ZERO)
                 value /= right
         return value
 
@@ -119,7 +125,9 @@ class _Parser:
         try:
             value = Decimal(token)
         except Exception as exc:  # noqa: BLE001 - token 已受限，仍把转换失败显式化
-            raise CalculationError(f"无效数字: {token}") from exc
+            raise CalculationError(
+                msg.CALC_BAD_NUMBER.format(token=token)
+            ) from exc
         self.inputs.append(value)
         return value
 
@@ -135,7 +143,7 @@ def _result_quantity(result: str) -> Quantity:
     """Run _result_quantity."""
     items = extract_quantities(result)
     if len(items) != 1:
-        raise CalculationError("result 必须且只能包含一个数值")
+        raise CalculationError(msg.CALC_RESULT_SINGLE)
     return items[0]
 
 
@@ -153,7 +161,7 @@ def validate_calculation(
         item.value
         for item in extract_quantities(evidence_text)
         if item.unit != "date"
-        and not (item.unit == "年" and 1900 <= int(item.value) <= 2999)
+        and not (item.unit == YEAR_UNIT and 1900 <= int(item.value) <= 2999)
     }
     percent_scale = "%" in (expression or "") or "％" in (expression or "")
     for value in calculated.inputs:

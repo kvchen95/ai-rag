@@ -1,4 +1,4 @@
-"""doc_key 归一化 / 指纹 / version_id（纯函数，不需要数据库）。
+"""doc_key 归一化 / 指纹 / version_id（纯函数，不需要数据库）。.
 
 这一组判据的作用是**锁住命名规则**：`doc_key` 一旦变了，库里已有的文档就全部
 断开版本线，而这件事在运行时不报错、不告警，只会表现为"怎么又新建了一份文档"。
@@ -88,23 +88,26 @@ DOC_KEY_CASES = [
 
 @pytest.mark.parametrize(("rel_path", "want", "why"), DOC_KEY_CASES)
 def test_doc_key_normalisation(rel_path: str, want: str, why: str) -> None:
+    """Run test_doc_key_normalisation."""
     assert doc_key_for(rel_path) == want, why
 
 
 def test_doc_key_is_stable_under_repeated_calls() -> None:
     # 同一个路径两次调用必须一致：key 抖一下，判重就失效。
+    """Run test_doc_key_is_stable_under_repeated_calls."""
     path = "policy/差旅管理办法-2025版-第2稿.pdf"
     assert doc_key_for(path) == doc_key_for(path)
 
 
 def test_doc_key_rejects_paths_escaping_the_root() -> None:
+    """Run test_doc_key_rejects_paths_escaping_the_root."""
     for bad in ("../secret.pdf", "a/../../b.pdf", ""):
         with pytest.raises(BadSamplePath):
             doc_key_for(bad)
 
 
 def test_different_materials_never_share_a_key() -> None:
-    """两份不同材料不能撞同一个 key。
+    """两份不同材料不能撞同一个 key。.
 
     撞了会被判成“同一份文档的改版”，于是后进来的那份把前一份顶掉——这是
     最不能静默发生的一类错。
@@ -121,6 +124,7 @@ def test_different_materials_never_share_a_key() -> None:
 
 
 def test_file_hash_is_lowercase_sha256_of_the_bytes(tmp_path) -> None:
+    """Run test_file_hash_is_lowercase_sha256_of_the_bytes."""
     path = tmp_path / "a.pdf"
     payload = b"%PDF-1.4\nhello\n"
     path.write_bytes(payload)
@@ -132,6 +136,7 @@ def test_file_hash_is_lowercase_sha256_of_the_bytes(tmp_path) -> None:
 
 
 def test_file_hash_changes_with_one_byte(tmp_path) -> None:
+    """Run test_file_hash_changes_with_one_byte."""
     a = tmp_path / "a.pdf"
     b = tmp_path / "b.pdf"
     a.write_bytes(b"%PDF-1.4\nAAAA\n")
@@ -140,7 +145,7 @@ def test_file_hash_changes_with_one_byte(tmp_path) -> None:
 
 
 def test_file_hash_is_chunked_but_equivalent(tmp_path) -> None:
-    """分块读不能改变结果。
+    """分块读不能改变结果。.
 
     样本里有几十 MB 的扫描件，一次性 read 会把内存翻倍。
     """
@@ -151,6 +156,7 @@ def test_file_hash_is_chunked_but_equivalent(tmp_path) -> None:
 
 
 def test_version_id_shape_and_collision_room() -> None:
+    """Run test_version_id_shape_and_collision_room."""
     digest = "a" * 64
     version_id = version_id_for("policy/travel-cn", digest)
     assert version_id == f"policy/travel-cn#{'a' * 12}"
@@ -159,11 +165,13 @@ def test_version_id_shape_and_collision_room() -> None:
 
 
 def test_version_id_rejects_non_sha256() -> None:
+    """Run test_version_id_rejects_non_sha256."""
     with pytest.raises(ValueError):
         version_id_for("policy/x", "abc123")
 
 
 def test_list_samples_only_picks_pdfs_and_is_ordered(tmp_path) -> None:
+    """Run test_list_samples_only_picks_pdfs_and_is_ordered."""
     (tmp_path / "b").mkdir()
     (tmp_path / "b" / "two.pdf").write_bytes(b"%PDF-1.4\n%2\n")
     (tmp_path / "a.pdf").write_bytes(b"%PDF-1.4\n%1\n")
@@ -177,21 +185,21 @@ def test_list_samples_only_picks_pdfs_and_is_ordered(tmp_path) -> None:
 
 
 def test_doc_key_transliterates_cjk_to_pinyin() -> None:
-    """中文文件名要变成 ASCII 标识符，否则 URL 里全是百分号编码。"""
+    """中文文件名要变成 ASCII 标识符，否则 URL 里全是百分号编码。."""
     key = doc_key_for("policy/差旅管理办法.pdf")
     assert key == "policy/cha-lv-guan-li-ban-fa"
     assert key.isascii(), "doc_key 必须是 ASCII，才能直接进 URL 路径参数"
 
 
 def test_doc_key_extracts_org_prefix() -> None:
-    """`【上海证券】…` 的机构名要单独成段，一眼能看出是哪家的报告。"""
+    """`【上海证券】…` 的机构名要单独成段，一眼能看出是哪家的报告。."""
     key = doc_key_for("reports/【上海证券】中芯国际深度研究报告.pdf")
     assert key.startswith("reports/shang-hai-zheng-quan-")
     assert key.isascii()
 
 
 def test_doc_key_strips_punctuation_before_transliteration() -> None:
-    """标点不是音节：`…提升，持续…` 不能产出 `…ti-sheng-，` 这种尾巴。"""
+    """标点不是音节：`…提升，持续…` 不能产出 `…ti-sheng-，` 这种尾巴。."""
     key = doc_key_for(
         "reports/【东方证券】产能利用率提升，持续推进工艺迭代.pdf"
     )
@@ -201,7 +209,7 @@ def test_doc_key_strips_punctuation_before_transliteration() -> None:
 
 
 def test_doc_key_pinyin_is_bounded() -> None:
-    """长标题不能产出无限长的 key——`make doc DOC_KEY=...` 要能敲进去。"""
+    """长标题不能产出无限长的 key——`make doc DOC_KEY=...` 要能敲进去。."""
     key = doc_key_for(
         "reports/中芯国际集成电路制造有限公司2024年年度报告全文.pdf"
     )
@@ -210,7 +218,7 @@ def test_doc_key_pinyin_is_bounded() -> None:
 
 
 def test_iter_sample_paths_skips_underscore_dirs(tmp_path) -> None:
-    """`_` 开头的目录整棵跳过：把文件挪进去就是"移出扫描"的全部动作。"""
+    """`_` 开头的目录整棵跳过：把文件挪进去就是"移出扫描"的全部动作。."""
     from api.ingest.fingerprint import iter_sample_paths
 
     (tmp_path / "ok").mkdir()
@@ -227,7 +235,7 @@ def test_iter_sample_paths_skips_underscore_dirs(tmp_path) -> None:
 
 
 def test_iter_sample_paths_keeps_underscore_files(tmp_path) -> None:
-    """只排除目录，不排除文件：`_draft.pdf` 是正常样本，只是名字带下划线。"""
+    """只排除目录，不排除文件：`_draft.pdf` 是正常样本，只是名字带下划线。."""
     from api.ingest.fingerprint import iter_sample_paths
 
     (tmp_path / "_draft.pdf").write_bytes(b"%PDF-1.4")

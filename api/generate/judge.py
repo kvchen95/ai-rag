@@ -27,6 +27,7 @@ from api.generate.llm import (
 )
 from api.observability import get_logger, log_event
 from api.prompts.generate import JUDGE_SYSTEM_PROMPT
+from api.resources import messages as msg
 
 logger = get_logger("api.generate.judge")
 
@@ -73,11 +74,10 @@ def build_judge_messages(
         {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
         {
             "role": "user",
-            "content": (
-                f"【问题】\n{question.strip()}\n\n"
-                f"【证据】\n{evidence_block}\n\n"
-                f"【答案】\n{answer.strip()}\n\n"
-                "只输出 JSON。"
+            "content": msg.JUDGE_USER_PROMPT.format(
+                question=question.strip(),
+                evidence=evidence_block,
+                answer=answer.strip(),
             ),
         },
     ]
@@ -98,18 +98,27 @@ def parse_verdict(payload: str) -> tuple[str, str]:
         data = None
     if isinstance(data, dict):
         verdict = (
-            str(data.get("verdict") or "").strip().upper().replace(" ", "_")
+            str(data.get("verdict") if data.get("verdict") else "")
+            .strip()
+            .upper()
+            .replace(" ", "_")
         )
         if verdict in ("SUPPORTED", "NOT_SUPPORTED"):
-            return verdict, str(data.get("reason") or "")[:500]
-        raise ValueError(f"verdict 缺失或非法: {data.get('verdict')!r}")
+            return verdict, str(
+                data.get("reason") if data.get("reason") else ""
+            )[:500]
+        raise ValueError(
+            msg.JUDGE_VERDICT_INVALID.format(verdict=data.get("verdict"))
+        )
     words = _VERDICT_WORDS.findall(body)
     if own := [w.upper().replace(" ", "_") for w in words]:
         # 出现了两种标记时判格式错：那是"我不确定"的写法，不能当成支持。
         if len(set(own)) == 1:
             return own[0], body[:500]
-        raise ValueError(f"判别器同时给出了两种结论: {sorted(set(own))}")
-    raise ValueError(f"判别器输出无法解析: {body[:200]}")
+        raise ValueError(
+            msg.JUDGE_TWO_VERDICTS.format(verdicts=sorted(set(own)))
+        )
+    raise ValueError(msg.JUDGE_UNPARSABLE.format(body=body[:200]))
 
 
 def judge(
@@ -128,7 +137,7 @@ def judge(
     """
     if client is None:
         return JudgeResult(
-            verdict="skipped", reason="未配置判别模型", skipped=True
+            verdict="skipped", reason=msg.JUDGE_NOT_CONFIGURED, skipped=True
         )
 
     import time
@@ -152,7 +161,7 @@ def judge(
         )
         return JudgeResult(
             verdict="NOT_SUPPORTED",
-            reason=f"判别器不可用（按不支持处理）: {type(exc).__name__}",
+            reason=msg.JUDGE_UNAVAILABLE.format(error_type=type(exc).__name__),
             elapsed_ms=elapsed,
         )
     except ValueError as exc:
@@ -160,7 +169,7 @@ def judge(
         log_event(logger, "judge_bad_output", level=40, error=str(exc)[:200])
         return JudgeResult(
             verdict="NOT_SUPPORTED",
-            reason=f"判别器输出无法解析（按不支持处理）: {exc}"[:500],
+            reason=msg.JUDGE_BAD_OUTPUT.format(error=exc)[:500],
             elapsed_ms=elapsed,
         )
     elapsed = (time.perf_counter() - started) * 1000

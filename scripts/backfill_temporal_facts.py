@@ -14,6 +14,11 @@ import re
 import sys
 from pathlib import Path
 
+if __package__:
+    from .resources.backfill_temporal_facts_msgs import MESSAGES as M
+else:  # run as a script: python3 scripts/backfill_temporal_facts.py
+    from resources.backfill_temporal_facts_msgs import MESSAGES as M
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
@@ -21,7 +26,7 @@ from api.clients.pg import PgDatabase  # noqa: E402
 from api.temporal.facts import extract_table_facts  # noqa: E402
 from api.temporal.repository import TemporalFactRepository  # noqa: E402
 
-_UNIT = re.compile(r"单位\s*[:：]\s*(万元|亿元|元|%|％)")
+_UNIT = re.compile(M["COMPILE_01"])
 _SQL = """
 SELECT c.chunk_id, c.doc_key, c.table_md, c.content_text,
        c.report_period_start::text AS report_period_start,
@@ -43,6 +48,7 @@ ORDER BY c.doc_key, c.page_num, c.chunk_id
 
 
 def main() -> int:
+    """Run main."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--apply", action="store_true")

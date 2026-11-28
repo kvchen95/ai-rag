@@ -36,6 +36,7 @@ from typing import Any, Literal
 
 from api.errors import ErrorCode
 from api.observability import get_logger, log_event
+from api.resources import messages as msg
 from api.retrieval.hybrid import Candidate
 
 logger = get_logger("api.retrieval.gate")
@@ -73,13 +74,15 @@ class GateConfig:
         """Run __post_init__."""
         if not (0 < self.reject_none < self.reject_low <= 1):
             raise ValueError(
-                f"门控阈值必须 0 < reject_none < reject_low <= 1，"
-                f"实际 {self.reject_none} / {self.reject_low}"
+                msg.GATE_THRESHOLD_INVALID.format(
+                    reject_none=self.reject_none, reject_low=self.reject_low
+                )
             )
         if self.borderline_low >= self.borderline_high:
             raise ValueError(
-                f"临界带必须递增，实际 "
-                f"[{self.borderline_low}, {self.borderline_high}]"
+                msg.GATE_BORDERLINE_INVALID.format(
+                    low=self.borderline_low, high=self.borderline_high
+                )
             )
 
     @property
@@ -232,7 +235,9 @@ def decorate_clarify_options(
         seen.add(candidate.doc_key)
         name = doc_names.get(candidate.doc_key) or candidate.doc_key
         label = (
-            f"{name}（第 {candidate.page_num} 页）"
+            msg.GATE_CLARIFY_LABEL.format(
+                name=name, page=candidate.page_num
+            )
             if candidate.page_num
             else name
         )
@@ -275,7 +280,9 @@ def _needs_clarify(
     if delta < cfg.clarify_score_delta:
         return (
             True,
-            f"两份文档分数接近（Δ={delta:.3f} < {cfg.clarify_score_delta}）",
+            msg.GATE_CLARIFY_CLOSE.format(
+                delta=delta, threshold=cfg.clarify_score_delta
+            ),
         )
     return False, ""
 
@@ -310,7 +317,7 @@ def decide(
         return GateDecision(
             verdict="reject_none",
             top1=None,
-            reason="检索无候选",
+            reason=msg.GATE_NO_CANDIDATES,
             degraded=degraded,
             degrade_reason=degrade_reason,
             reject_code=ErrorCode.NO_EVIDENCE,
@@ -323,7 +330,7 @@ def decide(
     # --- 第一段：无相关 ---
     if top1 < cfg.reject_none:
         reason = f"top1={top1:.3f} < {cfg.reject_none}" + (
-            "（精排降级，分数不可用）" if not any_scored else ""
+            msg.GATE_RERANK_DEGRADED if not any_scored else ""
         )
         return GateDecision(
             verdict="reject_none",
@@ -349,8 +356,8 @@ def decide(
     if in_borderline:
         paragraphs = _distinct_paragraphs(items)
         if multi_entity and paragraphs < cfg.evidence_min_paras:
-            borderline_used = (
-                f"临界带 top1={top1:.3f}：多实体问题但只有 {paragraphs} 段证据"
+            borderline_used = msg.GATE_BORDERLINE_FEW_PARAS.format(
+                top1=top1, paragraphs=paragraphs
             )
             return GateDecision(
                 verdict="reject_low",
@@ -363,7 +370,7 @@ def decide(
                 reject_code=ErrorCode.LOW_CONFIDENCE,
             )
         if not _entity_present(entities, items, texts):
-            borderline_used = f"临界带 top1={top1:.3f}：关键实体未出现在证据里"
+            borderline_used = msg.GATE_BORDERLINE_NO_ENTITY.format(top1=top1)
             return GateDecision(
                 verdict="reject_low",
                 top1=top1,
@@ -374,16 +381,15 @@ def decide(
                 degrade_reason=degrade_reason,
                 reject_code=ErrorCode.LOW_CONFIDENCE,
             )
-        borderline_used = f"临界带 top1={top1:.3f}：辅助条件满足，按过线处理"
+        borderline_used = msg.GATE_BORDERLINE_PASSED.format(top1=top1)
 
     # --- 第二段：弱相关（临界带已由上面判过，不再用分数复核）---
     if not in_borderline and top1 < cfg.reject_low:
         return GateDecision(
             verdict="reject_low",
             top1=top1,
-            reason=(
-                f"top1={top1:.3f} 落在 "
-                f"[{cfg.reject_none}, {cfg.reject_low})"
+            reason=msg.GATE_BELOW_LOW.format(
+                top1=top1, low=cfg.reject_none, high=cfg.reject_low
             ),
             borderline_used=borderline_used,
             suspected_docs=_suspects(items, cfg.suspected_docs_max),
@@ -399,9 +405,8 @@ def decide(
         return GateDecision(
             verdict="reject_low",
             top1=top1,
-            reason=(
-                f"多实体问题但只有 {distinct} 段证据"
-                f"（要求 >= {cfg.evidence_min_paras}）"
+            reason=msg.GATE_FEW_PARAS.format(
+                paragraphs=distinct, required=cfg.evidence_min_paras
             ),
             suspected_docs=_suspects(items, cfg.suspected_docs_max),
             degraded=degraded,
@@ -416,7 +421,7 @@ def decide(
             verdict="partial",
             evidence=tuple(items[: evidence_cap or len(items)]),
             top1=top1,
-            reason=f"多跳未覆盖：{', '.join(uncovered)}",
+            reason=msg.GATE_UNCOVERED.format(items=", ".join(uncovered)),
             uncovered=tuple(uncovered),
             degraded=degraded,
             degrade_reason=degrade_reason,

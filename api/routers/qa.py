@@ -43,6 +43,7 @@ from api.deps import IdentityDep
 from api.generate.llm import LlmClient
 from api.observability import get_logger, log_event
 from api.qa.orchestrator import QaOutcome, QaService
+from api.resources import messages as msg
 from api.retrieval.pipeline import build_pipeline
 from api.temporal.repository import TemporalFactRepository
 from api.time_range import TimeRange
@@ -89,7 +90,7 @@ class TimeRangeIn(BaseModel):
         """Run _ordered."""
         start = info.data.get("date_from")
         if start is not None and value < start:
-            raise ValueError("to 不能早于 from")
+            raise ValueError(msg.ROUTER_RANGE_ORDER)
         return value
 
     def to_range(self) -> TimeRange:
@@ -118,7 +119,7 @@ class QaStreamRequest(BaseModel):
         """Run _trim."""
         value = value.strip()
         if not value:
-            raise ValueError("question 不能为空白")
+            raise ValueError(msg.ROUTER_QUESTION_BLANK)
         return value
 
 

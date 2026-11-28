@@ -1,4 +1,4 @@
-"""表格三表示（§3.3）：HTML 保真、md 派生、cells 矩阵，以及三者的往返一致。
+"""表格三表示（§3.3）：HTML 保真、md 派生、cells 矩阵，以及三者的往返一致。.
 
 验收第二条是"表格三表示一致可重建"。这条要变成可执行的判据，只有一条路：
 **往返**。所以本文件的核心是
@@ -70,13 +70,14 @@ MERGED = [
 
 
 def test_html_keeps_span_attributes() -> None:
+    """Run test_html_keeps_span_attributes."""
     html = render_html(MERGED, 4, 3)
     assert 'colspan="2"' in html
     assert 'rowspan="2"' in html
 
 
 def test_html_omits_cells_covered_by_a_span() -> None:
-    """被覆盖的位置不输出 `<td>`——输出了浏览器会把后面的格整体挤到下一行。
+    """被覆盖的位置不输出 `<td>`——输出了浏览器会把后面的格整体挤到下一行。.
 
     4 行 × 3 列 = 12 个位置，减掉被 colspan 覆盖的 1 个、被 rowspan 覆盖
     的 1 个，HTML 里应该正好 10 个 `<td>/<th>`。
@@ -86,12 +87,14 @@ def test_html_omits_cells_covered_by_a_span() -> None:
 
 
 def test_html_uses_th_only_for_header_cells() -> None:
+    """Run test_html_uses_th_only_for_header_cells."""
     html = render_html(PLAIN, 4, 3)
     assert html.count("<th") == 3
     assert html.count("<td") == 9
 
 
 def test_html_escapes_special_characters() -> None:
+    """Run test_html_escapes_special_characters."""
     cells = [TableCell(0, 0, "a < b & c", is_header=True)]
     html = render_html(cells, 1, 1)
     assert "&lt;" in html and "&amp;" in html
@@ -99,7 +102,7 @@ def test_html_escapes_special_characters() -> None:
 
 
 def test_html_writes_placeholder_for_missing_cells() -> None:
-    """没有单元格覆盖到的位置输出空 td，而不是跳过。
+    """没有单元格覆盖到的位置输出空 td，而不是跳过。.
 
     跳过会让后面的格左移一列，而这个错误在 HTML 里完全看不出来，
     只有把 HTML 渲染出来、或反解回 cells 时才会暴露。
@@ -115,6 +118,7 @@ def test_html_writes_placeholder_for_missing_cells() -> None:
 def test_cells_to_html_to_cells_roundtrip(
     name: str, cells: list[TableCell]
 ) -> None:
+    """Run test_cells_to_html_to_cells_roundtrip."""
     del name
     html = render_html(cells, 4, 3)
     back, rows, cols = cells_from_html(html)
@@ -136,7 +140,7 @@ def test_cells_to_html_to_cells_roundtrip(
 
 
 def test_roundtrip_preserves_the_reconstructed_matrix() -> None:
-    """真正要一致的不是 cells 列表，而是**展开后的矩阵**。
+    """真正要一致的不是 cells 列表，而是**展开后的矩阵**。.
 
     同一张表可以用不同的 span 组合表达（跨两列 vs 两个相同值），矩阵才是它的
     语义。验收口径"三表示一致可重建"指的是这个层面的一致。
@@ -150,6 +154,7 @@ def test_roundtrip_preserves_the_reconstructed_matrix() -> None:
 
 
 def test_md_has_header_separator_and_rows() -> None:
+    """Run test_md_has_header_separator_and_rows."""
     md = render_md(PLAIN, 4, 3)
     lines = md.splitlines()
     assert lines[0] == "| City | Lodging cap | Region |"
@@ -158,7 +163,7 @@ def test_md_has_header_separator_and_rows() -> None:
 
 
 def test_md_expands_colspan_into_repeated_column_names() -> None:
-    """§3.3 规则 3：Markdown 不支持合并表头，展开成重复列名。
+    """§3.3 规则 3：Markdown 不支持合并表头，展开成重复列名。.
 
     填 `-` 会让人以为那格是空的——它不是空的，它是被合并格覆盖的同一列。
     """
@@ -168,6 +173,7 @@ def test_md_expands_colspan_into_repeated_column_names() -> None:
 
 
 def test_md_fills_empty_cells_with_placeholder() -> None:
+    """Run test_md_fills_empty_cells_with_placeholder."""
     cells = [
         TableCell(0, 0, "a", is_header=True),
         TableCell(0, 1, "", is_header=True),
@@ -177,7 +183,7 @@ def test_md_fills_empty_cells_with_placeholder() -> None:
 
 
 def test_md_escapes_pipes_inside_cells() -> None:
-    """“标准 500|380”是真实写法，不转义会把一行切成更多列。"""
+    """“标准 500|380”是真实写法，不转义会把一行切成更多列。."""
     cells = [TableCell(0, 0, "500|380", is_header=True)]
     md = render_md(cells, 1, 1)
     assert "\\|" in md
@@ -185,6 +191,7 @@ def test_md_escapes_pipes_inside_cells() -> None:
 
 
 def test_md_of_empty_table_is_empty_string() -> None:
+    """Run test_md_of_empty_table_is_empty_string."""
     assert render_md([], 0, 0) == ""
 
 
@@ -195,23 +202,26 @@ def test_md_of_empty_table_is_empty_string() -> None:
 def test_md_parses_back_to_the_same_matrix(
     name: str, cells: list[TableCell]
 ) -> None:
+    """Run test_md_parses_back_to_the_same_matrix."""
     del name
     md = render_md(cells, 4, 3)
     assert parse_md(md) == expand_to_matrix(cells, 4, 3)
 
 
 def test_parse_md_rejects_ragged_rows() -> None:
-    """列数不对时猜出来的表一定是错的，早炸比晚炸好。"""
+    """列数不对时猜出来的表一定是错的，早炸比晚炸好。."""
     with pytest.raises(ValueError):
         parse_md("| a | b |\n| --- | --- |\n| only-one |")
 
 
 def test_parse_md_rejects_malformed_separator() -> None:
+    """Run test_parse_md_rejects_malformed_separator."""
     with pytest.raises(ValueError):
         parse_md("| a | b |\n| not-a-separator | --- |")
 
 
 def test_parse_md_requires_header_and_separator() -> None:
+    """Run test_parse_md_requires_header_and_separator."""
     with pytest.raises(ValueError):
         parse_md("| a | b |")
 
@@ -220,7 +230,7 @@ def test_parse_md_requires_header_and_separator() -> None:
 
 
 def test_expand_copies_the_top_left_value_across_a_span() -> None:
-    """§3.3 规则 1：合并单元格按"左上角为值、其余格复制该值"展开。"""
+    """§3.3 规则 1：合并单元格按"左上角为值、其余格复制该值"展开。."""
     cells = [TableCell(0, 0, "merged", col_span=2, row_span=2)]
     assert expand_to_matrix(cells, 2, 2) == [
         ["merged", "merged"],
@@ -229,7 +239,7 @@ def test_expand_copies_the_top_left_value_across_a_span() -> None:
 
 
 def test_expand_does_not_overwrite_existing_values() -> None:
-    """展开时"先到先得"：后面的格不能盖掉前面已经写进去的值。
+    """展开时"先到先得"：后面的格不能盖掉前面已经写进去的值。.
 
     合并格的展开顺序决定了谁是"左上角"，写反了就会拿到被覆盖格的值。
     """
@@ -241,6 +251,7 @@ def test_expand_does_not_overwrite_existing_values() -> None:
 
 
 def test_expand_rejects_out_of_bounds_cells() -> None:
+    """Run test_expand_rejects_out_of_bounds_cells."""
     with pytest.raises(ValueError):
         expand_to_matrix([TableCell(5, 0, "x")], 2, 2)
 
@@ -259,11 +270,12 @@ def test_expand_rejects_out_of_bounds_cells() -> None:
     ],
 )
 def test_clean_cell_text(raw: str | None, want: str) -> None:
+    """Run test_clean_cell_text."""
     assert clean_cell_text(raw) == want
 
 
 def test_clean_cell_text_does_not_touch_numbers() -> None:
-    """不做全角转换、不做数字格式化：table_cells 是校验用的证据。
+    """不做全角转换、不做数字格式化：table_cells 是校验用的证据。.
 
     改一个字符就可能让"数字能否在被引证据里定位"判错。
     """
@@ -275,7 +287,7 @@ def test_clean_cell_text_does_not_touch_numbers() -> None:
 
 
 def test_table_content_text_uses_the_header_as_keys() -> None:
-    """表切片的检索文本按行拼成 "列名: 值"，让"上海住宿限额多少"能词法命中。
+    """表切片的检索文本按行拼成 "列名: 值"，让"上海住宿限额多少"能词法命中。.
 
     直接把 md 塞进 content_text 会让竖线与分隔行变成纯噪声，还占 token。
     """
@@ -287,7 +299,7 @@ def test_table_content_text_uses_the_header_as_keys() -> None:
 
 
 def test_table_content_text_without_header_does_not_invent_keys() -> None:
-    """表头是推断出来的（首行其实是数据）就不加键。
+    """表头是推断出来的（首行其实是数据）就不加键。.
 
     拿一行数据当列名会拼出 `500: 380 | tier-2: tier-3` 这种胡说。
     """
@@ -297,13 +309,14 @@ def test_table_content_text_without_header_does_not_invent_keys() -> None:
 
 
 def test_table_content_text_keeps_the_title_line() -> None:
+    """Run test_table_content_text_keeps_the_title_line."""
     table = build_table(PLAIN, row_count=4, col_count=3)
     text = table_content_text(table, title="Table 1. Lodging caps")
     assert text.splitlines()[0] == "Table 1. Lodging caps"
 
 
 def test_label_table_detection() -> None:
-    """单行单列的"表格"其实是标签（§3.3 边界表）。"""
+    """单行单列的"表格"其实是标签（§3.3 边界表）。."""
     assert is_label_table(
         build_table([TableCell(0, 0, "x")], row_count=1, col_count=1)
     )
@@ -314,6 +327,7 @@ def test_label_table_detection() -> None:
 
 
 def test_build_table_produces_all_three_representations() -> None:
+    """Run test_build_table_produces_all_three_representations."""
     table = build_table(PLAIN, row_count=4, col_count=3)
     assert table.html.startswith("<table")
     assert table.md.startswith("| City |")
@@ -322,7 +336,7 @@ def test_build_table_produces_all_three_representations() -> None:
 
 
 def test_cells_json_matches_the_database_shape() -> None:
-    """`chunks.table_cells` 是 jsonb 数组，键名必须与落库口径一致。"""
+    """`chunks.table_cells` 是 jsonb 数组，键名必须与落库口径一致。."""
     table = build_table(PLAIN, row_count=4, col_count=3)
     first = table.cells_json()[0]
     assert set(first) == {

@@ -1,4 +1,4 @@
-"""混合检索 + 版本兜底 + 精排 + 门控的端到端验证（真 PG + 真 Qdrant + 真 TEI）。
+"""混合检索、版本兜底、精排与门控的端到端验证。.
 
 这个文件是 B3 的**唯一**验收依据：它不用替身，所有断言都对着真服务的结果。
 
@@ -75,7 +75,7 @@ GATE = GateConfig(
 
 
 def test_both_routes_get_the_same_filter_object() -> None:
-    """§7.1："两路必须带完全相同的 filter"。
+    """§7.1："两路必须带完全相同的 filter"。.
 
     做法不是"两次 to_qdrant() 比较"，而是**只 dump 一次**、两路共用同一个 dict——
     这样"两路不一致"在结构上不可能发生，而不是靠一条用例事后发现。
@@ -92,7 +92,7 @@ def test_both_routes_get_the_same_filter_object() -> None:
 def test_hybrid_retrieval_honours_the_filter_on_both_routes(
     conn, store, embedder, retriever: HybridRetriever, query_embedder
 ) -> None:
-    """真数据上验两路都受同一个 filter 约束。
+    """真数据上验两路都受同一个 filter 约束。.
 
     造三条切片：公开、仅 fin、仅 hr。用 fin 身份检索时三条文本都能"字面命中"，
     但 hr 那条在两路都不得出现。
@@ -139,7 +139,7 @@ def test_hybrid_retrieval_honours_the_filter_on_both_routes(
 def test_unprivileged_document_never_leaks_through_either_route(
     conn, store, embedder, retriever: HybridRetriever, query_embedder, b3_pg
 ) -> None:
-    """验收原句："不泄露无权限文档"。
+    """验收原句："不泄露无权限文档"。.
 
     用一个**完全没有部门**的身份（只能看公开文档）检索，再造一条仅 fin 的切片。
     断言：候选池里没有它、门控的疑似文档列表里也没有它——后者更关键，
@@ -189,7 +189,7 @@ def test_unprivileged_document_never_leaks_through_either_route(
 def test_stale_version_chunks_are_dropped_before_rerank(
     conn, store, embedder, retriever: HybridRetriever, query_embedder, b3_pg
 ) -> None:
-    """验收原句："旧版本剔除"。
+    """验收原句："旧版本剔除"。.
 
     造两个版本：旧版本先上线（切片 status=active、点也在），再上线新版本。
     旧版本切片在向量库里仍是 active（前置过滤放它进来），但 PG 里它已下线——
@@ -246,7 +246,7 @@ def test_stale_version_chunks_are_dropped_before_rerank(
 def test_drop_stale_is_fail_closed_for_unknown_documents(
     conn, store, embedder, retriever: HybridRetriever, query_embedder, b3_pg
 ) -> None:
-    """查不到文档的生效版本 → 该文档的候选全丢（Fail-Closed）。
+    """查不到文档的生效版本 → 该文档的候选全丢（Fail-Closed）。.
 
     少召回会落进低置信门控；多召回会把已废止条款送进答案。两者代价不对等，
     所以查不到也必须丢。
@@ -297,7 +297,7 @@ def test_rerank_timeout_degrades_with_audit(
     query_embedder,
     b3_pg,
 ) -> None:
-    """验收原句："精排超时降级有审计"。
+    """验收原句："精排超时降级有审计"。.
 
     把预算压到 1ms（真服务不可能在 1ms 内返回）→ 必须降级，且审计里能读到
     四件事：降级标志、原因码、实际打分条数（0）、降级口径（按融合名次）。
@@ -347,7 +347,7 @@ def test_rerank_actually_scores_relevant_text_higher(
     query_embedder,
     b3_pg,
 ) -> None:
-    """真服务上的精排必须把相关的那条排到最前——否则"降级/不降级"没有意义。
+    """真服务上的精排必须把相关的那条排到最前——否则"降级/不降级"没有意义。.
 
     这条同时是"精排真的在工作"的证据：拿到真分数、且顺序符合常识。
     """
@@ -406,7 +406,7 @@ def test_gate_rejects_irrelevant_question_on_real_data(
     query_embedder,
     b3_pg,
 ) -> None:
-    """真数据上的拒答路径：库里只有差旅制度，问"明天天气"。
+    """真数据上的拒答路径：库里只有差旅制度，问"明天天气"。.
 
     门控必须给出 `reject_none`（< 0.20）或至少不是 `pass`——重点是它不能靠
     关键词碰巧命中就放行。
@@ -457,7 +457,7 @@ def test_gate_rejects_irrelevant_question_on_real_data(
 def test_chinese_bm25_needs_the_shared_tokeniser(
     conn, store, embedder, query_embedder, qdrant_reachable, collection
 ) -> None:
-    """查询侧漏过 `bm25_text()` 会让关键词路对中文几乎失效。
+    """查询侧漏过 `bm25_text()` 会让关键词路对中文几乎失效。.
 
     做法：同一句长中文查询，一次用 `bm25_vector()`（正确）、一次用原文（漏改），
     比较两路的 `sparse_count` 与能否命中目标切片。
@@ -513,6 +513,7 @@ def test_chinese_bm25_needs_the_shared_tokeniser(
 
 
 def _bm25_vector(text: str):
+    """Run _bm25_vector."""
     from scripts.qdrant_common import bm25_vector
 
     return bm25_vector(text)
@@ -524,7 +525,7 @@ def _bm25_vector(text: str):
 def test_local_rrf_matches_qdrant_native_fusion(
     conn, store, embedder, query_embedder, qdrant_reachable, collection
 ) -> None:
-    """`rrf_fuse` 的顺序必须与 `/points/query?fusion=rrf` 一致。
+    """`rrf_fuse` 的顺序必须与 `/points/query?fusion=rrf` 一致。.
 
     这条钉住 `RRF_K = 1`（实测反解出来的常数）。Qdrant 换版本改了常数、或者有人
     觉得"论文里 k=60 更正规"把常数改掉，这条会立刻红。
@@ -617,7 +618,7 @@ def test_local_rrf_matches_qdrant_native_fusion(
 def test_clarify_options_are_built_from_real_document_titles(
     conn, store, embedder, b3_pg
 ) -> None:
-    """§8.2：选项只能从检索到的事实里取，且每条能回填 `doc_keys`。
+    """§8.2：选项只能从检索到的事实里取，且每条能回填 `doc_keys`。.
 
     用真 PG 里的真实标题验证 label 的来源：`documents.filename`（澄清选项
     的展示名必须是用户认得出的文件名，不能是 doc_key 那种内部编号——除非
@@ -695,7 +696,7 @@ def test_clarify_options_are_built_from_real_document_titles(
 def test_candidates_carry_both_route_ranks(
     conn, store, embedder, retriever: HybridRetriever, query_embedder
 ) -> None:
-    """§7.6：每条候选带 `dense_rank` / `sparse_rank` / `fused_rank`。
+    """§7.6：每条候选带 `dense_rank` / `sparse_rank` / `fused_rank`。.
 
     少了任一路的名次，审计就回答不了"它为什么没排上来"——那正是排查检索质量
     时第一个要问的问题。

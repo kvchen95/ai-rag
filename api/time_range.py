@@ -28,24 +28,26 @@ from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from typing import Any, Literal
 
-from api.resources.time_grammar import (
-    ABS_DATE as _ABS_DATE,
-    ABS_HALF_YEAR as _ABS_HALF_YEAR,
-    ABS_MONTH as _ABS_MONTH,
-    ABS_QUARTER as _ABS_QUARTER,
-    ABS_YEAR as _ABS_YEAR,
-    ABS_YEAR_RANGE as _ABS_YEAR_RANGE,
-    CN_DIGITS as _CN_DIGITS,
-    HALF_YEAR_FIRST,
-    HALF_YEAR_SECOND,
-    NOTE_FISCAL_START,
-    NOTE_INVALID_DATE,
-    NOTE_INVALID_MONTH,
-    NOTE_INVALID_QUARTER,
-    NOTE_UNPARSED,
-    NOTE_YEAR_RANGE,
-    UNPARSED_MARKERS as _UNPARSED_MARKERS,
-)
+from api.resources import time_grammar
+
+# 时间语法表只有一份（api/resources/time_grammar.py）；本地别名保持既有引用名。
+_CN_DIGITS = time_grammar.CN_DIGITS
+_ABS_DATE = time_grammar.ABS_DATE
+_ABS_MONTH = time_grammar.ABS_MONTH
+_ABS_YEAR_RANGE = time_grammar.ABS_YEAR_RANGE
+_ABS_QUARTER = time_grammar.ABS_QUARTER
+_ABS_HALF_YEAR = time_grammar.ABS_HALF_YEAR
+_ABS_YEAR = time_grammar.ABS_YEAR
+_UNPARSED_MARKERS = time_grammar.UNPARSED_MARKERS
+HALF_YEAR_FIRST = time_grammar.HALF_YEAR_FIRST
+HALF_YEAR_SECOND = time_grammar.HALF_YEAR_SECOND
+NOTE_FISCAL_START = time_grammar.NOTE_FISCAL_START
+NOTE_INVALID_DATE = time_grammar.NOTE_INVALID_DATE
+NOTE_YEAR_RANGE = time_grammar.NOTE_YEAR_RANGE
+NOTE_INVALID_MONTH = time_grammar.NOTE_INVALID_MONTH
+NOTE_INVALID_QUARTER = time_grammar.NOTE_INVALID_QUARTER
+NOTE_UNPARSED = time_grammar.NOTE_UNPARSED
+FISCAL_START_INVALID = time_grammar.FISCAL_START_INVALID
 
 Granularity = Literal["day", "month", "quarter", "half_year", "year"]
 Basis = Literal["explicit", "relative", "assumed_year"]
@@ -181,7 +183,7 @@ def _normalise_time_rules(
     """
     if not (1 <= fiscal_start_month <= 12):
         raise ValueError(
-            f"fiscal_start_month 必须是 1..12，实际 {fiscal_start_month}"
+            FISCAL_START_INVALID.format(value=fiscal_start_month)
         )
     text = question or ""
     fy_note = (

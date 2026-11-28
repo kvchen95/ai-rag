@@ -10,6 +10,7 @@ from dataclasses import replace
 from typing import Any
 
 from api.generate.evidence import Evidence, EvidencePack
+from api.resources.time_grammar import EVIDENCE_RANGE_TEMPLATE
 from api.retrieval.texts import fetch_texts
 from api.temporal.graph import TemporalKnowledgeGraph
 from api.temporal.query import FactQuery
@@ -49,8 +50,13 @@ def temporal_evidence(
         if chunk is None:
             continue
         lines = [
-            f"{item.metric}（{item.period_start} 至 "
-            f"{item.period_end}）：{item.value} {item.unit}"
+            EVIDENCE_RANGE_TEMPLATE.format(
+                metric=item.metric,
+                start=item.period_start,
+                end=item.period_end,
+                value=item.value,
+                unit=item.unit,
+            )
             for item in items
         ]
         out.append(
@@ -61,7 +67,7 @@ def temporal_evidence(
                 doc_key=chunk.doc_key,
                 doc_name=chunk.doc_name,
                 page_num=chunk.page_num,
-                bbox=list(chunk.bbox or []),
+                bbox=list(chunk.bbox if chunk.bbox else []),
                 text="\n".join(lines),
                 chunk_type=chunk.chunk_type,
                 rerank_score=None,

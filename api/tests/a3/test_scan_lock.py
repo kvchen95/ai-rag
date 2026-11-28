@@ -1,4 +1,4 @@
-"""扫描锁的会话归属（详细设计.md §3.1；B2 报的“僵尸锁”回归）。
+"""扫描锁的会话归属（详细设计.md §3.1；B2 报的“僵尸锁”回归）。.
 
 `pg_try_advisory_lock` 是**会话级**锁，而 psycopg_pool 在连接还池时会
 reset —— reset **不释放** advisory lock（实测）。所以“拿锁后 commit →
@@ -29,7 +29,7 @@ NS = "a3scanlock"
 
 @pytest.fixture
 def db(migrated: str) -> PgDatabase:
-    """**两条**连接：僵尸锁依赖"有多条连接可还"，只开一条测不出来。"""
+    """**两条**连接：僵尸锁依赖"有多条连接可还"，只开一条测不出来。."""
     database = PgDatabase(migrated, min_size=1, max_size=4, connect_timeout_s=3)
     database.open()
     try:
@@ -43,6 +43,7 @@ def db(migrated: str) -> PgDatabase:
 
 @pytest.fixture
 def samples(tmp_path):
+    """Run samples."""
     root = tmp_path / "samples"
     (root / NS).mkdir(parents=True)
     (root / NS / "lock-probe.pdf").write_bytes(b"%PDF-1.4\n% lock probe\n")
@@ -51,7 +52,9 @@ def samples(tmp_path):
 
 @pytest.fixture(autouse=True)
 def _cleanup(migrated: str):
+    """Run _cleanup."""
     def purge() -> None:
+        """Run purge."""
         with psycopg.connect(normalize_dsn(migrated), autocommit=True) as conn:
             conn.execute(
                 "DELETE FROM chunks WHERE doc_key LIKE %s", (f"{NS}/%",)
@@ -74,6 +77,7 @@ def _cleanup(migrated: str):
 
 
 def _advisory_locks(db: PgDatabase) -> int:
+    """Run _advisory_locks."""
     rows = db.fetch_all(
         "SELECT count(*) AS n FROM pg_locks WHERE locktype = 'advisory'"
     )
@@ -81,7 +85,7 @@ def _advisory_locks(db: PgDatabase) -> int:
 
 
 def test_three_consecutive_scans_all_succeed(db: PgDatabase, samples) -> None:
-    """连续三次扫描都必须能拿锁。
+    """连续三次扫描都必须能拿锁。.
 
     这条用例的形态是关键：如果锁泄漏，第一次成功、第二次 409（锁在原后端上），
     第三次可能又成功（池把带锁的那条连接给了它）。所以"跑三次全过"才说明锁真的
@@ -98,6 +102,7 @@ def test_three_consecutive_scans_all_succeed(db: PgDatabase, samples) -> None:
 
 
 def test_no_advisory_lock_left_after_scan(db: PgDatabase, samples) -> None:
+    """Run test_no_advisory_lock_left_after_scan."""
     scan_samples(db, samples)
     # 把连接全还给池之后再查：此时若还有锁，就说明它挂在某条"空闲"连接上
     assert _advisory_locks(db) == 0
@@ -106,7 +111,7 @@ def test_no_advisory_lock_left_after_scan(db: PgDatabase, samples) -> None:
 def test_lock_on_another_session_blocks_the_scan(
     db: PgDatabase, samples, migrated: str
 ) -> None:
-    """另一会话真持锁 → ScanInProgress（证明这把锁跨会话有效）。"""
+    """另一会话真持锁 → ScanInProgress（证明这把锁跨会话有效）。."""
     blocker = psycopg.connect(normalize_dsn(migrated), autocommit=True)
     try:
         blocker.execute("SELECT pg_advisory_lock(%s)", (SCAN_LOCK_KEY,))
@@ -123,7 +128,7 @@ def test_lock_on_another_session_blocks_the_scan(
 def test_acquire_without_commit_still_takes_the_lock(
     db: PgDatabase, samples, migrated: str
 ) -> None:
-    """`_acquire_scan_lock` 不 commit 也要真的拿到锁。
+    """`_acquire_scan_lock` 不 commit 也要真的拿到锁。.
 
     这正是修复点：先 commit 会把连接还池，锁可能落在别的后端上。用另一条**独立**
     连接验证"锁确实被这台机器持有"。

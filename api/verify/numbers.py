@@ -31,25 +31,24 @@ import re
 from dataclasses import dataclass
 from decimal import Decimal
 
-from api.resources.units import (
-    ARABIC as _ARABIC,
-    ATTR as _ATTR,
-    ATTR_STRIP_PREFIX as _ATTR_STRIP_PREFIX,
-    ATTR_TRAILING as _ATTR_TRAILING,
-    CHINESE as _CHINESE,
-    CHINESE_PERCENT as _CHINESE_PERCENT,
-    CN_BIG as _CN_BIG,
-    CN_DIGITS as _CN_DIGITS,
-    CN_UNITS as _CN_UNITS,
-    DATE_PATTERNS as _DATE_PATTERNS,
-    NO_UNIT_LABEL,
-    ORDINAL_PREFIX,
-    PER_MILLE,
-    PROPER_EXACT as _PROPER_EXACT,
-    RANGE_TAIL as _RANGE_TAIL,
-    UNIT_TABLE,
-    YEAR_UNIT,
-)
+from api.resources import units
+
+# 表与正则只有一份（api/resources/units.py）；本地别名保持既有引用名。
+UNIT_TABLE = units.UNIT_TABLE
+_CN_DIGITS = units.CN_DIGITS
+_CN_UNITS = units.CN_UNITS
+_CN_BIG = units.CN_BIG
+_DATE_PATTERNS = units.DATE_PATTERNS
+_ARABIC = units.ARABIC
+_RANGE_TAIL = units.RANGE_TAIL
+_CHINESE = units.CHINESE
+_CHINESE_PERCENT = units.CHINESE_PERCENT
+_PROPER_EXACT = units.PROPER_EXACT
+_ATTR = units.ATTR
+_ATTR_TRAILING = units.ATTR_TRAILING
+_ATTR_STRIP_PREFIX = units.ATTR_STRIP_PREFIX
+_PROPER_EXACT = units.PROPER_EXACT
+_RANGE_TAIL = units.RANGE_TAIL
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,7 +69,7 @@ class Quantity:
 
     def __str__(self) -> str:  # pragma: no cover - 只用于报错信息
         """Return a human-readable representation."""
-        return f"{self.value}{self.unit or ''}"
+        return f"{self.value}{(self.unit if self.unit else '')}"
 
 
 def _normalise_decimal(value: Decimal) -> Decimal:
@@ -163,7 +162,7 @@ def extract_quantities(text: str) -> tuple[Quantity, ...]:
         )
         if value is None:
             continue
-        if match.group("kind") == PER_MILLE:
+        if match.group("kind") == units.PER_MILLE:
             value = value / Decimal(1000) * Decimal(100)
         unit_factor = UNIT_TABLE["%"]
         out.append(
@@ -190,7 +189,10 @@ def extract_quantities(text: str) -> tuple[Quantity, ...]:
 
     for match in _ARABIC.finditer(masked):
         # “第 66 页”“第 8 页”是引用定位，不是需要核对的数值。
-        if match.start() > 0 and masked[match.start() - 1] == ORDINAL_PREFIX:
+        if (
+            match.start() > 0
+            and masked[match.start() - 1] == units.ORDINAL_PREFIX
+        ):
             continue
         raw_num = match.group("num").replace(",", "").replace("，", "")
         try:
@@ -245,7 +247,7 @@ def locate_quantities(
     known = {item.as_key() for item in evidence_items}
     missing = []
     for item in claim_items:
-        if item.unit == YEAR_UNIT and 1900 <= int(item.value) <= 2999:
+        if item.unit == units.YEAR_UNIT and 1900 <= int(item.value) <= 2999:
             continue
         if item.as_key() in known:
             continue
@@ -399,7 +401,7 @@ def find_value_conflicts(
                 conflicts.append(
                     (
                         item.attribute,
-                        item.quantity.unit or NO_UNIT_LABEL,
+                        item.quantity.unit or units.NO_UNIT_LABEL,
                         str(previous[0]),
                         str(value),
                     )

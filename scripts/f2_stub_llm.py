@@ -26,7 +26,12 @@ import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
-EVIDENCE_HEAD = re.compile(r"^\[(\d+)\] 来源：(.+)$", re.MULTILINE)
+if __package__:
+    from .resources.f2_stub_llm_msgs import MESSAGES as M
+else:  # run as a script: python3 scripts/f2_stub_llm.py
+    from resources.f2_stub_llm_msgs import MESSAGES as M
+
+EVIDENCE_HEAD = re.compile(M["COMPILE_01"], re.MULTILINE)
 VERBOSE = False
 
 
@@ -52,6 +57,7 @@ def evidence_blocks(prompt: str) -> list[tuple[int, str, str]]:
 
 
 def first_sentence(text: str) -> str:
+    """Run first_sentence."""
     text = text.strip().replace("\n", " ")
     for sep in ("。", ". ", "；", "，"):
         head, found, _ = text.partition(sep)
@@ -66,7 +72,7 @@ def first_sentence(text: str) -> str:
     return text.replace(".", "·").strip()
 
 
-QUESTION_HEAD = re.compile(r"【问题】\s*(.+)$", re.DOTALL)
+QUESTION_HEAD = re.compile(M["COMPILE_02"], re.DOTALL)
 
 
 def extract_question(prompt: str) -> str:
@@ -82,11 +88,12 @@ def extract_question(prompt: str) -> str:
 
 
 def build_answer(prompt: str) -> dict[str, Any]:
+    """Run build_answer."""
     blocks = evidence_blocks(prompt)
     if not blocks:
         return {
             "status": "unknown",
-            "answer": "证据包为空，未找到可验证依据。",
+            "answer": M["ANSWER_01"],
             "citations": [],
             "claims": [],
         }
@@ -94,8 +101,12 @@ def build_answer(prompt: str) -> dict[str, Any]:
     # 在真链路上也能被演示到（否则永远只引用纯文本切片）。
     question = extract_question(prompt)
     chosen = blocks[0]
-    if "图" in question:
-        figure_like = [b for b in blocks if "裁图" in b[2] or "图表" in b[2]]
+    if M["BUILD_ANSWER_01"] in question:
+        figure_like = [
+            b
+            for b in blocks
+            if M["FIGURE_LIKE_01"] in b[2] or M["FIGURE_LIKE_02"] in b[2]
+        ]
         if figure_like:
             chosen = figure_like[0]
     n, _source, body = chosen
@@ -110,6 +121,7 @@ def build_answer(prompt: str) -> dict[str, Any]:
 
 
 class Handler(BaseHTTPRequestHandler):
+    """Handler."""
     server_version = "f2-stub-llm/0.1"
 
     def do_GET(self) -> None:  # noqa: N802 - http.server 的命名约定
@@ -134,6 +146,7 @@ class Handler(BaseHTTPRequestHandler):
         self._json(404, {"error": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802 - http.server 的命名约定
+        """Run do_POST."""
         length = int(self.headers.get("content-length") or 0)
         raw = self.rfile.read(length).decode("utf-8", "replace")
         try:
@@ -169,9 +182,11 @@ class Handler(BaseHTTPRequestHandler):
         )
 
     def log_message(self, format: str, *args: Any) -> None:  # noqa: A002 - 覆盖基类签名
+        """Run log_message."""
         print(f"[stub-llm] {format % args}", flush=True)
 
     def _json(self, status: int, payload: dict[str, Any]) -> None:
+        """Run _json."""
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("content-type", "application/json")
@@ -181,12 +196,13 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> int:
+    """Run main."""
     global VERBOSE
     parser = argparse.ArgumentParser(description="F2 stub LLM gateway")
     parser.add_argument("--port", type=int, default=8099)
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument(
-        "--verbose", action="store_true", help="打印提示词与生成的答案"
+        "--verbose", action="store_true", help=M["HELP_01"]
     )
     args = parser.parse_args()
     VERBOSE = args.verbose

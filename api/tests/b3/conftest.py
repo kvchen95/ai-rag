@@ -1,4 +1,4 @@
-"""集成测试夹具：真 PG + 真 Qdrant（独立集合）+ 真 TEI。
+"""集成测试夹具：真 PG + 真 Qdrant（独立集合）+ 真 TEI。.
 
 复用 A3 的 `api/tests/a3/conftest.py` 里那套造数函数（`seed_document` /
 `index_version` / `flip`）与 fixture——理由很直接：两条链路对同一份数据必须给
@@ -56,12 +56,13 @@ NS = "b3test"
 
 
 def doc_key(name: str) -> str:
+    """Run doc_key."""
     return f"{NS}/{name}"
 
 
 @pytest.fixture(scope="session")
 def b3_pg(request: pytest.FixtureRequest) -> PgDatabase:
-    """B3 专用的真 PG 连接池，迁移由 a3 的 `migrated` 夹具完成。
+    """B3 专用的真 PG 连接池，迁移由 a3 的 `migrated` 夹具完成。.
 
     通过 fixture 名取值而不是同名形参：形参会遮蔽上面 import 进来的
     `migrated`（F811），而那个 import 是让本目录也能发现该夹具的。
@@ -81,7 +82,7 @@ def b3_pg(request: pytest.FixtureRequest) -> PgDatabase:
 
 @pytest.fixture(autouse=True)
 def _cleanup_b3_rows(pool) -> None:
-    """用例前后清掉 `b3test/` 命名空间。"""
+    """用例前后清掉 `b3test/` 命名空间。."""
     _purge(pool)
     try:
         yield
@@ -90,6 +91,7 @@ def _cleanup_b3_rows(pool) -> None:
 
 
 def _purge(pool) -> None:
+    """Run _purge."""
     with pool.connection() as connection:
         with connection.cursor() as cur:
             cur.execute(
@@ -117,6 +119,7 @@ def _purge(pool) -> None:
 
 @pytest.fixture(scope="session")
 def rerank_reachable() -> str:
+    """Run rerank_reachable."""
     if not RERANK_URL:
         pytest.skip("RERANK_BASE_URL 未设置（集成需要真精排服务）")
     try:
@@ -132,6 +135,7 @@ def rerank_reachable() -> str:
 
 @pytest.fixture
 def retriever(qdrant_reachable: str, collection: str) -> HybridRetriever:
+    """Run retriever."""
     r = HybridRetriever(qdrant_reachable, collection, timeout_s=10)
     try:
         yield r
@@ -141,6 +145,7 @@ def retriever(qdrant_reachable: str, collection: str) -> HybridRetriever:
 
 @pytest.fixture
 def reranker(rerank_reachable: str) -> Reranker:
+    """Run reranker."""
     r = Reranker(rerank_reachable, RERANK_MODEL, timeout_s=30)
     try:
         yield r
@@ -150,6 +155,7 @@ def reranker(rerank_reachable: str) -> Reranker:
 
 @pytest.fixture
 def query_embedder(embedder) -> QueryEmbedder:  # noqa: ARG001 - 复用它的 skip 判定
+    """Run query_embedder."""
     return QueryEmbedder(
         base_url=EMBEDDING_URL,
         model=EMBEDDING_MODEL,
@@ -170,7 +176,7 @@ def publish(
     tag: str,
     chunks: list[dict],
 ) -> str:
-    """造一个已上线的版本：PG 双 active + 向量库点 status=active。
+    """造一个已上线的版本：PG 双 active + 向量库点 status=active。.
 
     B3 的用例要么验"能召回"、要么验"旧版本被剔"，两种都需要"这个版本现在是
     线上版本"这个事实。分成三步做（写 PG → 写向量 → 翻状态）而不是一步到位，
@@ -215,6 +221,7 @@ def publish(
 
 
 def _hash(tag: str) -> str:
+    """Run _hash."""
     import hashlib
 
     return hashlib.sha256(tag.encode()).hexdigest()
@@ -236,7 +243,7 @@ def _insert_chunk(
     parent_id: str | None = None,
     chunk_type: str = "text",
 ) -> None:
-    """插一条切片（status 先 pending，翻牌时才变 active）。"""
+    """插一条切片（status 先 pending，翻牌时才变 active）。."""
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -286,6 +293,7 @@ def make_chunk(
     parent_id: str | None = None,
     chunk_type: str = "text",
 ) -> dict[str, Any]:
+    """Run make_chunk."""
     return {
         "chunk_id": chunk_id,
         "content_text": text,
@@ -301,7 +309,7 @@ def make_chunk(
 
 
 def unique(name: str) -> str:
-    """同一份代码里多个用例共用一张表，名字必须唯一。
+    """同一份代码里多个用例共用一张表，名字必须唯一。.
 
     不唯一就撞 chunk_id 主键。
     """

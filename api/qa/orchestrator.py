@@ -58,6 +58,7 @@ from api.identity import IdentitySnapshot
 from api.observability import get_logger, log_event
 from api.qa import events as ev
 from api.qa.events import SseEvent
+from api.resources import messages as msg
 from api.retrieval.pipeline import RetrievalPipeline, RetrievalSnapshot
 from api.retrieval.texts import doc_names, fetch_texts
 from api.temporal.context import merge_evidence, temporal_evidence
@@ -198,7 +199,10 @@ class QaService:
         finally:
             latency = (time.perf_counter() - started) * 1000
             outcome.latency_ms = latency
-            uncovered = tuple(outcome.score_snapshot.get("uncovered") or ())
+            uncovered_value = outcome.score_snapshot.get("uncovered")
+            uncovered = tuple(
+                uncovered_value if uncovered_value else ()
+            )
             # `done` 永远最后一条（附录 C.2），异常路径也发。
             send(
                 ev.done(
@@ -254,13 +258,15 @@ class QaService:
         outcome.retrieved_ids = tuple(snapshot.retrieved_ids())
         outcome.score_snapshot = dict(snapshot.score_snapshot())
         outcome.score_snapshot["uncovered"] = list(snapshot.decision.uncovered)
+        evidence_value = outcome.score_snapshot.get("evidence")
+        evidence_ids = list(evidence_value if evidence_value else ())
         trace_event(
             "qa.retrieval_done",
             verdict=snapshot.verdict,
             top1=outcome.score_snapshot.get("top1"),
             candidates=len(snapshot.candidates),
             retrieved_ids=list(outcome.retrieved_ids),
-            evidence_ids=list(outcome.score_snapshot.get("evidence") or ()),
+            evidence_ids=evidence_ids,
             hops=snapshot.hop_count,
             reason=snapshot.decision.reason,
         )
@@ -307,7 +313,7 @@ class QaService:
                 send,
                 outcome,
                 ErrorCode.MODEL_TIMEOUT,
-                "未配置生成模型（LLM_MODEL 为空）",
+                msg.NO_LLM_MODEL,
             )
             return
 
@@ -326,7 +332,7 @@ class QaService:
                 pack,
                 notices,
                 code=ErrorCode.UNVERIFIABLE,
-                detail=f"模型输出不可用（{exc.reason}）",
+                detail=msg.DRAFT_UNUSABLE.format(reason=exc.reason),
             )
             return
         except GenerationUnavailable as exc:
@@ -356,7 +362,7 @@ class QaService:
                 code=report.error_code or ErrorCode.UNVERIFIABLE,
                 detail=report.failure.detail
                 if report.failure
-                else "校验未通过",
+                else msg.VERIFY_FAILED,
                 report=report,
             )
             return
@@ -412,11 +418,7 @@ class QaService:
         """Run _emit_clarify."""
         decision = snapshot.decision
         options = [opt.as_dict() for opt in decision.clarify_options]
-        question = (
-            "请确认要查的是哪一份资料："
-            if options
-            else "请补充查询条件（例如所属部门或年份）："
-        )
+        question = msg.CLARIFY_DOC if options else msg.CLARIFY_CONDITIONS
         outcome.verdict = "clarify"
         outcome.detail = decision.reason
         send(ev.clarify(question, options))
@@ -595,11 +597,11 @@ class QaService:
         uncovered = tuple(snapshot.decision.uncovered)
         if uncovered:
             notices.append(
-                f"（以下问题本次未查到可验证依据：{'、'.join(uncovered)}）"
+                msg.UNCOVERED_NOTICE.format(items="、".join(uncovered))
             )
         time_note = getattr(snapshot.plan.time, "note", None)
         if time_note:
-            notices.append(f"（时间口径：{time_note}）")
+            notices.append(msg.TIME_NOTE.format(note=time_note))
         return tuple(notices)
 
 
@@ -617,7 +619,7 @@ def _audit_entry(
     """
     identity = outcome.identity
     if identity is None:  # pragma: no cover - `run()` 一定传了身份
-        raise ValueError("QaOutcome 缺身份快照：审计无法回答「谁看了什么」")
+        raise ValueError(msg.MISSING_IDENTITY)
 
     score = dict(outcome.score_snapshot)
     if outcome.verification is not None:
@@ -648,11 +650,11 @@ def _audit_entry(
             else outcome.verification.gate2_verdict  # type: ignore[arg-type]
         ),
         hop_count=outcome.hop_count,
-        answer=outcome.answer or None,
+        answer=(outcome.answer if outcome.answer else None),
         citations=passthrough,
         reject_reason=outcome.error_code,
         latency_ms=int(round(latency_ms)),
-        model=model or None,
+        model=(model if model else None),
     )
 
 

@@ -14,11 +14,17 @@ from __future__ import annotations
 import subprocess
 import sys
 
+if __package__:
+    from .resources.promote_all_msgs import MESSAGES as M
+else:  # run as a script: python3 scripts/promote_all.py
+    from resources.promote_all_msgs import MESSAGES as M
+
 from api.clients.pg import PgDatabase
 from api.config import get_settings
 
 
 def main() -> int:
+    """Run main."""
     db = PgDatabase(get_settings().database_url)
     # 独立脚本没有 FastAPI lifespan，连接池必须自己开/关；否则 PoolClosed。
     db.open()
@@ -35,10 +41,10 @@ def main() -> int:
     finally:
         db.close()
     if not rows:
-        print("没有待转正的版本")
+        print(M["PRINT_01"])
         return 0
 
-    print(f"待转正 {len(rows)} 个版本")
+    print(f"{M['PRINT_02']}{len(rows)}{M['PRINT_03']}")
     failed: list[tuple[str, str]] = []
     for version_id, doc_key in rows:
         result = subprocess.run(
@@ -52,12 +58,12 @@ def main() -> int:
             failed.append((doc_key, (result.stderr or result.stdout).strip()))
 
     if failed:
-        print("\n失败的版本（其余已成功转正）：")
+        print(M["PRINT_04"])
         for doc_key, detail in failed:
             print(f"\n--- {doc_key} ---")
             print(detail)
         return 1
-    print("全部转正完成")
+    print(M["PRINT_05"])
     return 0
 
 

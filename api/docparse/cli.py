@@ -9,38 +9,39 @@ from pathlib import Path
 
 from api.docparse.single import run_single
 from api.docparse.stages import run_full_single
+from api.resources import messages as msg
 
 
 def build_parser() -> argparse.ArgumentParser:
     """Run build_parser."""
     parser = argparse.ArgumentParser(prog="parse_doc")
     sub = parser.add_subparsers(dest="command", required=True)
-    one = sub.add_parser("single", help="解析单个 PDF，先落本地阶段产物")
+    one = sub.add_parser("single", help=msg.CLI_HELP_SINGLE)
     one.add_argument("file", nargs="?", type=Path, default=None)
     one.add_argument(
-        "--max-pages", type=int, default=None, help="付费闸门：必须显式给"
+        "--max-pages", type=int, default=None, help=msg.CLI_HELP_MAX_PAGES
     )
     one.add_argument(
-        "--dry-run", action="store_true", help="只报页数与产出路径，不发请求"
+        "--dry-run", action="store_true", help=msg.CLI_HELP_DRY_RUN
     )
     one.add_argument("--out", type=Path, default=Path("data/parse"))
     one.add_argument(
         "--resume",
         type=Path,
         default=None,
-        help="从已有输出目录恢复下载，不重提交",
+        help=msg.CLI_HELP_RESUME,
     )
     one.add_argument(
-        "--from-raw", type=Path, default=None, help="只跑后续阶段，不调 MinerU"
+        "--from-raw", type=Path, default=None, help=msg.CLI_HELP_FROM_RAW
     )
     one.add_argument(
-        "--source", type=Path, default=None, help="from-raw 时的原始 PDF 路径"
+        "--source", type=Path, default=None, help=msg.CLI_HELP_SOURCE
     )
     one.add_argument(
-        "--batch-id", default=None, help="恢复下载时的 MinerU batch_id"
+        "--batch-id", default=None, help=msg.CLI_HELP_BATCH_ID
     )
     one.add_argument(
-        "--zip-url", default=None, help="恢复下载时的 full_zip_url"
+        "--zip-url", default=None, help=msg.CLI_HELP_ZIP_URL
     )
     return parser
 
@@ -49,7 +50,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Run main."""
     args = build_parser().parse_args(argv)
     if args.file is None and args.resume is None and args.from_raw is None:
-        print("拒绝执行：必须给 FILE 或 --resume/--from-raw")
+        print(msg.CLI_REFUSE_NO_ARGUMENT)
         return 2
     try:
         if args.resume is not None:
@@ -74,7 +75,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             source_path=args.source,
         )
     except ValueError as exc:
-        print(f"拒绝执行：{exc}")
+        print(msg.CLI_REFUSE.format(error=exc))
         return 2
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0

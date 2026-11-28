@@ -1,4 +1,4 @@
-"""同步与重试（详细设计.md §4.2）。
+"""同步与重试（详细设计.md §4.2）。.
 
 `drain()` 是“让 Qdrant 知道翻牌发生了”的那一步。它必须满足四件事，每件都有
 对应用例：
@@ -39,16 +39,18 @@ pytestmark = pytest.mark.integration
 
 
 class BrokenStore(QdrantVectorStore):
-    """模拟 Qdrant 挂掉：所有写操作抛错，读操作真实执行。"""
+    """模拟 Qdrant 挂掉：所有写操作抛错，读操作真实执行。."""
 
     fail_writes = True
 
     def set_status_by_version(self, version_id: str, status: str) -> None:
+        """Run set_status_by_version."""
         if self.fail_writes:
             raise ConnectionError("qdrant is down (simulated)")
         super().set_status_by_version(version_id, status)
 
     def delete_version_points(self, version_id: str) -> None:
+        """Run delete_version_points."""
         if self.fail_writes:
             raise ConnectionError("qdrant is down (simulated)")
         super().delete_version_points(version_id)
@@ -56,6 +58,7 @@ class BrokenStore(QdrantVectorStore):
 
 @pytest.fixture
 def broken_store(qdrant_reachable: str, collection: str) -> BrokenStore:
+    """Run broken_store."""
     s = BrokenStore(base_url=qdrant_reachable, collection=collection)
     try:
         yield s
@@ -66,7 +69,7 @@ def broken_store(qdrant_reachable: str, collection: str) -> BrokenStore:
 def _promote(
     conn, store, embedder, key: str, *, old_tag: str | None = None
 ) -> tuple[str, str | None]:
-    """建（可选）旧版 + 新版，索引并翻牌。
+    """建（可选）旧版 + 新版，索引并翻牌。.
 
     旧版也必须**先真正索引过**（真实世界里它当初就是这样上线的）：否则同步器会
     发现"PG 有 2 条 active 切片、Qdrant
@@ -96,7 +99,7 @@ def _promote(
 
 
 def test_drain_applies_status_to_qdrant(conn, pool, store, embedder) -> None:
-    """翻牌后 drain：新版点变 active、旧版点变 deprecated，两边分布一致。"""
+    """翻牌后 drain：新版点变 active、旧版点变 deprecated，两边分布一致。."""
     new, old = _promote(conn, store, embedder, "syncok", old_tag="prev")
     assert old is not None
 
@@ -117,7 +120,7 @@ def test_drain_applies_status_to_qdrant(conn, pool, store, embedder) -> None:
 
 
 def test_drain_is_idempotent(conn, pool, store, embedder) -> None:
-    """第二次 drain 什么都不做（任务已 done，不再到期）。"""
+    """第二次 drain 什么都不做（任务已 done，不再到期）。."""
     _promote(conn, store, embedder, "drainidem")
     first = drain(pool, store, max_attempts=4, backoff_s=0.0)
     second = drain(pool, store, max_attempts=4, backoff_s=0.0)
@@ -130,7 +133,7 @@ def test_drain_is_idempotent(conn, pool, store, embedder) -> None:
 def test_upsert_desired_does_not_reset_a_done_task(
     conn, store, embedder, pool
 ) -> None:
-    """重复写同一个期望状态不该把 done 打回 pending。
+    """重复写同一个期望状态不该把 done 打回 pending。.
 
     否则每小时的对账会把已经同步好的版本反复重推——每次都"成功"，但日志与
     Qdrant 的写入量会随时间线性增长。
@@ -155,7 +158,7 @@ def test_upsert_desired_does_not_reset_a_done_task(
 
 
 def test_desired_change_resets_retry_budget(conn, store, embedder) -> None:
-    """期望**变了**才重置：上一轮的失败不该让一次新的翻牌一上来就没额度。"""
+    """期望**变了**才重置：上一轮的失败不该让一次新的翻牌一上来就没额度。."""
     new, _ = _promote(conn, store, embedder, "reset")
     # 先人为把它弄成失败态
     with conn.cursor() as cur:
@@ -196,7 +199,7 @@ def test_desired_change_resets_retry_budget(conn, store, embedder) -> None:
 def test_verify_detects_wrong_status_even_when_qdrant_returns_200(
     conn, store, embedder
 ) -> None:
-    """把 PG 状态改掉（不回写 Qdrant）→ verify 必须判不一致。
+    """把 PG 状态改掉（不回写 Qdrant）→ verify 必须判不一致。.
 
     这条守的是"Qdrant 的 200 只说明它收下了请求"：filter 写错、改错版本、
     一条都没匹配上，它全都返回 completed。
@@ -222,7 +225,7 @@ def test_verify_detects_wrong_status_even_when_qdrant_returns_200(
 
 
 def test_verify_detects_missing_points(conn, store, embedder) -> None:
-    """点少了（被别的操作删掉）→ verify 判不一致。"""
+    """点少了（被别的操作删掉）→ verify 判不一致。."""
     new, _ = _promote(conn, store, embedder, "verifymiss")
     store.set_status_by_version(new, "active")
     assert verify_desired(conn, store, version_id=new, desired="active")[0]
@@ -239,7 +242,7 @@ def test_verify_detects_missing_points(conn, store, embedder) -> None:
 def test_drain_retries_then_marks_failed_and_records_drift(
     conn, pool, broken_store, embedder
 ) -> None:
-    """同步失败：按额度重试，耗尽后 failed 并记一条 sync_failed 漂移。
+    """同步失败：按额度重试，耗尽后 failed 并记一条 sync_failed 漂移。.
 
     `max_attempts=1` 让第一次失败就用完额度（不必等退避），断言的是"额度用完之后
     发生了什么"：任务 failed、漂移账上多一条、drain 报 not ok。
@@ -273,7 +276,7 @@ def test_drain_retries_then_marks_failed_and_records_drift(
 def test_retry_keeps_task_pending_until_budget_runs_out(
     conn, pool, broken_store, embedder
 ) -> None:
-    """还有额度时任务退回 pending（不丢），并推到未来（退避）。"""
+    """还有额度时任务退回 pending（不丢），并推到未来（退避）。."""
     new, _ = _promote(conn, broken_store, embedder, "syncbackoff")
 
     report = drain(pool, broken_store, max_attempts=3, backoff_s=3600.0)
@@ -289,7 +292,7 @@ def test_retry_keeps_task_pending_until_budget_runs_out(
 
 
 def test_backoff_grows_exponentially_and_is_capped() -> None:
-    """退避公式：base * 2^(attempt-1)，封顶 8×base。
+    """退避公式：base * 2^(attempt-1)，封顶 8×base。.
 
     §4.2 要求"翻牌后一分钟内必须同步完"，所以退避不能真的指数涨到十分钟。
     """
@@ -304,7 +307,7 @@ def test_backoff_grows_exponentially_and_is_capped() -> None:
 def test_failed_task_recovers_when_qdrant_comes_back(
     conn, pool, broken_store, embedder
 ) -> None:
-    """Qdrant 恢复后，failed 的任务能被**对账**修好（不是靠自动复活）。
+    """Qdrant 恢复后，failed 的任务能被**对账**修好（不是靠自动复活）。.
 
     这是验收"同步失败可对账修复"的落点：failed 不会自己回来（否则一个持续失败的
     对象会无限重试），但 `upsert_desired` 或对账能看到差异并纠正。
@@ -334,11 +337,13 @@ def test_failed_task_recovers_when_qdrant_comes_back(
 
 
 def store_active(conn, store: QdrantVectorStore, version_id: str) -> int:
+    """Run store_active."""
     del conn
     return store.count_version(version_id, status="active")
 
 
 def _drift_count(conn) -> int:
+    """Run _drift_count."""
     return int(
         conn.execute("SELECT count(*) FROM vector_drift_log").fetchone()[0]
     )
@@ -348,7 +353,7 @@ def _drift_count(conn) -> int:
 
 
 def test_claim_due_leases_the_task(conn, store, embedder) -> None:
-    """领任务会把它推到未来（租约），同一时刻别的 worker 领不到。
+    """领任务会把它推到未来（租约），同一时刻别的 worker 领不到。.
 
     进程崩在中途时租约到期，任务自动重新可领——不需要"清理僵尸任务"的流程。
     """
@@ -367,6 +372,7 @@ def test_claim_due_leases_the_task(conn, store, embedder) -> None:
 
 
 def test_mark_failed_requires_a_reason(conn, store, embedder) -> None:
+    """Run test_mark_failed_requires_a_reason."""
     new, _ = _promote(conn, store, embedder, "reason")
     conn.commit()
     with pytest.raises(ValueError, match="non-empty error"):
@@ -375,7 +381,7 @@ def test_mark_failed_requires_a_reason(conn, store, embedder) -> None:
 
 
 def test_record_drift_dedupes_open_entries(conn) -> None:
-    """同一处未修复的漂移只留一行（否则每小时对账会刷 24 条一样的记录）。"""
+    """同一处未修复的漂移只留一行（否则每小时对账会刷 24 条一样的记录）。."""
     first = record_drift(
         conn,
         doc_key=doc_key("drift"),
@@ -410,6 +416,7 @@ def test_record_drift_dedupes_open_entries(conn) -> None:
 
 
 def test_drain_report_shape() -> None:
+    """Run test_drain_report_shape."""
     report = DrainReport(processed=1, done=1)
     payload = report.as_dict()
     assert payload["processed"] == 1 and payload["done"] == 1

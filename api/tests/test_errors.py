@@ -1,4 +1,4 @@
-"""错误分类：文案/状态码/告警三件事必须同源，且 detail 不许外泄。"""
+"""错误分类：文案/状态码/告警三件事必须同源，且 detail 不许外泄。."""
 
 from __future__ import annotations
 
@@ -42,20 +42,25 @@ EXTENSIONS = {
 
 
 class _OkPg:
+    """_OkPg."""
     def open(self) -> None: ...
     def close(self) -> None: ...
     def ping(self, *, timeout_s: float | None = None) -> Probe:
+        """Run ping."""
         return Probe(ok=True, latency_ms=1.0)
 
 
 class _OkQdrant:
+    """_OkQdrant."""
     async def start(self) -> None: ...
     async def stop(self) -> None: ...
     async def ping(self, *, timeout_s: float | None = None) -> Probe:
+        """Run ping."""
         return Probe(ok=True, latency_ms=1.0)
 
 
 def _client_with_routes(*routes: tuple[str, object]) -> TestClient:
+    """Run _client_with_routes."""
     settings: Settings = make_settings()
     app: FastAPI = create_app(settings, pg=_OkPg(), qdrant=_OkQdrant())
     for path, handler in routes:
@@ -65,6 +70,7 @@ def _client_with_routes(*routes: tuple[str, object]) -> TestClient:
 
 def test_every_spec_matches_design_table() -> None:
     # §11.3 的原表逐行照抄；扩展码另表登记（见 EXTENSIONS）。
+    """Run test_every_spec_matches_design_table."""
     assert set(ERROR_SPECS) - set(EXTENSIONS) == set(EXPECTED)
     for code, (status, message, alert) in {**EXPECTED, **EXTENSIONS}.items():
         spec = spec_for(code)
@@ -76,7 +82,7 @@ def test_every_spec_matches_design_table() -> None:
 
 
 def test_every_error_code_is_registered_in_a_table() -> None:
-    """新增一个码却没人给它定状态码/文案/告警口径 = 监控会漏掉它。
+    """新增一个码却没人给它定状态码/文案/告警口径 = 监控会漏掉它。.
 
     这条是上一条的守卫：上一条只保证"表里的码对得上"，这条保证"枚举里的每个码
     都在某张表里"。加码时忘了登记，这里会红并点名是哪个。
@@ -89,6 +95,7 @@ def test_every_error_code_is_registered_in_a_table() -> None:
 
 def test_sse_fallback_flag_only_on_streamable_codes() -> None:
     # auth/forbidden 在开流前就该挡掉，不该以 fallback 事件出现在流里。
+    """Run test_sse_fallback_flag_only_on_streamable_codes."""
     assert not spec_for(ErrorCode.AUTH_INVALID).sse_fallback
     assert not spec_for(ErrorCode.FORBIDDEN).sse_fallback
     for code in (
@@ -101,7 +108,9 @@ def test_sse_fallback_flag_only_on_streamable_codes() -> None:
 
 
 def test_app_error_maps_status_and_hides_detail() -> None:
+    """Run test_app_error_maps_status_and_hides_detail."""
     def boom() -> None:
+        """Run boom."""
         raise AppError(
             ErrorCode.FORBIDDEN,
             detail="dept fin not allowed for doc policy/travel-cn",
@@ -119,7 +128,9 @@ def test_app_error_maps_status_and_hides_detail() -> None:
 
 
 def test_unhandled_exception_becomes_internal() -> None:
+    """Run test_unhandled_exception_becomes_internal."""
     def boom() -> None:
+        """Run boom."""
         raise RuntimeError("db password is hunter2")
 
     # raise_server_exceptions=False 才是"线上视角"：Starlette 的 500 handler
@@ -137,7 +148,9 @@ def test_unhandled_exception_becomes_internal() -> None:
 
 
 def test_validation_error_uses_own_code() -> None:
+    """Run test_validation_error_uses_own_code."""
     def need_int(n: int) -> dict[str, int]:
+        """Run need_int."""
         return {"n": n}
 
     with _client_with_routes(("/needs-int", need_int)) as client:
@@ -149,6 +162,7 @@ def test_validation_error_uses_own_code() -> None:
 
 @pytest.mark.parametrize("code", list(ErrorCode))
 def test_error_body_shape_is_stable(code: ErrorCode) -> None:
+    """Run test_error_body_shape_is_stable."""
     err = AppError(code)
     body = err.body("rid-1")
     assert set(body) == {"error"}

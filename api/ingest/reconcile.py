@@ -177,10 +177,14 @@ def _scroll_all(store: QdrantVectorStore) -> list[dict[str, Any]]:
         resp = store._call(
             "POST", f"/collections/{store.collection}/points/scroll", body
         )
-        result = (
-            ((resp or {}).get("result") or {}) if isinstance(resp, dict) else {}
-        )
-        page = result.get("points") or []
+        result: dict[str, Any] = {}
+        if isinstance(resp, dict):
+            raw_result = resp.get("result")
+            if isinstance(raw_result, dict):
+                result = raw_result
+        page = result.get("points")
+        if page is None:
+            page = []
         points.extend(page)
         offset = result.get("next_page_offset")
         if not offset or not page:
@@ -211,7 +215,9 @@ def diff(
     seen_chunks: set[str] = set()
 
     for point in points:
-        payload = point.get("payload") or {}
+        payload = point.get("payload")
+        if payload is None:
+            payload = {}
         chunk_id = payload.get("chunk_id")
         if not chunk_id:
             report.drifts.append(

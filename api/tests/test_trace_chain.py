@@ -1,4 +1,4 @@
-"""链路追踪的端到端切片：从问题理解到检索、精排的事件都落到本地文件。"""
+"""链路追踪的端到端切片：从问题理解到检索、精排的事件都落到本地文件。."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from api.trace import reset_trace
 
 @pytest.fixture
 def trace_path(monkeypatch, tmp_path) -> Path:
+    """Run trace_path."""
     path = tmp_path / "chain.jsonl"
     monkeypatch.setenv("AI_RAG_TRACE_FILE", str(path))
     monkeypatch.delenv("AI_RAG_TRACE_ENABLED", raising=False)
@@ -20,6 +21,7 @@ def trace_path(monkeypatch, tmp_path) -> Path:
 
 
 def events(path: Path) -> list[dict]:
+    """Run events."""
     return [
         json.loads(line)
         for line in path.read_text(encoding="utf-8").splitlines()
@@ -27,6 +29,7 @@ def events(path: Path) -> list[dict]:
 
 
 def test_understand_writes_query_stage_with_rewrites(trace_path):
+    """Run test_understand_writes_query_stage_with_rewrites."""
     from api.query import understand
 
     plan = understand("2025年差旅住宿标准是多少")
@@ -41,11 +44,13 @@ def test_understand_writes_query_stage_with_rewrites(trace_path):
 
 
 def test_hybrid_retrieve_traces_both_routes_fusion_and_dedup(trace_path):
+    """Run test_hybrid_retrieve_traces_both_routes_fusion_and_dedup."""
     from api.filters import RetrievalFilter
     from api.identity import IdentitySnapshot
     from api.retrieval.hybrid import HybridRetriever
 
     def point(chunk_id: str, score: float) -> dict:
+        """Run point."""
         return {
             "score": score,
             "payload": {
@@ -58,9 +63,11 @@ def test_hybrid_retrieve_traces_both_routes_fusion_and_dedup(trace_path):
         }
 
     class FakeResponse:
+        """FakeResponse."""
         status_code = 200
 
         def json(self):
+            """Run json."""
             return {
                 "result": [
                     {"points": [point("ch_dense", 0.91)]},
@@ -74,11 +81,14 @@ def test_hybrid_retrieve_traces_both_routes_fusion_and_dedup(trace_path):
             }
 
     class FakeClient:
+        """FakeClient."""
         def post(self, _path, **_kwargs):
+            """Run post."""
             return FakeResponse()
 
         def close(self):
-            return None
+            """Run close."""
+            return
 
     flt = RetrievalFilter(
         identity=IdentitySnapshot(user_id="u", depts=("fin",), roles=("staff",))
@@ -109,6 +119,7 @@ def test_hybrid_retrieve_traces_both_routes_fusion_and_dedup(trace_path):
 
 
 def test_rerank_traces_batch_scores_and_selected(trace_path):
+    """Run test_rerank_traces_batch_scores_and_selected."""
     from api.retrieval import rerank
     from api.retrieval.hybrid import Candidate
 
@@ -127,20 +138,25 @@ def test_rerank_traces_batch_scores_and_selected(trace_path):
     texts = {item.chunk_id: f"证据文本 {item.chunk_id}" for item in candidates}
 
     class FakeRerankResponse:
+        """FakeRerankResponse."""
         status_code = 200
 
         def json(self):
+            """Run json."""
             return [
                 {"index": index, "score": score}
                 for index, score in enumerate([0.9, 0.5, 0.1])
             ]
 
     class FakeRerankClient:
+        """FakeRerankClient."""
         def post(self, _path, **_kwargs):
+            """Run post."""
             return FakeRerankResponse()
 
         def close(self):
-            return None
+            """Run close."""
+            return
 
     with rerank.Reranker("http://rerank:8000", "m") as reranker:
         reranker._client = FakeRerankClient()  # type: ignore[assignment]
@@ -166,6 +182,7 @@ def test_rerank_traces_batch_scores_and_selected(trace_path):
 
 
 def test_pipeline_run_traces_full_retrieval_path(trace_path, monkeypatch):
+    """Run test_pipeline_run_traces_full_retrieval_path."""
     from api.identity import IdentitySnapshot
     from api.observability import request_id_var
     from api.retrieval import pipeline as pipeline_mod
@@ -188,9 +205,11 @@ def test_pipeline_run_traces_full_retrieval_path(trace_path, monkeypatch):
     )
 
     class FakeRetriever:
+        """FakeRetriever."""
         def retrieve(
             self, _query, _flt, *, dense_query, top_k, parent_child_keep
         ):
+            """Run retrieve."""
             return HybridResult(
                 candidates=[candidate],
                 dense_count=1,
@@ -199,20 +218,26 @@ def test_pipeline_run_traces_full_retrieval_path(trace_path, monkeypatch):
             )
 
         def close(self):
-            return None
+            """Run close."""
+            return
 
     class FakeEmbedder:
+        """FakeEmbedder."""
         def embed(self, _text):
+            """Run embed."""
             return [0.1] * 512
 
     class FakeReranker:
+        """FakeReranker."""
         max_batch = 32
 
         def score(self, _query, _texts, *, timeout_s):
+            """Run score."""
             return [0.88]
 
         def close(self):
-            return None
+            """Run close."""
+            return
 
     monkeypatch.setattr(pipeline_mod, "drop_stale", lambda pg, rows: (rows, []))
     monkeypatch.setattr(
@@ -292,6 +317,7 @@ def test_pipeline_run_traces_full_retrieval_path(trace_path, monkeypatch):
 def test_qa_service_traces_generation_verification_and_exit(
     trace_path, monkeypatch
 ):
+    """Run test_qa_service_traces_generation_verification_and_exit."""
     from api.generate.llm import Draft, Fact
     from api.identity import IdentitySnapshot
     from api.qa import orchestrator
@@ -327,26 +353,33 @@ def test_qa_service_traces_generation_verification_and_exit(
     )
 
     class FakePipeline:
+        """FakePipeline."""
         pg = object()
         rerank_top_n_max = 1
 
         def run(self, *_args, **_kwargs):
+            """Run run."""
             return snapshot
 
         def close(self):
-            return None
+            """Run close."""
+            return
 
     class FakePack:
+        """FakePack."""
         n_items = 1
         items: tuple = ()
 
         def render(self):
+            """Run render."""
             return "[1] 住宿费标准每人每天 500 元"
 
         def notice(self):
+            """Run notice."""
             return ""
 
         def as_audit(self):
+            """Run as_audit."""
             return {"items": [], "truncated": False}
 
     monkeypatch.setattr(
@@ -420,6 +453,7 @@ def test_qa_service_traces_generation_verification_and_exit(
 
 
 def test_qa_stream_traces_route_entry(trace_path, monkeypatch):
+    """Run test_qa_stream_traces_route_entry."""
     import asyncio
     from types import SimpleNamespace
 
@@ -440,16 +474,19 @@ def test_qa_stream_traces_route_entry(trace_path, monkeypatch):
     )
 
     class FakeService:
+        """FakeService."""
         pipeline = SimpleNamespace(close=lambda: None)
 
         def run(self, question, _identity, *, emit=None, **_kwargs):
+            """Run run."""
             emit(done(latency_ms=1.0, hop_count=0, verdict="pass"))
             return QaOutcome(
                 question=question, verdict="pass", identity=_identity
             )
 
         def close(self):
-            return None
+            """Run close."""
+            return
 
     monkeypatch.setattr(
         qa_router, "build_service", lambda *a, **k: FakeService()
@@ -460,6 +497,7 @@ def test_qa_stream_traces_route_entry(trace_path, monkeypatch):
     try:
 
         async def call_and_drain():
+            """Run call_and_drain."""
             response = await qa_router.qa_stream(
                 qa_router.QaStreamRequest(
                     question="住宿费限额是多少",
@@ -486,6 +524,7 @@ def test_qa_stream_traces_route_entry(trace_path, monkeypatch):
 
 
 def test_qa_stream_traces_worker_failure(trace_path, monkeypatch):
+    """Run test_qa_stream_traces_worker_failure."""
     import asyncio
     from types import SimpleNamespace
 
@@ -501,11 +540,13 @@ def test_qa_stream_traces_worker_failure(trace_path, monkeypatch):
     identity = IdentitySnapshot(user_id="u", depts=("fin",), roles=("staff",))
 
     def boom(*_args, **_kwargs):
+        """Run boom."""
         raise RuntimeError("装配失败")
 
     monkeypatch.setattr(qa_router, "build_service", boom)
 
     async def call_and_drain():
+        """Run call_and_drain."""
         response = await qa_router.qa_stream(
             qa_router.QaStreamRequest(question="坏请求"),
             request,  # type: ignore[arg-type]

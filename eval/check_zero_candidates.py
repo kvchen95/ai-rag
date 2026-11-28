@@ -4,6 +4,11 @@ import json
 import sys
 from pathlib import Path
 
+if __package__:
+    from .resources.check_zero_candidates_msgs import MESSAGES as M
+else:  # run as a script: python3 eval/check_zero_candidates.py
+    from resources.check_zero_candidates_msgs import MESSAGES as M
+
 report = Path(sys.argv[1])
 data = json.loads(report.read_text(encoding="utf-8"))
 
@@ -51,4 +56,4 @@ for r in records:
     print(f"{qid:<5} {str(ad):>11} {str(dt):>10} {detail:<26} {str(top1):>8}")
     if ad == 0:
         zero += 1
-print(f"\n零候选应答题数 = {zero} / 7")
+print(f"{M['MODULE_01']}{zero} / 7")

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from api.generate.evidence import EvidencePack
 from api.generate.llm import Draft, DraftFormatError
+from api.resources import messages as msg
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,12 +36,16 @@ def render_draft(draft: Draft, pack: EvidencePack) -> RenderedDraft:
     rendered_facts: list[str] = []
     for fact in draft.facts:
         if not fact.evidence_ids:
-            raise DraftFormatError("fact 缺少 evidence_ids", raw=draft.raw)
+            raise DraftFormatError(
+                msg.RENDER_FACT_NO_EVIDENCE, raw=draft.raw
+            )
         numbers: list[int] = []
         for evidence_id in fact.evidence_ids:
             if evidence_id not in pack_by_chunk:
                 raise DraftFormatError(
-                    f"evidence_id 不在 EvidencePack 中: {evidence_id}",
+                    msg.RENDER_UNKNOWN_EVIDENCE.format(
+                        evidence_id=evidence_id
+                    ),
                     raw=draft.raw,
                 )
             number = pack_by_chunk[evidence_id]

@@ -308,7 +308,7 @@ class Settings(BaseSettings):
                     "dim": self.embedding_dim,
                 },
                 "rerank": {"model": self.rerank_model},
-                "llm": {"model": self.llm_model or None},
+                "llm": {"model": (self.llm_model if self.llm_model else None)},
             },
             "generation": {
                 # 生成与判别的模型名是"配置指纹"的一部分：换模型必须能

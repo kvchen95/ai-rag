@@ -23,10 +23,16 @@ import sys
 import urllib.error
 import urllib.request
 
+if __package__:
+    from .resources.smoke_msgs import MESSAGES as M
+else:  # run as a script: python3 scripts/smoke.py
+    from resources.smoke_msgs import MESSAGES as M
+
 DEFAULT_DENSE_DIM = 512
 
 
 def _get(url: str, timeout: float = 10.0) -> tuple[int, str]:
+    """Run _get."""
     req = urllib.request.Request(url, method="GET")
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -36,6 +42,7 @@ def _get(url: str, timeout: float = 10.0) -> tuple[int, str]:
 
 
 def _post(url: str, payload: dict, timeout: float = 30.0) -> tuple[int, str]:
+    """Run _post."""
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         url,
@@ -51,6 +58,7 @@ def _post(url: str, payload: dict, timeout: float = 30.0) -> tuple[int, str]:
 
 
 def _put(url: str, payload: dict, timeout: float = 30.0) -> tuple[int, str]:
+    """Run _put."""
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         url,
@@ -66,6 +74,7 @@ def _put(url: str, payload: dict, timeout: float = 30.0) -> tuple[int, str]:
 
 
 def main() -> int:
+    """Run main."""
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--in-docker",
@@ -106,7 +115,7 @@ def main() -> int:
     # 3. embedding
     code, body = _post(
         f"{embedding}/embeddings",
-        {"input": ["2025年差旅住宿标准是多少", "差旅报销规定"], "model": "bge"},
+        {"input": [M["POST_01"], M["POST_02"]], "model": "bge"},
     )
     if code != 200:
         print(f"[3] embedding -> {code} {body[:200]}")
@@ -125,10 +134,10 @@ def main() -> int:
     code, body = _post(
         f"{rerank}/rerank",
         {
-            "query": "2025年差旅住宿标准是多少",
+            "query": M["QUERY_01"],
             "texts": [
-                "住宿费每晚上限500元，超标自理。",
-                "公司年度营收同比增长12%。",
+                M["POST_03"],
+                M["POST_04"],
             ],
         },
     )
@@ -148,7 +157,7 @@ def main() -> int:
         dense_vec = json.loads(
             _post(
                 f"{embedding}/embeddings",
-                {"input": ["住宿费每晚上限500元，超标自理。"]},
+                {"input": [M["POST_05"]]},
             )[1]
         )["data"][0]["embedding"]
         code, body = _put(
@@ -160,7 +169,7 @@ def main() -> int:
                         "vector": {
                             "dense": dense_vec,
                             "bm25": {
-                                "text": "住宿费每晚上限500元，超标自理。",
+                                "text": M["TEXT_01"],
                                 "model": "qdrant/bm25",
                             },
                         },
@@ -178,7 +187,7 @@ def main() -> int:
             failures.append("qdrant upsert")
         else:
             query_dense = json.loads(
-                _post(f"{embedding}/embeddings", {"input": ["差旅住宿标准"]})[1]
+                _post(f"{embedding}/embeddings", {"input": [M["POST_06"]]})[1]
             )["data"][0]["embedding"]
             code, body = _post(
                 f"{qdrant}/collections/{collection}/points/query",
@@ -187,7 +196,7 @@ def main() -> int:
                         {"query": query_dense, "using": "dense", "limit": 5},
                         {
                             "query": {
-                                "text": "差旅住宿标准",
+                                "text": M["TEXT_02"],
                                 "model": "qdrant/bm25",
                             },
                             "using": "bm25",

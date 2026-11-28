@@ -31,6 +31,11 @@ import sys
 import tempfile
 from pathlib import Path
 
+if __package__:
+    from .resources.b3_mutation_check_msgs import MESSAGES as M
+else:  # run as a script: python3 scripts/b3_mutation_check.py
+    from resources.b3_mutation_check_msgs import MESSAGES as M
+
 REPO = Path(__file__).resolve().parent.parent
 
 # 每个变异只跑它该打红的那一小撮用例：跑全量会让一次变异花掉几分钟，
@@ -42,6 +47,7 @@ PYTEST_TARGETS = [
 
 
 def run(targets: list[str]) -> tuple[int, str]:
+    """Run run."""
     env = dict(os.environ)
     for var in ("ALL_PROXY", "all_proxy"):
         env.pop(var, None)
@@ -63,14 +69,15 @@ def run(targets: list[str]) -> tuple[int, str]:
 
 
 def mutate(path: Path, old: str, new: str) -> None:
+    """Run mutate."""
     text = path.read_text(encoding="utf-8")
-    assert old in text, f"变异锚点未找到: {old[:80]!r} in {path.name}"
+    assert old in text, f"{M['MUTATE_01']}{old[:80]!r} in {path.name}"
     path.write_text(text.replace(old, new, 1), encoding="utf-8")
 
 
 MUTATIONS = [
     {
-        "name": "BM25 路不再带 ACL（两路 filter 分裂）",
+        "name": M["NAME_01"],
         "file": "api/retrieval/hybrid.py",
         # 锚点必须落在**代码**里而不是 docstring 里：`filter_json` 出现多次，
         # 但只有"第二路复用同一个 dict"这一处是判据所在。
@@ -87,18 +94,17 @@ MUTATIONS = [
         ),
     },
     {
-        "name": "去掉版本兜底（§7.4）",
+        "name": M["NAME_02"],
         "file": "api/version_guard.py",
         "old": (
             "        if expected is not None and item.get(\"version_id\") "
             "== expected:\n"
             "            kept.append(item)"
         ),
-        "new": """        if True:  # 变异：不做版本兜底
-            kept.append(item)""",
+        "new": M["NEW_01"],
     },
     {
-        "name": "RRF 常数改成 60（与 Qdrant 原生不再等价）",
+        "name": M["NAME_03"],
         "file": "api/retrieval/hybrid.py",
         # 锚点带换行与上下文：`RRF_K = 1` 单独出现会在 docstring 里先被匹配到
         # （实测撞过——变异改到了注释，用例当然不红）。
@@ -106,45 +112,39 @@ MUTATIONS = [
         "new": "\nRRF_K = 60\n",
     },
     {
-        "name": "精排降级时伪造 0 分",
+        "name": M["NAME_04"],
         "file": "api/retrieval/rerank.py",
-        "old": """    else:
-        # 一条都没打上分：整体按融合名次（§7.3"退回按名次取前 8"）。
-        merged = list(ordered)""",
-        "new": """    else:
-        # 变异：给没打分的候选填 0 分（伪造一个"无相关"的结论）
-        merged = [item.with_rerank(0.0) for item in ordered]""",
+        "old": M["OLD_01"],
+        "new": M["NEW_02"],
     },
     {
-        "name": "临界带改成补充而不是替代（0.39 仍按 <0.40 拒）",
+        "name": M["NAME_05"],
         "file": "api/retrieval/gate.py",
         "old": "    if not in_borderline and top1 < cfg.reject_low:",
-        "new": "    if top1 < cfg.reject_low:  # 变异：临界带没被当成替代",
+        "new": M["NEW_03"],
     },
     {
-        "name": "多跳不看本跳阈值（只看已有事实）",
+        "name": M["NAME_06"],
         "file": "api/retrieval/multihop.py",
         "old": """        if not outcome.passed:
             stop = "broken\"""",
-        "new": """        if False:  # 变异：不看本跳是否过阈
-            stop = "broken\"""",
+        "new": M["NEW_04"],
     },
     {
-        "name": "改写允许级联（去掉幂等守卫）",
+        "name": M["NAME_07"],
         "file": "api/query/__init__.py",
-        "old": """            if _inside_target(text, pos, key, targets):
-                # 命中的原文已经处在某个正式说法内部，替换只会制造重复片段。
-                break""",
-        "new": "            pass  # 变异：去掉幂等守卫",
+        "old": M["OLD_02"],
+        "new": M["NEW_05"],
     },
 ]
 
 
 def main() -> int:
+    """Run main."""
     baseline_rc, baseline_tail = run(PYTEST_TARGETS)
     print(f"baseline rc={baseline_rc} :: {baseline_tail}")
     if baseline_rc != 0:
-        print("基线不绿，变异测试无意义。先修基线。")
+        print(M["PRINT_01"])
         return 1
 
     undetected: list[str] = []
@@ -159,7 +159,7 @@ def main() -> int:
             rc, tail = run(PYTEST_TARGETS)
             if rc == 0:
                 undetected.append(mut["name"])
-                print(f"[{mut['name']}] STILL GREEN（判据无效）:: {tail}")
+                print(f"[{mut['name']}{M['PRINT_02']}{tail}")
             else:
                 print(f"[{mut['name']}] RED (expected) :: {tail}")
         finally:
@@ -169,10 +169,10 @@ def main() -> int:
     restored_rc, restored_tail = run(PYTEST_TARGETS)
     print(f"restored rc={restored_rc} :: {restored_tail}")
     if restored_rc != 0:
-        print("还原后仍然不绿——变异脚本没把文件改回去，先查这个。")
+        print(M["PRINT_03"])
         return 1
     if undetected:
-        print(f"\n以下变异没有被检出（对应判据形同虚设）: {undetected}")
+        print(f"{M['PRINT_04']}{undetected}")
         return 1
     print(f"\nALL {len(MUTATIONS)} MUTATIONS DETECTED AND RESTORED")
     return 0

@@ -180,7 +180,9 @@ class Reranker:
         for row in rows or []:
             index = int(row.get("index", -1))
             if 0 <= index < len(scores):
-                scores[index] = float(row.get("score") or 0.0)
+                scores[index] = float(
+                    row.get("score") if row.get("score") else 0.0
+                )
                 seen += 1
         if seen != len(texts):
             # 条数对不上说明服务端漏了条目；把漏的当 0 分处理并让调用方知道
@@ -206,7 +208,7 @@ def clip_for_rerank(text: str, max_chars: int | None) -> str:
     # 精排只吃相关性信号：PDF 表格文本里大量换行/空格会把"归属于上市公司股东的净
     # 利润"拆成"净 利润"，交叉编码器对这种碎片化文本打分偏低。证据包仍用原文，
     # 这里只把空白规整成单空格，不让排版碎片影响相关性。
-    text = "".join((text or "").split())
+    text = "".join((text if text else "").split())
     if max_chars is None or max_chars <= 0 or len(text) <= max_chars:
         return text
     return text[:max_chars]
@@ -293,7 +295,10 @@ def rerank_candidates(
         ]
         without = [item for item in ordered if item.chunk_id not in scored]
         with_score.sort(
-            key=lambda item: (-(item.rerank_score or 0.0), item.fused_rank)
+            key=lambda item: (
+                -(item.rerank_score if item.rerank_score else 0.0),
+                item.fused_rank,
+            )
         )
         merged = with_score + without
     else:

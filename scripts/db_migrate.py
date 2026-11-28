@@ -33,23 +33,18 @@ import time
 from pathlib import Path
 from typing import NoReturn
 
+if __package__:
+    from .resources.db_migrate_msgs import MESSAGES as M
+else:  # run as a script: python3 scripts/db_migrate.py
+    from resources.db_migrate_msgs import MESSAGES as M
+
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "db" / "migrations"
 ADVISORY_LOCK_KEY = 0x61695F726167  # "ai_rag" — stable across runs
-LEDGER_SQL = (
-                 "\n"
-                 "CREATE TABLE IF NOT EXISTS schema_migrations (\n"
-                 "    version    text        PRIMARY KEY,\n"
-                 "    checksum   text        NOT NULL,\n"
-                 "    applied_at timestamptz NOT NULL DEFAULT now(),\n"
-                 "    elapsed_ms int         NOT NULL DEFAULT 0\n"
-                 ");\n"
-                 "COMMENT ON TABLE schema_migrations IS "
-                 "'已应用的迁移文件（version=文件名，checksum=sha256 前 16 "
-                 "位）';\n"
-             )
+LEDGER_SQL = M["LEDGER_SQL_01"]
 
 
 def die(msg: str, code: int = 1) -> NoReturn:
+    """Run die."""
     print(f"ERROR: {msg}", file=sys.stderr)
     sys.exit(code)
 
@@ -67,6 +62,7 @@ def normalise_dsn(dsn: str) -> str:
 
 
 def resolve_dsn(arg: str | None) -> str:
+    """Run resolve_dsn."""
     if arg:
         return normalise_dsn(arg)
     env = os.getenv("DATABASE_URL") or os.getenv("PG_DSN")
@@ -82,10 +78,12 @@ def resolve_dsn(arg: str | None) -> str:
 
 
 def checksum(text: str) -> str:
+    """Run checksum."""
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
 def discover() -> list[tuple[str, str]]:
+    """Run discover."""
     if not MIGRATIONS_DIR.is_dir():
         die(f"migrations dir not found: {MIGRATIONS_DIR}")
     out = []
@@ -97,6 +95,7 @@ def discover() -> list[tuple[str, str]]:
 
 
 def connect(dsn: str):
+    """Run connect."""
     try:
         import psycopg  # noqa: PLC0415
     except ImportError:
@@ -113,6 +112,7 @@ def connect(dsn: str):
 
 
 def applied_map(conn, create: bool = True) -> dict[str, str]:
+    """Run applied_map."""
     with conn.cursor() as cur:
         if create:
             cur.execute(LEDGER_SQL)
@@ -132,6 +132,7 @@ def applied_map(conn, create: bool = True) -> dict[str, str]:
 
 
 def show_status(conn) -> int:
+    """Run show_status."""
     applied = applied_map(conn)
     files = discover()
     print(f"{'file':44} {'state':10} checksum")
@@ -161,6 +162,7 @@ def show_status(conn) -> int:
 
 
 def main() -> int:
+    """Run main."""
     ap = argparse.ArgumentParser(
         description="apply db/migrations/*.sql in order"
     )

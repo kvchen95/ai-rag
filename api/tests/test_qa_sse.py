@@ -1,4 +1,4 @@
-"""SSE 事件顺序与出口（详细设计.md §10.4 / 附录 C.2）与三档降级。
+"""SSE 事件顺序与出口（详细设计.md §10.4 / 附录 C.2）与三档降级。.
 
 这一组用**整条编排层**（`QaService`）跑，检索与生成都换成替身：要验的不是
 "检索对不对"（那是 B3
@@ -44,44 +44,53 @@ FIN = IdentitySnapshot(user_id="u_fin", depts=("fin",), roles=("staff",))
 
 
 class _TextRepo:
-    """`fetch_texts` / `doc_names` 的替身（编排层只用 PG 做这两件事）。"""
+    """`fetch_texts` / `doc_names` 的替身（编排层只用 PG 做这两件事）。."""
 
     def __init__(
         self, texts: dict[str, ChunkText], names: dict[str, str] | None = None
     ) -> None:
+        """Initialize the instance."""
         self.texts = texts
         self.names = names or {}
 
     def fetch(self, _pg: Any, chunk_ids: Sequence[str]) -> dict[str, ChunkText]:
+        """Run fetch."""
         return {cid: self.texts[cid] for cid in chunk_ids if cid in self.texts}
 
     def names_for(self, _pg: Any, doc_keys: Sequence[str]) -> dict[str, str]:
+        """Run names_for."""
         return {key: self.names.get(key, key) for key in doc_keys}
 
 
 class _StubPipeline:
-    """只实现编排层用到的那几个成员：`run`、`pg`、`rerank_top_n_max`、`close`。"""
+    """只实现编排层用到的那几个成员：`run`、`pg`、`rerank_top_n_max`、`close`。."""
 
     def __init__(self, snapshot: RetrievalSnapshot) -> None:
+        """Initialize the instance."""
         self.snapshot = snapshot
         self.pg = object()
         self.rerank_top_n_max = 8
         self.closed = False
 
     def run(self, question: str, identity: Any, **_: Any) -> RetrievalSnapshot:
+        """Run run."""
         _ = (question, identity)
         return self.snapshot
 
     def close(self) -> None:
+        """Run close."""
         self.closed = True
 
 
 class _StubLlm(LlmClient):
+    """_StubLlm."""
     def __init__(self, payload: str | Exception) -> None:  # noqa: D107
+        """Initialize the instance."""
         self.payload = payload
         self.calls: list[float] = []
 
     def complete(self, messages, *, temperature: float = 0.0) -> str:  # type: ignore[override]
+        """Run complete."""
         _ = messages
         self.calls.append(temperature)
         if isinstance(self.payload, Exception):
@@ -96,6 +105,7 @@ def _cand(
     page_num: int = 47,
     score: float = 0.62,
 ) -> Candidate:
+    """Run _cand."""
     return Candidate(
         chunk_id=chunk_id,
         doc_key=doc_key,
@@ -114,6 +124,7 @@ def _text(
     doc_key: str = "policy/travel",
     page_num: int = 47,
 ) -> ChunkText:
+    """Run _text."""
     return ChunkText(
         chunk_id=chunk_id,
         doc_key=doc_key,
@@ -147,7 +158,7 @@ def _snapshot(
     hop_count: int = 0,
     time_note: str | None = None,
 ) -> RetrievalSnapshot:
-    """造一个检索快照。
+    """造一个检索快照。.
 
     `plan` 用**真的** `understand()` 产物而不是手写替身：`score_snapshot()` 会读
     `plan.mode` / `plan.trace`，手写一个只有 `time.note` 的对象会在编排层炸掉——
@@ -189,6 +200,7 @@ def _snapshot(
 def _service(
     snapshot: RetrievalSnapshot, llm: Any = None, judge: Any = None
 ) -> QaService:
+    """Run _service."""
     _patch_text_repo()
     return QaService(
         pipeline=_StubPipeline(snapshot),  # type: ignore[arg-type]
@@ -205,7 +217,7 @@ _ORIGINAL_NAMES = None
 
 
 def _patch_text_repo() -> None:
-    """把 `fetch_texts` / `doc_names` 换成本文件的替身。
+    """把 `fetch_texts` / `doc_names` 换成本文件的替身。.
 
     编排层每次调用都重新 import。
     """
@@ -225,6 +237,7 @@ def _patch_text_repo() -> None:
 
 @pytest.fixture(autouse=True)
 def _restore_text_repo():
+    """Run _restore_text_repo."""
     yield
     if _ORIGINAL_FETCH is not None:
         import api.qa.orchestrator as mod
@@ -236,12 +249,14 @@ def _restore_text_repo():
 def _run(
     service: QaService, question: str = "2025年差旅住宿标准是多少"
 ) -> tuple[QaOutcome, list[SseEvent]]:
+    """Run _run."""
     sent: list[SseEvent] = []
     outcome = service.run(question, FIN, emit=sent.append)
     return outcome, sent
 
 
 def _names(events: Sequence[SseEvent]) -> list[str]:
+    """Run _names."""
     return [event.name for event in events]
 
 
@@ -252,10 +267,13 @@ PASS_DRAFT = (
 
 
 class _Supported(LlmClient):
+    """_Supported."""
     def __init__(self) -> None:  # noqa: D107
+        """Initialize the instance."""
         pass
 
     def complete(self, messages, *, temperature: float = 0.0) -> str:  # type: ignore[override]
+        """Run complete."""
         return '{"verdict":"SUPPORTED","reason":"stub"}'
 
 
@@ -263,7 +281,7 @@ class _Supported(LlmClient):
 
 
 def test_frame_has_both_event_name_and_type() -> None:
-    """`event:` 行给 `addEventListener`，`data.type` 给落盘重放——两条都要有。"""
+    """`event:` 行和 `data.type` 两条都必须存在。."""
     frame = ev.token("你好").frame()
     assert frame.startswith("event: token\n")
     assert frame.endswith("\n\n")
@@ -272,7 +290,7 @@ def test_frame_has_both_event_name_and_type() -> None:
 
 
 def test_step_payload_has_hop_phase_elapsed() -> None:
-    """附录 C.2：`step` 的载荷是 hop / phase / elapsed_ms。"""
+    """附录 C.2：`step` 的载荷是 hop / phase / elapsed_ms。."""
     frame = ev.step(ev.PHASE_RETRIEVAL, hop=2, elapsed_ms=123.4).frame()
     data = json.loads(frame.split("data: ", 1)[1].strip())
     assert data["hop"] == 2
@@ -281,17 +299,19 @@ def test_step_payload_has_hop_phase_elapsed() -> None:
 
 
 def test_phases_are_the_four_from_appendix_c() -> None:
+    """Run test_phases_are_the_four_from_appendix_c."""
     assert PHASES == ("retrieval", "rerank", "generate", "verify")
 
 
 def test_citations_payload_is_the_items_array() -> None:
+    """Run test_citations_payload_is_the_items_array."""
     frame = ev.citations([{"n": 1, "chunk_id": "ch_a"}]).frame()
     data = json.loads(frame.split("data: ", 1)[1].strip())
     assert data["items"] == [{"n": 1, "chunk_id": "ch_a"}]
 
 
 def test_fallback_payload_has_code_message_docs() -> None:
-    """附录 C.2：`fallback` 的载荷是 code / message / docs。"""
+    """附录 C.2：`fallback` 的载荷是 code / message / docs。."""
     data = json.loads(
         ev.fallback("no_evidence", "未找到可验证依据", [])
         .frame()
@@ -303,6 +323,7 @@ def test_fallback_payload_has_code_message_docs() -> None:
 
 
 def test_done_carries_latency_hops_verdict() -> None:
+    """Run test_done_carries_latency_hops_verdict."""
     data = json.loads(
         ev.done(latency_ms=1840.4, hop_count=2, verdict="pass")
         .frame()
@@ -314,7 +335,7 @@ def test_done_carries_latency_hops_verdict() -> None:
 
 
 def test_clarify_options_expose_value_for_the_frontend() -> None:
-    """前端 F1 的 `ClarifyOption` 只有 `{label, value}`。
+    """前端 F1 的 `ClarifyOption` 只有 `{label, value}`。.
 
     `value` 要是可回填的 doc_key。
     """
@@ -339,11 +360,13 @@ def test_clarify_options_expose_value_for_the_frontend() -> None:
 
 
 def test_chunk_text_splits_into_fixed_size_pieces() -> None:
+    """Run test_chunk_text_splits_into_fixed_size_pieces."""
     assert chunk_text("abcdefg", 3) == ("abc", "def", "g")
     assert chunk_text("", 3) == ()
 
 
 def test_chunk_text_rejects_non_positive_size() -> None:
+    """Run test_chunk_text_rejects_non_positive_size."""
     with pytest.raises(ValueError):
         chunk_text("abc", 0)
 
@@ -352,7 +375,7 @@ def test_chunk_text_rejects_non_positive_size() -> None:
 
 
 def test_happy_path_event_order() -> None:
-    """§10.4 时序图的正常路径：进度 → 逐字 → 引用 → 收尾。"""
+    """§10.4 时序图的正常路径：进度 → 逐字 → 引用 → 收尾。."""
     service = _service(
         _snapshot("pass", evidence=(_cand("ch_a"),), reason="top1=0.62"),
         llm=_StubLlm(PASS_DRAFT),
@@ -373,7 +396,7 @@ def test_happy_path_event_order() -> None:
 def test_emit_answer_uses_facts_without_legacy_claims_attribute(
     monkeypatch,
 ) -> None:
-    """成功出口只读 Draft.facts；旧 claims 属性不存在也必须完成回答。"""
+    """成功出口只读 Draft.facts；旧 claims 属性不存在也必须完成回答。."""
     import api.qa.orchestrator as mod
     from api.generate.llm import Draft, Fact
     from api.generate.render import render_draft
@@ -413,7 +436,7 @@ def test_emit_answer_uses_facts_without_legacy_claims_attribute(
 
 
 def test_answer_tokens_join_back_to_the_verified_text() -> None:
-    """逐字增量拼起来必须等于校验通过的正文，一个字都不能多不能少。"""
+    """逐字增量拼起来必须等于校验通过的正文，一个字都不能多不能少。."""
     service = _service(
         _snapshot("pass", evidence=(_cand("ch_a"),)),
         llm=_StubLlm(PASS_DRAFT),
@@ -432,7 +455,7 @@ def test_answer_tokens_join_back_to_the_verified_text() -> None:
 
 
 def test_citations_carry_the_full_field_set() -> None:
-    """验收原句：citations 含 doc/page/bbox/snippet/chunk_id。
+    """验收原句：citations 含 doc/page/bbox/snippet/chunk_id。.
 
     即附录 C.2 的 items[]。
     """
@@ -457,7 +480,7 @@ def test_citations_carry_the_full_field_set() -> None:
 
 
 def test_llm_is_called_at_temperature_zero() -> None:
-    """§9.2：解码参数固定 Temperature = 0。"""
+    """§9.2：解码参数固定 Temperature = 0。."""
     llm = _StubLlm(PASS_DRAFT)
     service = _service(
         _snapshot("pass", evidence=(_cand("ch_a"),)),
@@ -479,7 +502,7 @@ def test_llm_is_called_at_temperature_zero() -> None:
     ],
 )
 def test_gate_rejection_has_no_token(verdict: str, code: ErrorCode) -> None:
-    """§10.4："拒答路径只有进度与收尾两类，没有逐字"。"""
+    """§10.4："拒答路径只有进度与收尾两类，没有逐字"。."""
     service = _service(
         _snapshot(verdict, reason="top1 太低", reject_code=code),
         llm=_StubLlm(PASS_DRAFT),
@@ -496,7 +519,7 @@ def test_gate_rejection_has_no_token(verdict: str, code: ErrorCode) -> None:
 
 
 def test_gate_rejection_does_not_call_the_model() -> None:
-    """§8.1："< 0.20 直接返回拒答，不调模型"。
+    """§8.1："< 0.20 直接返回拒答，不调模型"。.
 
     省一次生成也避免模型看到空证据胡说。
     """
@@ -511,7 +534,7 @@ def test_gate_rejection_does_not_call_the_model() -> None:
 
 
 def test_reject_low_fallback_lists_only_permitted_suspects() -> None:
-    """§8.1："拒答 + 有权限的疑似文档清单（≤3 份）"。
+    """§8.1："拒答 + 有权限的疑似文档清单（≤3 份）"。.
 
     疑似文档来自 `decision.suspected_docs`，而它们已经过前置过滤——这里验的是
     "编排层不在这一步再筛一遍、也不自己造文档"。
@@ -540,6 +563,7 @@ def test_reject_low_fallback_lists_only_permitted_suspects() -> None:
 
 
 def test_clarify_path_has_no_token_and_no_fallback() -> None:
+    """Run test_clarify_path_has_no_token_and_no_fallback."""
     service = _service(
         _snapshot(
             "clarify",
@@ -570,7 +594,7 @@ def test_clarify_path_has_no_token_and_no_fallback() -> None:
 
 
 def test_clarify_options_are_passed_through_from_the_gate() -> None:
-    """选项只能来自证据（§8.2）：编排层不做筛选、不补文档。"""
+    """选项只能来自证据（§8.2）：编排层不做筛选、不补文档。."""
     service = _service(
         _snapshot(
             "clarify",
@@ -594,7 +618,7 @@ def test_clarify_options_are_passed_through_from_the_gate() -> None:
 
 
 def test_verification_failure_degrades_to_original_text_without_token() -> None:
-    """§10.3 档一：数字或判别不过 → 原文片段 + 页码，明确"未形成结论"。"""
+    """§10.3 档一：数字或判别不过 → 原文片段 + 页码，明确"未形成结论"。."""
     hallucinated = (
         '{"status":"answered","facts":[{"text":"住宿费标准一般是 400 元",'
         '"evidence_ids":["ch_a"]}]}'
@@ -620,11 +644,15 @@ def test_verification_failure_degrades_to_original_text_without_token() -> None:
 
 
 def test_judge_not_supported_degrades_to_original_text() -> None:
+    """Run test_judge_not_supported_degrades_to_original_text."""
     class _NotSupported(LlmClient):
+        """_NotSupported."""
         def __init__(self) -> None:  # noqa: D107
+            """Initialize the instance."""
             pass
 
         def complete(self, messages, *, temperature: float = 0.0) -> str:  # type: ignore[override]
+            """Run complete."""
             return '{"verdict":"NOT_SUPPORTED","reason":"stub"}'
 
     service = _service(
@@ -645,7 +673,7 @@ def test_judge_not_supported_degrades_to_original_text() -> None:
 
 
 def test_missing_judge_model_degrades_but_is_audited_as_skipped() -> None:
-    """没配判别模型时也走档一，但审计里必须是 skipped（少了一道闸要看得见）。"""
+    """没配判别模型时走档一，审计必须记为 skipped。."""
     service = _service(
         _snapshot("pass", evidence=(_cand("ch_a"),)), llm=_StubLlm(PASS_DRAFT)
     )
@@ -660,7 +688,7 @@ def test_missing_judge_model_degrades_but_is_audited_as_skipped() -> None:
 
 
 def test_model_unavailable_is_the_system_tier_and_gives_no_docs() -> None:
-    """§10.3 档三："一句稍后重试，不暴露内部细节"——也不能把原文推出去当安慰。"""
+    """档三只提示稍后重试，不暴露内部细节或原文。."""
     service = _service(
         _snapshot("pass", evidence=(_cand("ch_a"),)),
         llm=_StubLlm(GenerationUnavailable("gateway down")),
@@ -680,7 +708,7 @@ def test_model_unavailable_is_the_system_tier_and_gives_no_docs() -> None:
 
 
 def test_model_output_format_error_is_tier_one_not_system() -> None:
-    """§9.2 的降级（非 JSON / 缺字段）落档一。
+    """§9.2 的降级（非 JSON / 缺字段）落档一。.
 
     证据在手，用户读原文比读“稍后重试”有用。
     """
@@ -697,6 +725,7 @@ def test_model_output_format_error_is_tier_one_not_system() -> None:
 
 
 def test_no_llm_configured_is_the_system_tier() -> None:
+    """Run test_no_llm_configured_is_the_system_tier."""
     service = _service(_snapshot("pass", evidence=(_cand("ch_a"),)), llm=None)
     outcome, sent = _run(service)
     fallback = next(event for event in sent if event.name == "fallback")
@@ -706,10 +735,12 @@ def test_no_llm_configured_is_the_system_tier() -> None:
 
 
 def test_unhandled_exception_still_emits_done() -> None:
-    """没有 done 的流会让前端永远转圈：异常路径也必须有收尾。"""
+    """没有 done 的流会让前端永远转圈：异常路径也必须有收尾。."""
 
     class _Exploding(_StubLlm):
+        """_Exploding."""
         def complete(self, messages, *, temperature: float = 0.0) -> str:  # type: ignore[override]
+            """Run complete."""
             raise RuntimeError("boom")
 
     service = _service(
@@ -730,7 +761,7 @@ def test_unhandled_exception_still_emits_done() -> None:
 
 
 def test_partial_emits_answer_tokens_plus_the_uncovered_notice() -> None:
-    """§8.3 / §8.4：partial 要给"已查实部分 + 未覆盖清单"，不能只给一半答案。"""
+    """Partial 要同时给出已查实部分和未覆盖清单。."""
     service = _service(
         _snapshot(
             "partial",
@@ -755,7 +786,7 @@ def test_partial_emits_answer_tokens_plus_the_uncovered_notice() -> None:
 
 
 def test_time_assumption_note_reaches_the_user() -> None:
-    """§5.3："补了年份并在回答里注明假设"——不注明的话用户会以为那是原文说的。"""
+    """§5.3："补了年份并在回答里注明假设"——不注明的话用户会以为那是原文说的。."""
     service = _service(
         _snapshot(
             "pass",
@@ -773,7 +804,7 @@ def test_time_assumption_note_reaches_the_user() -> None:
 
 
 def test_truncated_evidence_notice_reaches_the_user() -> None:
-    """§9.3："证据超长被截 → 在答案里说明仅依据前 N 条"。"""
+    """§9.3："证据超长被截 → 在答案里说明仅依据前 N 条"。."""
     service = _service(
         _snapshot("pass", evidence=(_cand("ch_a"), _cand("ch_b", score=0.55))),
         llm=_StubLlm(PASS_DRAFT),
@@ -791,6 +822,7 @@ def test_truncated_evidence_notice_reaches_the_user() -> None:
 
 
 def test_audit_row_maps_pass_to_gate1_pass() -> None:
+    """Run test_audit_row_maps_pass_to_gate1_pass."""
     service = _service(
         _snapshot("pass", evidence=(_cand("ch_a"),)),
         llm=_StubLlm(PASS_DRAFT),
@@ -808,7 +840,7 @@ def test_audit_row_maps_pass_to_gate1_pass() -> None:
 def test_audit_row_maps_partial_to_gate1_pass_with_uncovered_in_snapshot() -> (
     None
 ):
-    """`partial` 过了门控（§8.4 说它要带证据给下一步）。
+    """`partial` 过了门控（§8.4 说它要带证据给下一步）。.
 
     未覆盖清单进 score_snapshot。
     """
@@ -826,7 +858,7 @@ def test_audit_row_maps_partial_to_gate1_pass_with_uncovered_in_snapshot() -> (
 
 
 def test_audit_row_maps_unverifiable_to_pass_plus_reject_reason() -> None:
-    """校验不过是“门控放行、校验拦住”。
+    """校验不过是“门控放行、校验拦住”。.
 
     写进 reject_low 会污染低置信的统计。
     """
@@ -850,6 +882,7 @@ def test_audit_row_maps_unverifiable_to_pass_plus_reject_reason() -> None:
 
 
 def test_audit_row_for_rejection_carries_the_reason_code() -> None:
+    """Run test_audit_row_for_rejection_carries_the_reason_code."""
     service = _service(
         _snapshot("reject_none", reject_code=ErrorCode.NO_EVIDENCE)
     )
@@ -861,7 +894,7 @@ def test_audit_row_for_rejection_carries_the_reason_code() -> None:
 
 
 def test_audit_row_carries_identity_snapshot() -> None:
-    """§11.2：身份快照是必填，否则审计回答不了"谁在什么时候看了什么"。"""
+    """§11.2：身份快照是必填，否则审计回答不了"谁在什么时候看了什么"。."""
     service = _service(
         _snapshot("reject_none", reject_code=ErrorCode.NO_EVIDENCE)
     )
@@ -872,7 +905,7 @@ def test_audit_row_carries_identity_snapshot() -> None:
 
 
 def test_audit_row_has_no_full_text() -> None:
-    """§11.2：审计只存编号与分数摘要，不存完整原文。"""
+    """§11.2：审计只存编号与分数摘要，不存完整原文。."""
     service = _service(
         _snapshot("pass", evidence=(_cand("ch_a"),)),
         llm=_StubLlm(PASS_DRAFT),
@@ -885,6 +918,7 @@ def test_audit_row_has_no_full_text() -> None:
 
 
 def test_verification_report_records_all_five_checks_on_success() -> None:
+    """Run test_verification_report_records_all_five_checks_on_success."""
     service = _service(
         _snapshot("pass", evidence=(_cand("ch_a"),)),
         llm=_StubLlm(PASS_DRAFT),
@@ -899,7 +933,7 @@ def test_verification_report_records_all_five_checks_on_success() -> None:
 
 
 def test_format_error_is_not_treated_as_a_system_outage() -> None:
-    """`DraftFormatError` 与 `GenerationUnavailable` 是两类。
+    """`DraftFormatError` 与 `GenerationUnavailable` 是两类。.
 
     前者档一、后者档三。合成一个类会让“模型说了但不算数”变成“系统挂了”
     ——用户收到“稍后重试”，而真相是这次查询本来就有证据可看。

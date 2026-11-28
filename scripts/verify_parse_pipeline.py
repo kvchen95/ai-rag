@@ -38,6 +38,11 @@ import os
 import sys
 from pathlib import Path
 
+if __package__:
+    from .resources.verify_parse_pipeline_msgs import MESSAGES as M
+else:  # run as a script: python3 scripts/verify_parse_pipeline.py
+    from resources.verify_parse_pipeline_msgs import MESSAGES as M
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
@@ -63,12 +68,14 @@ RESULTS: list[tuple[bool, str]] = []
 
 
 def check(ok: bool, message: str) -> bool:
+    """Run check."""
     RESULTS.append((ok, message))
     print(("  PASS  " if ok else "  FAIL  ") + message)
     return ok
 
 
 def resolve_dsn(arg: str | None) -> str:
+    """Run resolve_dsn."""
     if arg:
         return normalize_dsn(arg)
     env = os.getenv("DATABASE_URL") or os.getenv("AI_RAG_TEST_DATABASE_URL")
@@ -78,6 +85,7 @@ def resolve_dsn(arg: str | None) -> str:
 
 
 def normalize_dsn(dsn: str) -> str:
+    """Run normalize_dsn."""
     for prefix in ("postgresql+psycopg://", "postgresql+psycopg2://"):
         if dsn.startswith(prefix):
             return "postgresql://" + dsn[len(prefix) :]
@@ -118,6 +126,7 @@ INSERT_SQL = (
 
 
 def main() -> int:
+    """Run main."""
     ap = argparse.ArgumentParser(
         description="verify the A2 parse pipeline against real PG"
     )
@@ -146,7 +155,7 @@ def main() -> int:
 
     with psycopg.connect(dsn, autocommit=False) as conn:
         # --- 前置：三份样本必须存在 ---
-        print("\n[1] 样本与版本号")
+        print(M["PRINT_01"])
         prepared: list[tuple[Path, str, str]] = []
         for rel in SAMPLES:
             path = samples_root / rel
@@ -159,7 +168,7 @@ def main() -> int:
             return report()
 
         # --- 解析 + 切片 ---
-        print("\n[2] 解析与切片（每片必须带齐六项随行信息）")
+        print(M["PRINT_02"])
         all_chunks = []
         for path, doc_key, version_id in prepared:
             outcome = parse_document(
@@ -213,7 +222,7 @@ def main() -> int:
         conn.commit()
 
         # --- 读回断言 ---
-        print("\n[3] 读回校验")
+        print(M["PRINT_03"])
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT count(*) FROM chunks WHERE chunk_id = ANY(%s)",
@@ -252,7 +261,7 @@ def main() -> int:
                 (written_ids,),
             )
             not_pending = cur.fetchone()[0]
-        check(not_pending == 0, "all rows are status=pending (翻牌是 A3 的事)")
+        check(not_pending == 0, M["CHECK_01"])
 
         # bbox 能算出原页像素坐标（"可映射原页"的数值形式）
         with conn.cursor() as cur:
@@ -280,14 +289,14 @@ def main() -> int:
         _check_stored_tables(conn, written_ids)
 
         # --- 版面夹具：合并单元格 / OCR / 页眉页脚 ---
-        print("\n[4] 版面能力（合并单元格、OCR 兜底、页眉页脚）")
+        print(M["PRINT_04"])
         _check_layout_fixtures(conn, samples_root, written_ids)
 
         # --- 清理 ---
         if args.keep:
-            print(f"\n[5] --keep: 保留 {len(written_ids)} 行（记得手动清理）")
+            print(f"{M['PRINT_05']}{len(written_ids)}{M['PRINT_06']}")
         else:
-            print("\n[5] 清理")
+            print(M["PRINT_07"])
             conn.execute(
                 "DELETE FROM chunks WHERE chunk_id = ANY(%s)", (written_ids,)
             )
@@ -528,8 +537,7 @@ def _check_stored_tables(conn, written_ids: list[str]) -> None:
         if cells_raw is None:
             check(
                 False,
-                f"stored {chunk_id}: table_cells is NULL "
-                "(004 迁移的列没写进去)",
+                f"stored {chunk_id}{M['CHECK_02']}",
             )
             continue
         if not (html and md):
@@ -604,6 +612,7 @@ def _table_three_ways_agree(chunk) -> bool:
 
 
 def report() -> int:
+    """Run report."""
     failures = [message for ok, message in RESULTS if not ok]
     total = len(RESULTS)
     print("\n" + "=" * 62)

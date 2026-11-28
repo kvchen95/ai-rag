@@ -1,4 +1,4 @@
-"""研报零面积 bbox 回归：PDF 内嵌流被抽成零尺寸字符，不能让整份文档摄取失败。
+"""研报零面积 bbox 回归：PDF 内嵌流被抽成零尺寸字符，不能让整份文档摄取失败。.
 
 真实样本（华泰证券中芯国际研报）page 5 有 64 个 `size=0` 的 Helvetica 字符，
 坐标全在 `(0, -0.08)`、宽高均为 0——是 PDF 内嵌流被当文字层抽出。`extract_lines`
@@ -35,7 +35,7 @@ EXPECTED_CHUNKS = 330
 
 
 def test_huatai_sample_parses_with_no_degenerate_bbox() -> None:
-    """端到端：这份样本必须能解析成功，且所有切片的 bbox 都是真矩形。"""
+    """端到端：这份样本必须能解析成功，且所有切片的 bbox 都是真矩形。."""
     assert (
         SAMPLE is not None
     ), "sample missing (pytest.skip should have caught this)"

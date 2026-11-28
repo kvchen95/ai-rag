@@ -144,7 +144,10 @@ class Embedder:
                     f"embedding service rejected the request: "
                     f"HTTP {resp.status_code} {resp.text[:300]}"
                 )
-            return self._validate(resp.json().get("data") or [], len(texts))
+            data = resp.json().get("data")
+            if data is None:
+                data = []
+            return self._validate(data, len(texts))
         raise EmbeddingError(
             f"embedding failed after {HTTP_ATTEMPTS} attempts: {last}"
         )
@@ -351,11 +354,12 @@ class QdrantVectorStore:
                     "with_vector": False,
                 },
             )
-            out.extend(
-                ((body or {}).get("result") or [])
-                if isinstance(body, dict)
-                else []
-            )
+            page_result: list[dict[str, Any]] = []
+            if isinstance(body, dict):
+                raw_result = body.get("result")
+                if isinstance(raw_result, list):
+                    page_result = raw_result
+            out.extend(page_result)
         return out
 
     # --- 读 ---
@@ -375,7 +379,10 @@ class QdrantVectorStore:
             f"/collections/{self.collection}/points/count",
             {"exact": True, "filter": flt},
         )
-        return int(((body or {}).get("result") or {}).get("count", 0))
+        result = body.get("result") if isinstance(body, dict) else None
+        if not isinstance(result, dict):
+            result = {}
+        return int(result.get("count", 0))
 
     def scroll_version(
         self, version_id: str, *, page: int = 256
@@ -395,12 +402,14 @@ class QdrantVectorStore:
             resp = self._call(
                 "POST", f"/collections/{self.collection}/points/scroll", body
             )
-            result = (
-                ((resp or {}).get("result") or {})
-                if isinstance(resp, dict)
-                else {}
-            )
-            page_points = result.get("points") or []
+            result: dict[str, Any] = {}
+            if isinstance(resp, dict):
+                raw_result = resp.get("result")
+                if isinstance(raw_result, dict):
+                    result = raw_result
+            page_points = result.get("points")
+            if page_points is None:
+                page_points = []
             points.extend(page_points)
             offset = result.get("next_page_offset")
             if not offset or not page_points:
@@ -426,12 +435,14 @@ class QdrantVectorStore:
             resp = self._call(
                 "POST", f"/collections/{self.collection}/points/scroll", body
             )
-            result = (
-                ((resp or {}).get("result") or {})
-                if isinstance(resp, dict)
-                else {}
-            )
-            page_points = result.get("points") or []
+            result: dict[str, Any] = {}
+            if isinstance(resp, dict):
+                raw_result = resp.get("result")
+                if isinstance(raw_result, dict):
+                    result = raw_result
+            page_points = result.get("points")
+            if page_points is None:
+                page_points = []
             points.extend(page_points)
             offset = result.get("next_page_offset")
             if not offset or not page_points:
@@ -440,7 +451,10 @@ class QdrantVectorStore:
     def collection_points(self) -> int:
         """Run collection_points."""
         body = self._call("GET", f"/collections/{self.collection}")
-        return int(((body or {}).get("result") or {}).get("points_count", 0))
+        result = body.get("result") if isinstance(body, dict) else None
+        if not isinstance(result, dict):
+            result = {}
+        return int(result.get("points_count", 0))
 
 
 def _version_filter(version_id: str) -> dict[str, Any]:
@@ -528,7 +542,7 @@ def index_version(
 
     pending: list[dict[str, Any]] = []
     for row in rows:
-        text = row.get("content_text") or ""
+        text = (row.get("content_text") if row.get("content_text") else "")
         # `str.strip()` 挡不住 U+200B/200D/FEFF 这类零宽字符（实测：它们 strip
         # 之后还在），而 Qdrant 会把它们切成 0 个 token → 稀疏向量为空。空稀疏
         # 向量本身能被 Qdrant 收下（实测 200），但那条切片在关键词路上永远召回

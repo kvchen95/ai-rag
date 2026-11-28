@@ -43,6 +43,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+if __package__:
+    from .resources.calibrate_msgs import MESSAGES as M
+else:  # run as a script: python3 eval/calibrate.py
+    from resources.calibrate_msgs import MESSAGES as M
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_GOLDEN = REPO_ROOT / "eval" / "golden_questions_v1.jsonl"
 DEFAULT_OUT_DIR = REPO_ROOT / "eval" / "reports"
@@ -50,7 +55,7 @@ DEFAULT_OUT_DIR = REPO_ROOT / "eval" / "reports"
 ANSWERABLE = ("pass", "partial")
 REFUSABLE = ("reject_none", "reject_low")
 FIXTURE_DOC_KEY = "evalfix/design-doc"
-FIXTURE_SOURCE = REPO_ROOT / "详细设计.md"
+FIXTURE_SOURCE = REPO_ROOT / M['FIXTURE_SOURCE_01']
 
 
 # ------------------------------------------------------------------------
@@ -98,7 +103,7 @@ def points_from_report(path: Path) -> tuple[list[Point], dict[str, Any]]:
             )
         )
     meta = {
-        "source": f"run_eval 报告 {path}",
+        "source": f"{M['SOURCE_01']}{path}",
         "base_url": payload.get("base_url"),
         "counts": payload.get("counts"),
         "generated_at": payload.get("generated_at"),
@@ -144,7 +149,9 @@ def points_from_qa_log(
                     reason=str(reject_reason or ""),
                 )
             )
-    return points, {"source": f"qa_log 最近 {since_minutes} 分钟"}
+    return points, {
+        "source": f"{M['SOURCE_02']}{since_minutes}{M['SOURCE_03']}"
+    }
 
 
 def _match_question(
@@ -274,7 +281,7 @@ def recommend(
     if not answerable or not refusable or not sweep_rows:
         return {
             "available": False,
-            "reason": "应答题或拒答题没有有效 top1，无法标定",
+            "reason": M['REASON_01'],
         }
 
     best = max(sweep_rows, key=lambda row: (row["youden"], -row["threshold"]))
@@ -307,7 +314,7 @@ def _sections(markdown: str) -> list[tuple[str, str]]:
     """
     lines = markdown.splitlines()
     sections: list[tuple[str, str]] = []
-    title = "前言"
+    title = M['TITLE_01']
     body: list[str] = []
     for line in lines:
         if re.match(r"^#{2,3}\s+", line):
@@ -379,7 +386,7 @@ def run_fixture(args: argparse.Namespace) -> tuple[list[Point], dict[str, Any]]:
 
     dsn = args.dsn or os.getenv("DATABASE_URL")
     if not dsn:
-        raise SystemExit("夹具演练需要 DATABASE_URL 或 --dsn")
+        raise SystemExit(M['RUN_FIXTURE_01'])
     settings = Settings()
     pg = PgDatabase(dsn, min_size=1, max_size=4, connect_timeout_s=5)
     pg.open()
@@ -403,8 +410,8 @@ def run_fixture(args: argparse.Namespace) -> tuple[list[Point], dict[str, Any]]:
     baseline: dict[str, Any] = {}
     meta: dict[str, Any] = {
         "source": (
-            f"夹具演练（{FIXTURE_SOURCE.name} 切片入库，"
-            "生产同一条写入/检索路径）"
+            f"{M['SOURCE_04']}{FIXTURE_SOURCE.name}{M['SOURCE_05']}"
+            f"{M['SOURCE_06']}"
         ),
         "doc_key": FIXTURE_DOC_KEY,
         "version_id": version_id,
@@ -420,8 +427,8 @@ def run_fixture(args: argparse.Namespace) -> tuple[list[Point], dict[str, Any]]:
             )
             if int(cur.fetchone()[0]) != 0:
                 raise SystemExit(
-                    f"{FIXTURE_DOC_KEY} 已存在（上次演练没清干净？）。"
-                    "先清场再跑，脚本拒绝在脏基线上继续。"
+                    f"{FIXTURE_DOC_KEY}{M['RUN_FIXTURE_02']}"
+                    f"{M['RUN_FIXTURE_03']}"
                 )
             cur.execute(
                 "INSERT INTO documents (doc_key, filename, page_count, status) "
@@ -462,7 +469,7 @@ def run_fixture(args: argparse.Namespace) -> tuple[list[Point], dict[str, Any]]:
                 )
             report = index_version(conn, store, embedder, version_id)
             if not report.ok:
-                raise SystemExit(f"索引失败：{report.as_dict()}")
+                raise SystemExit(f"{M['RUN_FIXTURE_04']}{report.as_dict()}")
             flip(conn, version_id)
             meta["indexed_points"] = report.points
         store.set_status_by_version(version_id, "active")
@@ -517,7 +524,7 @@ def run_fixture(args: argparse.Namespace) -> tuple[list[Point], dict[str, Any]]:
             store.delete_version_points(version_id)
         except Exception as exc:  # noqa: BLE001
             print(
-                "[fixture][WARN] 删 Qdrant 点失败："
+                f"{M['RUN_FIXTURE_05']}"
                 f"{type(exc).__name__}: {exc}",
                 file=sys.stderr,
             )
@@ -552,7 +559,7 @@ def run_fixture(args: argparse.Namespace) -> tuple[list[Point], dict[str, Any]]:
                 baseline["documents_left"] = int(cur.fetchone()[0])
         except Exception as exc:  # noqa: BLE001
             print(
-                f"[fixture][WARN] PG 清场失败：{type(exc).__name__}: {exc}",
+                f"{M['RUN_FIXTURE_06']}{type(exc).__name__}: {exc}",
                 file=sys.stderr,
             )
         try:
@@ -564,7 +571,7 @@ def run_fixture(args: argparse.Namespace) -> tuple[list[Point], dict[str, Any]]:
         embedder.close()
         pg.close()
         print(
-            f"[fixture] 清场：{json.dumps(baseline, ensure_ascii=False)} "
+            f"{M['RUN_FIXTURE_07']}{json.dumps(baseline, ensure_ascii=False)} "
             f"points_left={meta.get('points_left')}"
         )
 
@@ -626,29 +633,28 @@ def render_report(
     histogram_rows = histogram(points)
 
     lines: list[str] = [
-        "# 门控阈值标定报告",
+        M['LINES_01'],
         "",
-        "- 生成时间："
+        f"{M['LINES_02']}"
         f"{datetime.now(UTC).astimezone().isoformat(timespec='seconds')}",
-        f"- 数据来源：{meta.get('source')}",
-        f"- 样本：应答题 {len(answerable)}，拒答题 {len(refusable)}，"
-        f"澄清题 {len(clarify)}",
+        f"{M['LINES_03']}{meta.get('source')}",
+        f"{M['LINES_04']}{len(answerable)}{M['LINES_05']}{len(refusable)}，"
+        f"{M['LINES_06']}{len(clarify)}",
         "",
-        "## 1. 一句话结论",
+        M['LINES_07'],
         "",
     ]
     if not choice.get("available"):
-        lines.append(f"**不可标定**：{choice.get('reason')}。")
+        lines.append(f"{M['RENDER_REPORT_01']}{choice.get('reason')}。")
     else:
         lines.append(
-            f"在本样本上，Youden 最优点 **{choice['youden_threshold']:.2f}**"
+            f"{M['RENDER_REPORT_02']}{choice['youden_threshold']:.2f}**"
             f"（TPR {choice['tpr']:.0%} / FPR {choice['fpr']:.0%}）；"
-            f"观测波谷 "
+            f"{M['RENDER_REPORT_03']}"
             + (
                 f"**{choice['valley_low']:.2f}–{choice['valley_high']:.2f}**。"
                 if not choice["overlap"]
-                else "**不存在**（两组分布重叠，任何阈值都会同时误伤应答题"
-                "与放行拒答题）。"
+                else M['RENDER_REPORT_04']
             )
         )
         if not choice["overlap"] and choice["valley_low"] is not None:
@@ -656,35 +662,27 @@ def render_report(
                 choice["valley_low"] <= 0.38 and choice["valley_high"] >= 0.42
             )
             lines.append(
-                "该区间**包含**设计先验 0.38–0.42，可作为本次候选区间。"
+                M['RENDER_REPORT_05']
                 if inside
-                else "该区间与设计先验 0.38–0.42 **不重合**——"
-                "先别改配置，先看限制一节："
-                "语料/样本与生产不一致时，先验仍是默认值。"
+                else M['RENDER_REPORT_06']
             )
     lines += [
         "",
-        "## 2. 口径",
+        M['LINES_08'],
         "",
-        "- `top1` = 门控看到的精排最高分"
-        "（`RetrievalSnapshot.decision.top1`，即 qa_log 的 "
-        "`score_snapshot->>'top1'`）。没有候选时记 `None`，"
-        "统计时按 0.0 计入并单独报 `n_none`。",
-        "- 应答题 = `expected_verdict` 为 `pass`/`partial`；"
-        "拒答题 = `reject_none`/`reject_low`；"
-        "`clarify` 不参与二分类，单独列。",
-        "- 阈值语义：`top1 < t` 预测为 `reject_none`。"
-        "扫描区间 0.20–0.60，步长 0.01（覆盖两档门控带）。",
+        M['LINES_09'],
+        M['LINES_10'],
+        M['LINES_11'],
         "",
-        "## 3. top1 分布",
+        M['LINES_12'],
         "",
-        "| 组 | n | 有分数 | None | min | p10 | 中位 | p90 | max | 均值 |",
+        M['LINES_13'],
         "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for name, stat in (
-        ("应答题", stats_answer),
-        ("拒答题", stats_refuse),
-        ("澄清题", stats_clarify),
+        (M['RENDER_REPORT_07'], stats_answer),
+        (M['RENDER_REPORT_08'], stats_refuse),
+        (M['RENDER_REPORT_09'], stats_clarify),
     ):
 
         def fmt(key: str, stat: dict[str, Any] = stat) -> str:
@@ -699,7 +697,7 @@ def render_report(
             f"{fmt('p90')} | {fmt('max')} | {fmt('mean')} |"
         )
 
-    lines += ["", "### 直方图（0.05 一档）", "", "```"]
+    lines += ["", M['LINES_14'], "", "```"]
     max_count = max(
         [row["answerable"] + row["refusable"] for row in histogram_rows] or [1]
     )
@@ -707,17 +705,17 @@ def render_report(
         bar_a = "#" * round(row["answerable"] / max_count * 40)
         bar_r = "+" * round(row["refusable"] / max_count * 40)
         lines.append(
-            f"{row['low']:.2f}-{row['high']:.2f}  应 {bar_a:<40} "
-            f"{row['answerable']:>2}  拒 {bar_r:<40} {row['refusable']:>2}"
+            f"{row['low']:.2f}-{row['high']:.2f}"
+            f"{M['RENDER_REPORT_10']}{bar_a:<40} "
+            f"{row['answerable']:>2}{M['RENDER_REPORT_11']}"
+            f"{bar_r:<40} {row['refusable']:>2}"
         )
     lines.append("```")
-    lines.append(
-        "`#` 应答题，`+` 拒答题；观察两峰之间是否有计数接近 0 的连续区间。"
-    )
+    lines.append(M['RENDER_REPORT_12'])
 
     lines += [
         "",
-        "## 4. 阈值扫描与波谷",
+        M['LINES_15'],
         "",
         "| t | TP | FN | FP | TN | TPR | FPR | Youden |",
         "|---:|---:|---:|---:|---:|---:|---:|---:|",
@@ -736,43 +734,29 @@ def render_report(
         )
     lines += [
         "",
-        "## 5. 建议",
+        M['LINES_16'],
         "",
     ]
     if choice.get("available"):
         lines += [
-            f"1. 候选阈值：**{choice['youden_threshold']:.2f}**"
-            f"（Youden 最优；TPR {choice['tpr']:.0%}、"
+            f"{M['LINES_17']}{choice['youden_threshold']:.2f}**"
+            f"{M['LINES_18']}{choice['tpr']:.0%}、"
             f"FPR {choice['fpr']:.0%}）。",
-            "2. 若观测波谷是一个区间且与 0.38–0.42 有交集，取交集；"
-            "否则**保留先验 0.38–0.42**，"
-            "先把语料与样本补齐再标定。",
-            "3. 每次调阈值都必须重跑 `eval/run_eval.py` 四条红线："
-            "阈值下降换来的覆盖率，"
-            "不得以忠实度/数值准确率下降为代价（§12.2 第四条）。",
-            "4. 阈值、提示词、模型名三者同版本留档；"
-            "回滚以版本为单位，不做局部回滚（§12.3）。",
+            M['LINES_19'],
+            M['LINES_20'],
+            M['LINES_21'],
         ]
     else:
-        lines.append(
-            "1. 先补齐能产生 top1 的数据：语料 active chunks > 0、"
-            "生成模型可用，再重跑本脚本。"
-        )
+        lines.append(M['RENDER_REPORT_13'])
 
     lines += [
         "",
-        "## 6. 限制与风险",
+        M['LINES_22'],
         "",
-        "- **样本量**：二分类的 TPR/FPR 都是点估计；"
-        "n<30 时一个样本就能移动 3–7 个百分点。"
-        '本报告不附置信区间，因此只用于"区间候选"，不用于精确验收。',
-        "- **语料代表性**：夹具演练只有一篇设计文档，且问题集是为生产语料写的；"
-        "分数分布会随语料长度、切片粒度、精排模型变化。**夹具结论不能直接改为生产配置**。",
-        "- **top1=None**：没有候选的题按 0.0 计入。"
-        "若 `n_none` 占比高，说明问题不是阈值，"
-        "而是召回/入库/权限过滤——先查那三处。",
-        "- **漂移**：§12.2 明说波谷随语料漂移；"
-        "每次语料大版本更新后重新跑，不沿用旧阈值。",
+        M['LINES_23'],
+        M['LINES_24'],
+        M['LINES_25'],
+        M['LINES_26'],
         "",
     ]
     out_md.parent.mkdir(parents=True, exist_ok=True)
@@ -801,25 +785,25 @@ def render_report(
 def main(argv: Sequence[str] | None = None) -> int:
     """入口：按 --report/--dsn/--fixture/--selftest 选数据源出报告。."""
     parser = argparse.ArgumentParser(
-        description="门控阈值标定（top1 分布 + 波谷）"
+        description=M['PARSER_01']
     )
-    parser.add_argument("--report", type=Path, help="run_eval 产出的 JSON")
+    parser.add_argument("--report", type=Path, help=M['MAIN_01'])
     parser.add_argument(
         "--dsn",
         default=os.getenv("DATABASE_URL", ""),
-        help="直接查 qa_log 时用",
+        help=M['MAIN_02'],
     )
     parser.add_argument("--since-minutes", type=int, default=120)
     parser.add_argument(
         "--fixture",
         action="store_true",
-        help="夹具演练：设计文档切片入库→检索→清场",
+        help=M['MAIN_03'],
     )
     parser.add_argument("--golden", type=Path, default=DEFAULT_GOLDEN)
     parser.add_argument(
         "--selftest",
         action="store_true",
-        help="合成分布自检（验证波谷算法，不是数据）",
+        help=M['MAIN_04'],
     )
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     parser.add_argument("--name", default="")
@@ -828,7 +812,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     meta: dict[str, Any] = {}
     if args.selftest:
         points = synthetic_points()
-        meta = {"source": "**合成分布自检**（不是语料数据；仅验证算法）"}
+        meta = {"source": M['SOURCE_07']}
     elif args.fixture:
         try:
             points, meta = run_fixture(args)
@@ -836,7 +820,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise
         except Exception as exc:  # noqa: BLE001
             print(
-                f"[FATAL] 夹具演练失败：{type(exc).__name__}: {exc}",
+                f"{M['MAIN_05']}{type(exc).__name__}: {exc}",
                 file=sys.stderr,
             )
             return 1
@@ -846,7 +830,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         golden = load_golden(args.golden)
         points, meta = points_from_qa_log(args.dsn, args.since_minutes, golden)
     else:
-        parser.error("需要 --report / --dsn / --fixture / --selftest 之一")
+        parser.error(M['MAIN_06'])
 
     name = args.name or (
         "calibration_selftest"
@@ -858,18 +842,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     payload = render_report(points, meta, out_md=out_md, out_json=out_json)
     choice = payload["recommendation"]
     print(
-        f"[calibration] 应答题 {payload['groups']['answerable']['n']} / "
-        f"拒答题 {payload['groups']['refusable']['n']}"
+        f"{M['MAIN_07']}{payload['groups']['answerable']['n']} / "
+        f"{M['MAIN_08']}{payload['groups']['refusable']['n']}"
     )
     if choice.get("available"):
         print(
             f"[calibration] Youden t={choice['youden_threshold']:.2f} "
             f"J={choice['youden']:+.3f} "
-            f"波谷={choice['valley_low']}–{choice['valley_high']} "
+            f"{M['MAIN_09']}{choice['valley_low']}–{choice['valley_high']} "
             f"overlap={choice['overlap']}"
         )
     else:
-        print(f"[calibration] 不可标定：{choice.get('reason')}")
+        print(f"{M['MAIN_10']}{choice.get('reason')}")
     print(f"[report] {out_md}")
     print(f"[report] {out_json}")
 
@@ -877,11 +861,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         t = choice["youden_threshold"]
         if 0.34 <= t <= 0.45:
             print(
-                f"[selftest] PASS：合成的波谷（真值约 0.42）被恢复在 t={t:.2f}"
+                f"{M['MAIN_11']}{t:.2f}"
             )
             return 0
         print(
-            f"[selftest] FAIL：合成波谷应在 0.34–0.45，实际 {t:.2f}",
+            f"{M['MAIN_12']}{t:.2f}",
             file=sys.stderr,
         )
         return 2

@@ -8,6 +8,8 @@ import os
 import urllib.request
 from typing import Any
 
+from api.resources import messages as msg
+
 TARGET_CHARS = 500
 OVERLAP_CHARS = 50
 _BREAKS = "。！？；.!?;\n"
@@ -49,14 +51,13 @@ class TeiEmbeddings:
             request, timeout=self.timeout_s
         ) as response:
             payload = json.loads(response.read().decode("utf-8"))
-        rows = sorted(
-            payload.get("data") or [], key=lambda row: row.get("index", 0)
-        )
+        data = payload.get("data")
+        rows = sorted(data if data else [], key=lambda row: row.get("index", 0))
         vectors = [list(map(float, row["embedding"])) for row in rows]
         if len(vectors) != len(texts) or any(
             len(vector) != self.dim for vector in vectors
         ):
-            raise ValueError("TEI embedding 返回数量或维度不匹配")
+            raise ValueError(msg.TEI_SHAPE_MISMATCH)
         return vectors
 
     def embed_query(self, text):
@@ -163,7 +164,7 @@ def chunk_blocks(
         if block.get("type") in {"footer", "page_number", "page_footnote"}:
             continue
         level = block.get("heading_level")
-        text = str(block.get("text") or "").strip()
+        text = str(block.get("text") if block.get("text") else "").strip()
         if len(text) <= 1:
             continue
         if level is not None and text:
@@ -171,7 +172,9 @@ def chunk_blocks(
                 (level, text)
             ]
         heading_path = " > ".join(item[1] for item in headings)
-        page_num = int(block.get("page_idx") or 0) + 1
+        page_num = (
+            int(block.get("page_idx") if block.get("page_idx") else 0) + 1
+        )
         block_id = block.get("block_id")
         source_ids = [block_id] if block_id else []
 

@@ -46,12 +46,14 @@ BANNED_TEMPORAL_NAMES = (
 
 @dataclass(frozen=True, slots=True)
 class Violation:
+    """Violation."""
     invariant: str
     path: str
     line: int
     message: str
 
     def as_dict(self) -> dict[str, object]:
+        """Run as_dict."""
         return {
             "invariant": self.invariant,
             "path": self.path,
@@ -61,6 +63,7 @@ class Violation:
 
 
 def _is_empty(node: ast.AST | None) -> bool:
+    """Run _is_empty."""
     if node is None:
         return True
     if isinstance(node, ast.Constant):
@@ -73,6 +76,7 @@ def _is_empty(node: ast.AST | None) -> bool:
 
 
 def _handler_is_broad(handler: ast.ExceptHandler) -> bool:
+    """Run _handler_is_broad."""
     if handler.type is None:
         return True
     names: list[str] = []
@@ -86,6 +90,7 @@ def _handler_is_broad(handler: ast.ExceptHandler) -> bool:
 
 
 def _scan_except(tree: ast.AST, path: str) -> list[Violation]:
+    """Run _scan_except."""
     out: list[Violation] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.ExceptHandler):
@@ -118,6 +123,7 @@ def _scan_except(tree: ast.AST, path: str) -> list[Violation]:
 
 
 def _scan_or_empty(tree: ast.AST, path: str) -> list[Violation]:
+    """Run _scan_or_empty."""
     out: list[Violation] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.BoolOp) and isinstance(node.op, ast.Or):
@@ -138,6 +144,7 @@ def _scan_or_empty(tree: ast.AST, path: str) -> list[Violation]:
 
 
 def _scan_llm_import(tree: ast.AST, path: str) -> list[Violation]:
+    """Run _scan_llm_import."""
     if not any(path.startswith(prefix) for prefix in DETERMINISTIC_PREFIXES):
         return []
     out: list[Violation] = []
@@ -157,6 +164,7 @@ def _scan_llm_import(tree: ast.AST, path: str) -> list[Violation]:
 
 
 def _scan_temporal_names(tree: ast.AST, path: str) -> list[Violation]:
+    """Run _scan_temporal_names."""
     if not any(path.startswith(prefix) for prefix in DETERMINISTIC_PREFIXES):
         return []
     out: list[Violation] = []
@@ -183,6 +191,7 @@ def _scan_temporal_names(tree: ast.AST, path: str) -> list[Violation]:
 
 
 def _scan_missing_metadata_open(tree: ast.AST, path: str) -> list[Violation]:
+    """Run _scan_missing_metadata_open."""
     out: list[Violation] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.If):
@@ -210,6 +219,7 @@ def _scan_missing_metadata_open(tree: ast.AST, path: str) -> list[Violation]:
 
 
 def scan_file(path: Path) -> list[Violation]:
+    """Run scan_file."""
     try:
         rel = path.relative_to(ROOT).as_posix()
     except ValueError:
@@ -230,6 +240,7 @@ def scan_file(path: Path) -> list[Violation]:
 
 
 def _changed_lines(base: str) -> dict[str, set[int]]:
+    """Run _changed_lines."""
     result = subprocess.run(
         [
             "git",
@@ -277,6 +288,7 @@ def _changed_lines(base: str) -> dict[str, set[int]]:
 
 
 def main() -> int:
+    """Run main."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--all", action="store_true", help="scan all api/**/*.py"

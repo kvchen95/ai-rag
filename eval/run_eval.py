@@ -49,6 +49,11 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+if __package__:
+    from .resources.run_eval_msgs import MESSAGES as M
+else:  # run as a script: python3 eval/run_eval.py
+    from resources.run_eval_msgs import MESSAGES as M
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_GOLDEN = REPO_ROOT / "eval" / "golden_questions_v1.jsonl"
 DEFAULT_OUT_DIR = REPO_ROOT / "eval" / "reports"
@@ -94,21 +99,10 @@ RL_NUMERIC_RATE = 0.96
 RL_CITATION_RATE = 0.98
 
 RED_LINE_DEFS = {
-    "RL1": "陷阱题拒答率 = 安全拒答/澄清的陷阱题数 ÷ 陷阱题总数（要求 100%），"
-    '外加判别力闸：应答题中至少 1 题拿到证据，否则本指标是"全拒答"真空态',
-    "RL2": (
-        "数值准确率 = 数值断言全部能在被引证据中找到的题数 ÷ "
-        "含数值断言的已答题数（≥96%）"
-    ),
-    "RL3": (
-        "角标可点回率 = 能在 PG 中定位"
-        "（chunk_id + doc_key + page_num + bbox）的引用数 ÷ "
-        "总引用数（≥98%）"
-    ),
-    "RL4": (
-        '忠实度优先于覆盖率 = 已答题中"每句有引用、数字有据、无禁用措辞"'
-        "的比例（要求 100%）；覆盖率单独报告，不允许用覆盖率换取忠实度"
-    ),
+    "RL1": M['RL1_01'],
+    "RL2": M['RL2_01'],
+    "RL3": M['RL3_01'],
+    "RL4": M['RL4_01'],
 }
 
 _CITE_MARK = re.compile(r"\[[0-9]{1,3}\]")
@@ -159,7 +153,7 @@ def build_token(args: argparse.Namespace) -> tuple[str, str]:
     优先用服务自己的 `mint_dev_token`，保证 claim 名与配置一致。.
     """
     if args.token:
-        return args.token, "命令行 --token"
+        return args.token, M['BUILD_TOKEN_01']
     _seed_env_from_dotenv()
     # 容器内、或宿主上 `api` 可导入时走这条：不碰 secret，也不猜 claim 名。
     try:
@@ -194,17 +188,17 @@ def build_token(args: argparse.Namespace) -> tuple[str, str]:
                     "exp": now + 3600,
                 },
             )
-            return token, "本地 HS256（--jwt-secret/AUTH_JWT_SECRET）"
+            return token, M['BUILD_TOKEN_02']
         raise SystemExit(
-            f"拿不到身份凭证（{type(exc).__name__}: {exc}）。"
-            "三种解法任选其一：\n"
-            "  1. 在容器内跑（推荐，secret 与 DSN 由 compose 注入）：\n"
+            f"{M['BUILD_TOKEN_03']}{type(exc).__name__}: {exc}）。"
+            f"{M['BUILD_TOKEN_04']}"
+            f"{M['BUILD_TOKEN_05']}"
             "     docker compose exec -T api python eval/run_eval.py\n"
-            "  2. 宿主跑但给 secret：\n"
-            "     AUTH_JWT_SECRET=<与 compose 同值> "
+            f"{M['BUILD_TOKEN_06']}"
+            f"{M['BUILD_TOKEN_07']}"
             "python3 eval/run_eval.py --dsn <PG DSN>\n"
-            f"     或在 {REPO_ROOT / '.env'} 里加一行 AUTH_JWT_SECRET=...\n"
-            "  3. 已有 token：--token <Bearer token>"
+            f"{M['BUILD_TOKEN_08']}{REPO_ROOT / '.env'}{M['BUILD_TOKEN_09']}"
+            f"{M['BUILD_TOKEN_10']}"
         ) from exc
 
 
@@ -217,9 +211,7 @@ def normalise(text: str) -> str:
     )
 
 
-_NOTICE = re.compile(
-    r"（(?:证据超出长度上限|以下问题本次未查到可验证依据|时间口径：|本次仅依据)[^）]*）"
-)
+_NOTICE = re.compile(M['NOTICE_01'])
 
 
 def strip_system_notices(text: str) -> str:
@@ -236,7 +228,7 @@ def numbers_in(text: str) -> list[tuple[str, str]]:
     """答案里的数值断言（去掉角标/日期；否则每条答案都会多出几个假数字）。."""
     cleaned = _CITE_MARK.sub(" ", normalise(text))
     cleaned = re.sub(
-        r"\d{4}\s*[-/年]\s*\d{1,2}\s*[-/月]\s*\d{1,2}\s*日?", " ", cleaned
+        M['CLEANED_01'], " ", cleaned
     )
     out: list[tuple[str, str]] = []
     for match in _NUMBER.finditer(cleaned):
@@ -270,7 +262,7 @@ def load_golden(path: Path) -> list[dict[str, Any]]:
                 row = json.loads(line)
             except json.JSONDecodeError as exc:
                 raise SystemExit(
-                    f"{path}:{line_no} 不是合法 JSON: {exc}"
+                    f"{path}:{line_no}{M['LOAD_GOLDEN_01']}{exc}"
                 ) from exc
             for key in (
                 "id",
@@ -280,11 +272,13 @@ def load_golden(path: Path) -> list[dict[str, Any]]:
                 "must_not_contain",
             ):
                 if key not in row:
-                    raise SystemExit(f"{path}:{line_no} 缺字段 {key}")
+                    raise SystemExit(
+                        f"{path}:{line_no}{M['LOAD_GOLDEN_02']}{key}"
+                    )
             rows.append(row)
     ids = [row["id"] for row in rows]
     if len(ids) != len(set(ids)):
-        raise SystemExit(f"{path}: 题号重复")
+        raise SystemExit(f"{path}{M['LOAD_GOLDEN_03']}")
     return rows
 
 
@@ -343,7 +337,7 @@ def post_sse(
     """
     url = urlsplit(base_url)
     if url.scheme not in ("http", "https"):
-        raise ValueError(f"base_url 必须是 http(s)，实际 {base_url}")
+        raise ValueError(f"{M['POST_SSE_01']}{base_url}")
     host = url.hostname or "127.0.0.1"
     port = url.port or (443 if url.scheme == "https" else 80)
     prefix = url.path.rstrip("/")
@@ -398,11 +392,11 @@ def post_sse(
         if frame_name is not None or data_lines:
             result.events.append(_make_event(frame_name, data_lines))
         if not result.events:
-            result.error = "流里没有任何 SSE 帧"
+            result.error = M['POST_SSE_02']
     except TimeoutError as exc:
-        result.error = f"读取超时（{timeout_s}s）: {exc}"
+        result.error = f"{M['POST_SSE_03']}{timeout_s}s）: {exc}"
     except (http.client.HTTPException, OSError) as exc:
-        result.error = f"传输失败: {type(exc).__name__}: {exc}"
+        result.error = f"{M['POST_SSE_04']}{type(exc).__name__}: {exc}"
     finally:
         result.elapsed_ms = (time.perf_counter() - started) * 1000
         with contextlib.suppress(Exception):
@@ -506,28 +500,28 @@ def contract_violations(stream: StreamResult) -> list[str]:
     names = stream.names
     problems: list[str] = []
     if not names:
-        return ["没有事件"]
+        return [M['CONTRACT_VIOLATIONS_01']]
     if names.count("done") != 1:
-        problems.append(f"done 出现 {names.count('done')} 次（必须恰好 1 次）")
+        problems.append(f"{M['CONTRACT_VIOLATIONS_02']}{names.count('done')}{M['CONTRACT_VIOLATIONS_03']}")
     if names[-1] != "done":
-        problems.append(f"最后一条不是 done，而是 {names[-1]}")
+        problems.append(f"{M['CONTRACT_VIOLATIONS_04']}{names[-1]}")
     done = stream.first("done") or {}
     verdict = done.get("verdict")
     if "token" in names and verdict not in ANSWERABLE_VERDICTS:
-        problems.append(f"verdict={verdict} 却发了 token")
+        problems.append(f"verdict={verdict}{M['CONTRACT_VIOLATIONS_05']}")
     if "fallback" in names and verdict in ANSWERABLE_VERDICTS:
-        problems.append(f"verdict={verdict} 却发了 fallback")
+        problems.append(f"verdict={verdict}{M['CONTRACT_VIOLATIONS_06']}")
     if "clarify" in names and verdict != "clarify":
-        problems.append(f"发了 clarify 但 verdict={verdict}")
+        problems.append(f"{M['CONTRACT_VIOLATIONS_07']}{verdict}")
     if "citations" in names and verdict not in ANSWERABLE_VERDICTS:
-        problems.append(f"verdict={verdict} 却发了 citations")
+        problems.append(f"verdict={verdict}{M['CONTRACT_VIOLATIONS_08']}")
     if "fallback" in names and "token" in names:
-        problems.append("同一条流既有 fallback 又有 token")
+        problems.append(M['CONTRACT_VIOLATIONS_09'])
     if "citations" in names:
         index_cite = names.index("citations")
         index_done = names.index("done")
         if index_cite > index_done:
-            problems.append("citations 在 done 之后")
+            problems.append(M['CONTRACT_VIOLATIONS_10'])
     return problems
 
 
@@ -545,31 +539,31 @@ def resolve_citations(
         chunk_id = str(item.get("chunk_id") or "")
         row = rows.get(chunk_id)
         ok = row is not None
-        reason = "ok" if ok else "chunk_id 不在 PG"
+        reason = "ok" if ok else M['REASON_01']
         if row is not None:
             if str(item.get("doc_key") or "") != str(row["doc_key"]):
                 ok, reason = (
                     False,
-                    "doc_key 不一致（引用 "
-                    f"{item.get('doc_key')}，库 {row['doc_key']}）",
+                    f"{M['RESOLVE_CITATIONS_01']}"
+                    f"{item.get('doc_key')}{M['RESOLVE_CITATIONS_02']}{row['doc_key']}）",
                 )
             elif int(item.get("page_num") or 0) != int(row["page_num"]):
                 ok, reason = (
                     False,
-                    "page_num 不一致（引用 "
-                    f"{item.get('page_num')}，库 {row['page_num']}）",
+                    f"{M['RESOLVE_CITATIONS_03']}"
+                    f"{item.get('page_num')}{M['RESOLVE_CITATIONS_02']}{row['page_num']}）",
                 )
             elif not item.get("bbox"):
-                ok, reason = False, "引用没有 bbox"
+                ok, reason = False, M['RESOLVE_CITATIONS_04']
             elif not _bbox_equal(item.get("bbox"), row["bbox"]):
-                ok, reason = False, "bbox 与库里的行不一致"
+                ok, reason = False, M['RESOLVE_CITATIONS_05']
             elif (
                 row["chunk_status"] != "active"
                 or row["version_status"] != "active"
             ):
                 ok, reason = (
                     False,
-                    f"切片/版本未生效（{row['chunk_status']}/{row['version_status']}）",
+                    f"{M['RESOLVE_CITATIONS_06']}{row['chunk_status']}/{row['version_status']}）",
                 )
         count += 1 if ok else 0
         resolved.append({"chunk_id": chunk_id, "ok": ok, "reason": reason})
@@ -680,13 +674,13 @@ def score_question(
     reasons: list[str] = []
     if must_not:
         score = 0.0
-        reasons.append(f"输出包含禁用措辞：{must_not}")
+        reasons.append(f"{M['SCORE_QUESTION_01']}{must_not}")
     elif stream.status == 403 and expected in ("reject_none", "reject_low"):
         # 闸二/闸三的 403 是"无权查看"：不区分不存在与没权限，也不透露标题。
         score = 1.0
     elif actual is None:
         score = 0.0
-        reasons.append("没有 done 事件，无法判定")
+        reasons.append(M['SCORE_QUESTION_02'])
     elif category == "trap" or expected in (
         "reject_none",
         "reject_low",
@@ -702,13 +696,13 @@ def score_question(
             score = 1.0
         elif safe:
             score = 0.5  # 给了降级输出但仍有内容：按 §5.1 允许半分
-            reasons.append("安全降级但输出了内容")
+            reasons.append(M['SCORE_QUESTION_03'])
         else:
             score = 0.0
-            reasons.append(f"陷阱题未安全拒答（verdict={actual}）")
+            reasons.append(f"{M['SCORE_QUESTION_04']}{actual}）")
         if actual in ("internal", "model_timeout", "index_stale"):
             score = 0.0
-            reasons.append(f"系统故障，不是安全拒答（{actual}）")
+            reasons.append(f"{M['SCORE_QUESTION_05']}{actual}）")
     else:  # 应答题
         if actual in ANSWERABLE_VERDICTS:
             score = 1.0 if expected == "pass" and actual == "pass" else 0.5
@@ -716,21 +710,21 @@ def score_question(
                 score = 1.0
             if not citations:
                 score = 0.0
-                reasons.append("应答题没有引用")
+                reasons.append(M['SCORE_QUESTION_06'])
             if uncited:
                 score = 0.0
-                reasons.append(f"有 {len(uncited)} 句没有角标")
+                reasons.append(f"{M['SCORE_QUESTION_07']}{len(uncited)}{M['SCORE_QUESTION_08']}")
             if numeric == "bad":
                 score = 0.0
-                reasons.append(f"数值无据：{numeric_bad[:5]}")
+                reasons.append(f"{M['SCORE_QUESTION_09']}{numeric_bad[:5]}")
             if must_not:
                 score = 0.0
         elif actual in REFUSAL_VERDICTS or actual == "clarify":
             score = 0.0
-            reasons.append(f"应答题拒答（verdict={actual}）")
+            reasons.append(f"{M['SCORE_QUESTION_10']}{actual}）")
         else:
             score = 0.0
-            reasons.append(f"应答题未得到答案（verdict={actual}）")
+            reasons.append(f"{M['SCORE_QUESTION_11']}{actual}）")
 
     trap_safe: bool | None = None
     if category == "trap" or expected in (
@@ -962,7 +956,7 @@ def compute_red_lines(
     trap_ok = sum(1 for item in traps if item.trap_safe)
     rl1 = RedLine(
         key="RL1",
-        name="陷阱题拒答率",
+        name=M['RL1_02'],
         status=(
             "PASS"
             if trap_n and trap_ok == trap_n and with_evidence
@@ -972,18 +966,21 @@ def compute_red_lines(
         ),
         value=f"{trap_ok}/{trap_n} = {trap_ok / trap_n:.1%}"
         if trap_n
-        else "无陷阱题",
+        else M['RL1_03'],
         threshold="= 100%",
         numerator=trap_ok,
         denominator=trap_n,
         note=(
-            "判别力闸：应答题中拿到证据/进入生成层的 "
+            f"{M['RL1_04']}"
             f"{len(with_evidence)}/{len(answerable)}"
-            + ('；为 0 时本指标是"全拒答"真空态' if not with_evidence else "")
+            + (M['RL1_05'] if not with_evidence else "")
             + (
                 ""
                 if corpus is None
-                else f"；库内 active 切片 {corpus.get('active_chunks', 0)} 条"
+                else (
+                    f"{M['RL1_06']}"
+                    f"{corpus.get('active_chunks', 0)}{M['RL1_07']}"
+                )
             )
         ),
     )
@@ -999,7 +996,7 @@ def compute_red_lines(
         rl2_status = "FAIL"
     rl2 = RedLine(
         key="RL2",
-        name="数值准确率",
+        name=M['RL2_02'],
         status=rl2_status,
         value="—"
         if numeric_rate is None
@@ -1008,10 +1005,8 @@ def compute_red_lines(
         numerator=numeric_ok,
         denominator=len(numeric_items),
         note=(
-            "口径：答案中每个数字（已去掉 [n] 角标）都必须出现在"
-            "被引证据原文里；"
-            "没有已答题或答案不含数字时不可测。"
-            + ("" if db_available else " 本轮无 DB 连接，证据原文取不到。")
+            M['RL2_03']
+            + ("" if db_available else M['RL2_04'])
         ),
     )
 
@@ -1025,18 +1020,17 @@ def compute_red_lines(
         rl3_status = "FAIL"
     rl3 = RedLine(
         key="RL3",
-        name="角标可点回率",
+        name=M['RL3_02'],
         status=rl3_status,
         value=f"{cite_ok}/{cite_total} = {cite_ok / cite_total:.1%}"
         if cite_total
-        else "无引用可查",
+        else M['RL3_03'],
         threshold="≥ 98%",
         numerator=cite_ok,
         denominator=cite_total,
         note=(
-            "逐条回查 PG：chunk_id 存在、doc_key/page_num/bbox 与库一致、"
-            "切片与版本均 active。"
-            + ("" if db_available else " 本轮无 DB 连接。")
+            M['RL3_04']
+            + ("" if db_available else M['RL3_05'])
         ),
     )
 
@@ -1057,21 +1051,21 @@ def compute_red_lines(
     coverage = (len(answered) / len(answerable)) if answerable else None
     rl4 = RedLine(
         key="RL4",
-        name="忠实度优先于覆盖率",
+        name=M['RL4_02'],
         status=rl4_status,
         value=f"{len(faithful)}/{len(answered)} = "
         + (f"{len(faithful) / len(answered):.1%}" if answered else "—"),
-        threshold="= 100%（覆盖率单独报告，不得以覆盖率换忠实度）",
+        threshold=M['RL4_03'],
         numerator=len(faithful),
         denominator=len(answered),
         note=(
-            "覆盖率 = 应答题得到答案/应答题总数 = "
+            M['RL4_04']
             + (
                 f"{len(answered)}/{len(answerable)} = {coverage:.1%}"
                 if coverage is not None
                 else "—"
             )
-            + "；0 题已答时忠实度不可测（不是通过）。"
+            + M['RL4_05']
         ),
     )
     return [rl1, rl2, rl3, rl4], {
@@ -1109,81 +1103,72 @@ def write_report(
     )
     statuses = {item.status for item in red_lines}
     if "FAIL" in statuses:
-        verdict = "不通过（至少一条红线不达标）"
-        conclusion = "四条红线未全过：存在不达标项，按 §12.3 不得发布。"
+        verdict = M['VERDICT_01']
+        conclusion = M['CONCLUSION_01']
     elif "NOT_MEASURABLE" in statuses:
-        verdict = "不可认证（存在不可测红线）"
-        conclusion = (
-            "四条红线中有不可测项，本次结果**不能作为发布依据**。"
-            '具体见红线表与前提检查；不要把"未测"读成"通过"。'
-        )
+        verdict = M['VERDICT_02']
+        conclusion = M['CONCLUSION_02']
     else:
-        verdict = "通过（四条红线全过）"
-        conclusion = (
-            "四条红线全部达标，可作为发布依据（需同时留档版本三件套）。"
-        )
+        verdict = M['VERDICT_03']
+        conclusion = M['CONCLUSION_03']
 
     summary = (
-        f"题目 {len(scores)} 题（应答题 {len(answerable)}，陷阱 {len(trap)}），"
-        f"应答题得到答案 {len(answered)} 题，"
-        f"单题均分 {total_score:.2f}；"
-        f"陷阱安全拒答 {sum(1 for i in trap if i.trap_safe)}/{len(trap)}。"
+        f"{M['SUMMARY_01']}{len(scores)}{M['SUMMARY_02']}{len(answerable)}{M['SUMMARY_03']}{len(trap)}），"
+        f"{M['SUMMARY_04']}{len(answered)}{M['SUMMARY_05']}"
+        f"{M['SUMMARY_06']}{total_score:.2f}；"
+        f"{M['SUMMARY_07']}{sum(1 for i in trap if i.trap_safe)}/{len(trap)}。"
     )
     gen_cell = (
-        "已配置"
+        M['GEN_CELL_01']
         if precondition.get("llm_configured")
-        else "**未配置**（应答题会落 model_timeout）"
+        else M['GEN_CELL_02']
     )
     llm_cell = (
-        "LLM 已配置"
+        M['LLM_CELL_01']
         if precondition.get("llm_configured")
-        else "LLM_BASE_URL/LLM_MODEL 为空"
+        else M['LLM_CELL_02']
     )
     lines: list[str] = [
-        "# 红线验收报告",
+        M['LINES_01'],
         "",
-        "- 生成时间："
+        f"{M['LINES_02']}"
         f"{datetime.now(UTC).astimezone().isoformat(timespec='seconds')}",
-        f"- 评测集：`{args.golden}`",
+        f"{M['LINES_03']}{args.golden}`",
         f"- API：`{args.base_url}`",
-        f"- 身份凭证：{token_source}"
+        f"{M['LINES_04']}{token_source}"
         f"（user={args.user_id}, depts={list(args.dept)}, "
         f"roles={list(args.role)}）",
-        "- 评测器：`eval/run_eval.py`"
-        "（退出码：0 全过 / 1 不达标 / 2 有不可测项 / 3 评测器失败）",
+        M['LINES_05'],
         "",
-        "## 1. 一句话结论",
+        M['LINES_06'],
         "",
         f"**{verdict}**：{conclusion}",
         "",
         f"> {summary}",
         "",
-        "## 2. 口径与数据来源",
+        M['LINES_07'],
         "",
-        "| 项 | 值 |",
+        M['LINES_08'],
         "|---|---|",
-        f"| 题库 | `{args.golden}`（{len(scores)} 题；"
-        f"TBD doc_key 占位 {precondition.get('tbd_questions', 0)} 题） |",
-        "| 接口 | `POST /api/v1/qa/stream`（SSE，done 必须是最后一条） |",
-        f"| 语料快照 | documents={counts.get('documents', '—')}，"
+        f"{M['LINES_09']}{args.golden}`（{len(scores)}{M['LINES_10']}"
+        f"{M['LINES_11']}{precondition.get('tbd_questions', 0)}{M['LINES_12']}",
+        M['LINES_13'],
+        f"{M['LINES_14']}{counts.get('documents', '—')}，"
         f"active versions={counts.get('active_versions', '—')}，"
         f"active chunks={counts.get('active_chunks', '—')} |",
-        f"| 生成模型 | {gen_cell} |",
-        f"| 审计回查 | {'qa_log 可用' if counts else '不可用（无 DB 连接）'} |",
+        f"{M['LINES_15']}{gen_cell} |",
+        f"{M['LINES_16']}{M['LINES_17'] if counts else M['LINES_18']} |",
         "",
-        "判分口径（与 `eval/README.md` §5 一致，差异处已注明）：",
+        M['LINES_19'],
         "",
-        "1. 陷阱题：安全拒答/澄清"
-        "（`reject_none`/`reject_low`/`clarify`）、不输出正文、"
-        "不含 `must_not_contain` 措辞、不以系统故障收场 → 算拒答成功。",
-        "2. 应答题：`pass/partial` 且引用非空、每句有角标、数字有据 → 得分；"
-        "拒答记 0（防止靠全拒答刷忠实度）。",
-        '3. 数值准确率只统计"已答题且答案含数字"的题。',
-        "4. 角标可点回逐条回查 PG（存在性 + doc_key/page/bbox + active）。",
+        M['LINES_20'],
+        M['LINES_21'],
+        M['LINES_22'],
+        M['LINES_23'],
         "",
-        "## 3. 四条红线",
+        M['LINES_24'],
         "",
-        "| 红线 | 结果 | 实测 | 阈值 | 分母/样本 | 说明 |",
+        M['LINES_25'],
         "|---|---|---|---|---|---|",
     ]
     for item in red_lines:
@@ -1195,16 +1180,16 @@ def write_report(
         )
     lines += [
         "",
-        "红线定义（原样落盘，避免报告与门禁两份口径）：",
+        M['LINES_26'],
         "",
     ]
     for key, text in RED_LINE_DEFS.items():
         lines.append(f"- **{key}**：{text}")
     lines += [
         "",
-        "## 4. 陷阱题逐题（15 题）",
+        M['LINES_27'],
         "",
-        "| 题号 | 期望 | 实际 | 安全拒答 | 拒绝码 | fallback docs | 禁用措辞 |",
+        M['LINES_28'],
         "|---|---|---|---|---|---|---|",
     ]
     for item in trap:
@@ -1227,10 +1212,9 @@ def write_report(
         )
     lines += [
         "",
-        "## 5. 应答题逐题",
+        M['LINES_29'],
         "",
-        "| 题号 | 期望 | 实际 | 引用 | 可点回 | 数值 | "
-        "证据命中 | 得分 | 失败原因 |",
+        M['LINES_30'],
         "|---|---|---|---|---|---|---|---|---|",
     ]
     for item in answerable:
@@ -1243,40 +1227,33 @@ def write_report(
         )
     lines += [
         "",
-        "## 6. 限制与风险",
+        M['LINES_31'],
         "",
-        f"- **语料**：库内 active 切片 {counts.get('active_chunks', '—')} 条。"
-        "为 0 时所有题都会走 `no_evidence`，陷阱拒答率再高也没有判别力。",
-        f"- **题库**：{precondition.get('tbd_questions', 0)}/{len(scores)} 题"
-        "的 `expected_doc_keys` 是 `TBD_*` 占位，"
-        "doc_key 精确命中不可评（`evidence_hit=unknown`），"
-        "只能评答案内部一致性与行为。",
-        f"- **生成**：{llm_cell}；"
-        "未配置时 faithful/numeric 两条红线天然不可测——"
-        "报告不会把它们记成通过。",
-        "- **样本量**：50 题里应答题 31、陷阱 15；"
-        "任何按百分比的门禁（96%/98%）在小样本上都是"
-        '"错一题就不过"，因此报告同时给出分子/分母，不做四舍五入后的口头判断。',
-        "- **单轮**：忠实度优先于覆盖率是跨版本约束；"
-        "本报告只给当前版本的覆盖率与忠实度，"
-        "不与历史版本比较（没有基线快照）。",
+        f"{M['LINES_32']}{counts.get('active_chunks', '—')}{M['LINES_33']}"
+        f"{M['LINES_34']}",
+        f"{M['LINES_35']}"
+        f"{precondition.get('tbd_questions', 0)}/{len(scores)}"
+        f"{M['LINES_36']}"
+        f"{M['LINES_37']}"
+        f"{M['LINES_38']}"
+        f"{M['LINES_39']}",
+        f"{M['LINES_40']}{llm_cell}；"
+        f"{M['LINES_41']}"
+        f"{M['LINES_42']}",
+        M['LINES_43'],
+        M['LINES_44'],
         "",
-        "## 7. 建议动作",
+        M['LINES_45'],
         "",
-        "1. 先补齐语料：把 golden 的 `TBD_*` 回填成真实 doc_key，"
-        "并让对应文档真正入库"
-        "（active chunks > 0）；否则四条红线里三条永远不可测。",
-        "2. 配好生成网关（LLM_BASE_URL/LLM_MODEL）后再跑本脚本；"
-        "只有那时 RL2/RL4 才有意义。",
-        "3. 每次发布候选按 `eval/README.md` §5.2 的四条红线过门禁；"
-        "参数/提示词/模型名三者同版本留档。",
-        "4. 阈值调参后先跑 `eval/calibrate.py` 看 top1 分布是否真有波谷，"
-        "再动 `GATE_*`。",
+        M['LINES_46'],
+        M['LINES_47'],
+        M['LINES_48'],
+        M['LINES_49'],
         "",
-        "## 8. 附件",
+        M['LINES_50'],
         "",
-        f"- 机器可读：`{path_json}`"
-        "（含逐题事件序列，可直接用于 `eval/calibrate.py`）",
+        f"{M['LINES_51']}{path_json}`"
+        f"{M['LINES_52']}",
         "",
     ]
     path_md.parent.mkdir(parents=True, exist_ok=True)
@@ -1316,65 +1293,65 @@ def write_report(
 def build_parser() -> argparse.ArgumentParser:
     """构造命令行参数解析器。."""
     parser = argparse.ArgumentParser(
-        description="黄金 50 题评测 + 四条红线报告"
+        description=M['PARSER_01']
     )
     parser.add_argument(
-        "--golden", type=Path, default=DEFAULT_GOLDEN, help="黄金集 JSONL"
+        "--golden", type=Path, default=DEFAULT_GOLDEN, help=M['BUILD_PARSER_01']
     )
     parser.add_argument(
-        "--base-url", default="http://127.0.0.1:8000", help="API 根地址"
+        "--base-url", default="http://127.0.0.1:8000", help=M['BUILD_PARSER_02']
     )
     parser.add_argument(
-        "--token", default="", help="已有 Bearer token（不给则本地签发）"
+        "--token", default="", help=M['BUILD_PARSER_03']
     )
     parser.add_argument(
-        "--jwt-secret", default="", help="宿主签发时用的 HS256 secret"
+        "--jwt-secret", default="", help=M['BUILD_PARSER_04']
     )
     parser.add_argument(
-        "--user-id", default="eval_runner", help="评测身份 user_id"
+        "--user-id", default="eval_runner", help=M['BUILD_PARSER_05']
     )
     parser.add_argument(
         "--dept",
         action="append",
         default=["fin"],
-        help="评测身份部门（可多次）",
+        help=M['BUILD_PARSER_06'],
     )
     parser.add_argument(
         "--role",
         action="append",
         default=["staff"],
-        help="评测身份角色（可多次）",
+        help=M['BUILD_PARSER_07'],
     )
     parser.add_argument(
         "--admin",
         action="store_true",
-        help="用管理员身份（审计会带 admin_access）",
+        help=M['BUILD_PARSER_08'],
     )
     parser.add_argument(
         "--dsn",
         default=os.getenv("DATABASE_URL", ""),
-        help="PG DSN，用于引用回查/top1",
+        help=M['BUILD_PARSER_09'],
     )
     parser.add_argument(
-        "--timeout", type=float, default=45.0, help="单题超时秒数"
+        "--timeout", type=float, default=45.0, help=M['BUILD_PARSER_10']
     )
     parser.add_argument(
-        "--settle", type=float, default=3.0, help="审计行等待秒数"
+        "--settle", type=float, default=3.0, help=M['BUILD_PARSER_11']
     )
     parser.add_argument(
-        "--only", default="", help="只跑这些题号，逗号分隔（如 TR01,TR05）"
+        "--only", default="", help=M['BUILD_PARSER_12']
     )
     parser.add_argument(
         "--category",
         default="",
-        help="只跑这个类别（basic_table/chart/temporal_multihop/trap）",
+        help=M['BUILD_PARSER_13'],
     )
     parser.add_argument(
-        "--limit", type=int, default=0, help="最多跑多少题（0=全量）"
+        "--limit", type=int, default=0, help=M['BUILD_PARSER_14']
     )
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     parser.add_argument(
-        "--report-name", default="", help="报告文件名（不含扩展名）"
+        "--report-name", default="", help=M['BUILD_PARSER_15']
     )
     parser.add_argument(
         "--allow-empty-corpus", action="store_true", help=argparse.SUPPRESS
@@ -1397,13 +1374,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         rows = [row for row in rows if str(row["id"]).upper() in wanted]
         missing = wanted - {str(row["id"]).upper() for row in rows}
         if missing:
-            raise SystemExit(f"--only 里有不存在的题号：{sorted(missing)}")
+            raise SystemExit(f"{M['MAIN_01']}{sorted(missing)}")
     if args.category:
         rows = [row for row in rows if row["category"] == args.category]
     if args.limit:
         rows = rows[: args.limit]
     if not rows:
-        raise SystemExit("筛选后没有题目可跑")
+        raise SystemExit(M['MAIN_02'])
 
     try:
         token, token_source = build_token(args)
@@ -1411,21 +1388,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise
     except Exception as exc:  # noqa: BLE001
         print(
-            f"[FATAL] 签发 token 失败：{type(exc).__name__}: {exc}",
+            f"{M['MAIN_03']}{type(exc).__name__}: {exc}",
             file=sys.stderr,
         )
         return 3
 
     db: Db | None = None
-    db_reason = "未配置 DATABASE_URL/--dsn"
+    db_reason = M['DB_REASON_01']
     if args.dsn:
         try:
             db = Db(args.dsn)
             db.counts()
-            db_reason = "psycopg 已连接"
+            db_reason = M['DB_REASON_02']
         except Exception as exc:  # noqa: BLE001
             db = None
-            db_reason = f"DB 不可用：{type(exc).__name__}: {exc}"
+            db_reason = f"{M['DB_REASON_03']}{type(exc).__name__}: {exc}"
 
     counts: dict[str, Any] = {}
     if db is not None:
@@ -1453,25 +1430,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         "db": db_reason,
         "tbd_questions": tbd_questions,
         "corpus_empty": int(counts.get("active_chunks", 0) or 0) == 0,
-        "rubric": "eval/README.md §5（细化 §12.1）",
+        "rubric": M['RUBRIC_01'],
     }
 
     missing_chunks = precondition["corpus_empty"]
     print(
-        f"[preflight] 题目={len(rows)} TBD doc_key={tbd_questions} "
+        f"{M['MAIN_04']}{len(rows)} TBD doc_key={tbd_questions} "
         f"active_chunks={counts.get('active_chunks', '—')} "
         f"LLM={'on' if llm_configured else 'off'} DB={db_reason}"
     )
     if missing_chunks:
-        print(
-            "[preflight][WARN] 语料为空：所有题目都会走 no_evidence，"
-            "陷阱拒答率是真空态，报告会记 NOT_MEASURABLE（不是通过）。"
-        )
+        print(M['MAIN_05'])
     if not llm_configured:
-        print(
-            "[preflight][WARN] 生成模型未配置：应答题会落 model_timeout，"
-            "RL2/RL4 将不可测。"
-        )
+        print(M['MAIN_06'])
 
     scores: list[QuestionScore] = []
     for index, row in enumerate(rows, 1):
@@ -1489,7 +1460,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     str(row["question"]), started_at, wait_s=args.settle
                 )
             except Exception as exc:  # noqa: BLE001
-                audit = {"source": f"qa_log 查询失败: {type(exc).__name__}"}
+                audit = {"source": f"{M['SOURCE_01']}{type(exc).__name__}"}
         score = score_question(row, stream, db=db, audit=audit)
         scores.append(score)
         mark = "✓" if score.score >= 1 else ("~" if score.score > 0 else "✗")
@@ -1503,11 +1474,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     red_lines, derived = compute_red_lines(
         scores, corpus=counts or None, db_available=db is not None
     )
-    print("\n=== 四条红线 ===")
+    print(M['MAIN_07'])
     for item in red_lines:
         print(
             f"  {item.key} {item.name}: {item.status}  {item.value}  "
-            f"(阈值 {item.threshold})"
+            f"{M['MAIN_08']}{item.threshold})"
         )
     print(f"  coverage={derived.get('coverage')}")
 

@@ -1,4 +1,4 @@
-"""业务时间与可信度（§3.5 第四项随行信息 / §5.2 时间过滤）。
+"""业务时间与可信度（§3.5 第四项随行信息 / §5.2 时间过滤）。.
 
 这一项最容易出错的不是"认不认得出日期"，而是**把推断当显式**：
 
@@ -62,6 +62,7 @@ CASES = [
 def test_find_date_classification(
     text: str, date: int | None, year: int | None, confidence: str, why: str
 ) -> None:
+    """Run test_find_date_classification."""
     found = find_date(text)
     assert found.effective_date == date, why
     assert found.effective_year == year, why
@@ -69,7 +70,7 @@ def test_find_date_classification(
 
 
 def test_explicit_requires_a_lead_word() -> None:
-    """`require_lead=True` 时，没有引导词的日期不算生效日期。
+    """`require_lead=True` 时，没有引导词的日期不算生效日期。.
 
     用途：切片级判定。一段正文里出现的任何日期都不该变成"这批切片的生效时间"，
     只有明说"生效日期：…"的才算（目录里的"发布日期"、注释里的"修订于"都要排除）。
@@ -85,7 +86,7 @@ def test_explicit_requires_a_lead_word() -> None:
 
 
 def test_document_level_date_does_not_require_a_lead_word() -> None:
-    """文档级（标题年份）不需要引导词：`- 2025 revision` 就是这份材料的年份。"""
+    """文档级日期不需要引导词：`- 2025 revision` 就是材料年份。."""
     assert (
         document_date(
             "Travel Expense Policy (CN) - 2025 revision"
@@ -95,7 +96,7 @@ def test_document_level_date_does_not_require_a_lead_word() -> None:
 
 
 def test_business_date_derives_the_year_from_the_date() -> None:
-    """`effective_year` 由 `effective_date` 派生（附录 A.3）。
+    """`effective_year` 由 `effective_date` 派生（附录 A.3）。.
 
     两者不一致的行会让时间过滤按错误的年去筛，而那种错在 SQL 里完全看不出来。
     """
@@ -104,22 +105,25 @@ def test_business_date_derives_the_year_from_the_date() -> None:
 
 
 def test_business_date_rejects_a_mismatched_year() -> None:
+    """Run test_business_date_rejects_a_mismatched_year."""
     with pytest.raises(AssertionError):
         BusinessDate(20250301, 2024, "explicit")
 
 
 def test_business_date_rejects_an_out_of_range_date() -> None:
+    """Run test_business_date_rejects_an_out_of_range_date."""
     with pytest.raises(ValueError):
         BusinessDate(18991231, 1899, "explicit")
 
 
 def test_business_date_rejects_an_unknown_confidence() -> None:
+    """Run test_business_date_rejects_an_unknown_confidence."""
     with pytest.raises(ValueError):
         BusinessDate(None, None, "guessed")
 
 
 def test_month_only_dates_are_not_explicit() -> None:
-    """`2025年3月` 不等于 `2025-03-01 生效`。
+    """`2025年3月` 不等于 `2025-03-01 生效`。.
 
     当 explicit 会让"3 月 15 日"的提问命中一条 3 月 1 日生效的推断——
     而它可能根本还没生效。
@@ -130,22 +134,24 @@ def test_month_only_dates_are_not_explicit() -> None:
 
 
 def test_invalid_calendar_dates_are_skipped() -> None:
-    """`2025-13-45` 不是日期，别把它当 2026-01-14 之类的东西。"""
+    """`2025-13-45` 不是日期，别把它当 2026-01-14 之类的东西。."""
     assert find_date("生效日期 2025-13-45").effective_date is None
 
 
 def test_leap_day_is_accepted() -> None:
+    """Run test_leap_day_is_accepted."""
     assert find_date("生效日期 2024-02-29").effective_date == 20240229
 
 
 def test_merge_prefers_the_slice_level_date() -> None:
-    """切片级结果优先，缺什么用文档级补；`confidence` 取严格的那一个。"""
+    """切片级结果优先，缺什么用文档级补；`confidence` 取严格的那一个。."""
     slice_level = BusinessDate(20250301, 2025, "explicit")
     doc_level = BusinessDate(None, 2024, "inferred")
     assert merge_dates(slice_level, doc_level) == slice_level
 
 
 def test_merge_falls_back_to_the_document_year() -> None:
+    """Run test_merge_falls_back_to_the_document_year."""
     assert (
         merge_dates(EMPTY, BusinessDate(None, 2024, "inferred")).effective_year
         == 2024
@@ -153,7 +159,7 @@ def test_merge_falls_back_to_the_document_year() -> None:
 
 
 def test_merge_does_not_fabricate_a_full_date() -> None:
-    """“切片有年、文档有日”不能拼成完整日期——那是在造事实。"""
+    """“切片有年、文档有日”不能拼成完整日期——那是在造事实。."""
     slice_level = BusinessDate(None, 2025, "inferred")
     doc_level = BusinessDate(20240301, 2024, "explicit")
     merged = merge_dates(slice_level, doc_level)
@@ -163,6 +169,7 @@ def test_merge_does_not_fabricate_a_full_date() -> None:
 
 
 def test_empty_is_the_neutral_element() -> None:
+    """Run test_empty_is_the_neutral_element."""
     assert EMPTY.effective_date is None
     assert EMPTY.effective_year is None
     assert EMPTY.confidence == "inferred"
@@ -170,15 +177,17 @@ def test_empty_is_the_neutral_element() -> None:
 
 
 def test_document_date_uses_the_first_page_when_the_title_has_none() -> None:
+    """Run test_document_date_uses_the_first_page_when_the_title_has_none."""
     found = document_date(None, ["2025 版制度汇编", "其他内容"])
     assert found.effective_year == 2025
 
 
 def test_document_date_returns_empty_without_any_hint() -> None:
+    """Run test_document_date_returns_empty_without_any_hint."""
     assert document_date(None, ["没有年份的一段话"]) == EMPTY
 
 
 def test_document_date_never_produces_an_explicit_date() -> None:
-    """文档级日期只用来兜底，绝不进 explicit——否则时间过滤会把它当真。"""
+    """文档级日期只用来兜底，绝不进 explicit——否则时间过滤会把它当真。."""
     found = document_date("2025-03-01 生效的制度")
     assert not found.is_explicit

@@ -1,4 +1,4 @@
-"""QaLogEntry 的成对口径（不需要数据库）。
+"""QaLogEntry 的成对口径（不需要数据库）。.
 
 DB 层的 qa_log 只有单列 CHECK，所以"拒答必须带原因码""原因码与判定必须自洽"
 这三条只能在这里拦。每条都验正反两个方向：
@@ -15,6 +15,7 @@ from api.errors import ErrorCode
 
 
 def _entry(**overrides: object) -> QaLogEntry:
+    """Run _entry."""
     payload: dict[str, object] = {
         "user_id": "u_dev",
         "user_depts": ["fin"],
@@ -28,6 +29,7 @@ def _entry(**overrides: object) -> QaLogEntry:
 
 
 def test_minimal_entry_is_valid() -> None:
+    """Run test_minimal_entry_is_valid."""
     entry = _entry()
     assert entry.hop_count == 0
     assert entry.is_admin is False
@@ -35,6 +37,7 @@ def test_minimal_entry_is_valid() -> None:
 
 
 def test_identity_is_required() -> None:
+    """Run test_identity_is_required."""
     with pytest.raises(ValidationError):
         _entry(user_id="")
     with pytest.raises(ValidationError):
@@ -43,6 +46,7 @@ def test_identity_is_required() -> None:
 
 @pytest.mark.parametrize("verdict", ["reject_none", "reject_low"])
 def test_reject_requires_reason(verdict: str) -> None:
+    """Run test_reject_requires_reason."""
     with pytest.raises(ValidationError) as excinfo:
         _entry(gate1_verdict=verdict)
     assert "reject_reason" in str(excinfo.value)
@@ -54,6 +58,7 @@ def test_reject_requires_reason(verdict: str) -> None:
     "reason", [ErrorCode.NO_EVIDENCE, ErrorCode.LOW_CONFIDENCE]
 )
 def test_reason_requires_reject_verdict(reason: ErrorCode) -> None:
+    """Run test_reason_requires_reject_verdict."""
     with pytest.raises(ValidationError) as excinfo:
         _entry(gate1_verdict="pass", reject_reason=reason)
     assert "只能配拒答判定" in str(excinfo.value)
@@ -62,6 +67,7 @@ def test_reason_requires_reject_verdict(reason: ErrorCode) -> None:
 
 def test_unverifiable_can_coexist_with_supported() -> None:
     # 第五道失败时判别器仍可能判定 supported，两者不是自相矛盾。
+    """Run test_unverifiable_can_coexist_with_supported."""
     assert _entry(
         gate2_verdict="supported", reject_reason=ErrorCode.UNVERIFIABLE
     )
@@ -71,6 +77,7 @@ def test_unverifiable_can_coexist_with_supported() -> None:
 
 
 def test_hop_and_latency_are_non_negative() -> None:
+    """Run test_hop_and_latency_are_non_negative."""
     with pytest.raises(ValidationError):
         _entry(latency_ms=-1)
     with pytest.raises(ValidationError):
@@ -78,6 +85,6 @@ def test_hop_and_latency_are_non_negative() -> None:
 
 
 def test_unknown_field_is_rejected() -> None:
-    """字段名写错时不能静默丢：审计少一列，事后才发现。"""
+    """字段名写错时不能静默丢：审计少一列，事后才发现。."""
     with pytest.raises(ValidationError):
         _entry(user_departments=["fin"])

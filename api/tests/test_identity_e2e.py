@@ -1,4 +1,4 @@
-"""身份 → 过滤 → 审计的端到端串联（§5 → §11.2）。
+"""身份 → 过滤 → 审计的端到端串联（§5 → §11.2）。.
 
 单测已经覆盖了每一块；这里验的是"拼起来还成立"的三件事：
 
@@ -31,7 +31,7 @@ SECRET = "e2e-secret"
 
 
 def _app(**overrides: object) -> FastAPI:
-    """最小 app：只装身份依赖、错误映射与一个示例路由。"""
+    """最小 app：只装身份依赖、错误映射与一个示例路由。."""
     values: dict[str, object] = {"AUTH_JWT_SECRET": SECRET}
     values.update(overrides)
     settings = make_settings(**values)
@@ -42,6 +42,7 @@ def _app(**overrides: object) -> FastAPI:
 
     @app.get("/whoami")
     def whoami(identity: IdentityDep) -> dict[str, object]:
+        """Run whoami."""
         flt = build_filter(identity, doc_keys=["policy/travel-cn"])
         return {
             "identity": identity.model_dump(),
@@ -53,6 +54,7 @@ def _app(**overrides: object) -> FastAPI:
 
 
 def _token(settings, **claims: object) -> str:
+    """Run _token."""
     payload: dict[str, object] = {
         "iat": int(time.time()),
         "exp": int(time.time()) + 600,
@@ -66,6 +68,7 @@ def _token(settings, **claims: object) -> str:
 
 
 def test_missing_credential_is_401_with_auth_invalid_code() -> None:
+    """Run test_missing_credential_is_401_with_auth_invalid_code."""
     client = TestClient(_app())
     resp = client.get("/whoami")
     assert resp.status_code == 401
@@ -78,6 +81,7 @@ def test_missing_credential_is_401_with_auth_invalid_code() -> None:
 
 
 def test_valid_credential_flows_identity_into_filter_and_audit() -> None:
+    """Run test_valid_credential_flows_identity_into_filter_and_audit."""
     settings = make_settings(AUTH_JWT_SECRET=SECRET)
     token = mint_dev_token(
         settings, user_id="u_fin", depts=("fin", "corp"), roles=("staff",)
@@ -105,7 +109,7 @@ def test_valid_credential_flows_identity_into_filter_and_audit() -> None:
 
 
 def test_audit_snapshot_satisfies_qa_log_contract() -> None:
-    """身份快照要能直接塞进 qa_log 的行模型，字段名不能各写一套。"""
+    """身份快照要能直接塞进 qa_log 的行模型，字段名不能各写一套。."""
     settings = make_settings(AUTH_JWT_SECRET=SECRET)
     token = mint_dev_token(settings, user_id="u_x", depts=("fin",), admin=True)
     client = TestClient(_app())
@@ -124,7 +128,7 @@ def test_audit_snapshot_satisfies_qa_log_contract() -> None:
 
 
 def test_admin_access_is_visible_in_both_filter_and_audit() -> None:
-    """§5.1：管理员跨部门访问必须在审计里可辨——审计列 + 过滤描述的可辨标记。"""
+    """§5.1：管理员跨部门访问必须在审计里可辨——审计列 + 过滤描述的可辨标记。."""
     settings = make_settings(AUTH_JWT_SECRET=SECRET)
     token = mint_dev_token(settings, user_id="u_admin", depts=(), admin=True)
     client = TestClient(_app())
@@ -138,7 +142,7 @@ def test_admin_access_is_visible_in_both_filter_and_audit() -> None:
 
 
 def test_no_depts_user_is_not_rejected() -> None:
-    """新入职没分配部门：能登录、能看公开，而不是 403。
+    """新入职没分配部门：能登录、能看公开，而不是 403。.
 
     这条最容易被写成"拒绝"。
     """
@@ -163,6 +167,7 @@ def test_no_depts_user_is_not_rejected() -> None:
     ],
 )
 def test_every_bad_authorization_shape_is_401(header: str) -> None:
+    """Run test_every_bad_authorization_shape_is_401."""
     client = TestClient(_app())
     resp = client.get(
         "/whoami", headers={"Authorization": header} if header else {}
@@ -172,6 +177,7 @@ def test_every_bad_authorization_shape_is_401(header: str) -> None:
 
 
 def test_mock_header_mode_end_to_end() -> None:
+    """Run test_mock_header_mode_end_to_end."""
     client = TestClient(
         _app(AUTH_MODE="mock_header", AUTH_MOCK_USER_ID="u_mock")
     )

@@ -46,6 +46,11 @@ import time
 from collections.abc import Iterator
 from typing import Any
 
+if __package__:
+    from .resources.qdrant_rebuild_msgs import MESSAGES as M
+else:  # run as a script: python3 scripts/qdrant_rebuild.py
+    from resources.qdrant_rebuild_msgs import MESSAGES as M
+
 import qdrant_common as qc
 
 DEFAULT_SQL_ACTIVE = """
@@ -81,6 +86,7 @@ DEFAULT_SQL_ALL = (
 
 
 def normalise_dsn(dsn: str) -> str:
+    """Run normalise_dsn."""
     for prefix in ("postgresql+psycopg://", "postgresql+psycopg2://"):
         if dsn.startswith(prefix):
             return "postgresql://" + dsn[len(prefix) :]
@@ -88,6 +94,7 @@ def normalise_dsn(dsn: str) -> str:
 
 
 def resolve_dsn(arg: str | None) -> str:
+    """Run resolve_dsn."""
     if arg:
         return normalise_dsn(arg)
     env = os.getenv("DATABASE_URL") or os.getenv("PG_DSN")
@@ -105,6 +112,7 @@ def resolve_dsn(arg: str | None) -> str:
 def build_where(
     doc_keys: list[str] | None, version_ids: list[str] | None, table_alias: str
 ) -> tuple[str, dict[str, Any]]:
+    """Run build_where."""
     clauses, params = [], {}
     if doc_keys:
         clauses.append(f"{table_alias}doc_key = ANY(%(doc_keys)s)")
@@ -116,6 +124,7 @@ def build_where(
 
 
 def connect(dsn: str):
+    """Run connect."""
     try:
         import psycopg  # noqa: PLC0415
         from psycopg.rows import dict_row  # noqa: PLC0415
@@ -138,6 +147,7 @@ def connect(dsn: str):
 def stream_rows(
     conn, sql: str, params: dict[str, Any], itersize: int
 ) -> Iterator[dict[str, Any]]:
+    """Run stream_rows."""
     with conn.cursor(
         name="chunk_stream"
     ) as cur:  # server-side cursor: no full load in RAM
@@ -147,8 +157,9 @@ def stream_rows(
 
 
 def probe_embedding(url: str, model: str, dim: int) -> tuple[bool, str]:
+    """Run probe_embedding."""
     try:
-        vec = qc.embed_texts(url, ["差旅住宿标准"], model=model)[0]
+        vec = qc.embed_texts(url, [M["EMBED_TEXTS_01"]], model=model)[0]
     except Exception as exc:  # noqa: BLE001
         return False, f"embedding service unreachable: {exc}"
     norm = sum(v * v for v in vec) ** 0.5
@@ -169,6 +180,7 @@ def probe_embedding(url: str, model: str, dim: int) -> tuple[bool, str]:
 def summarise_rows(
     conn, sql_count: str, params: dict[str, Any]
 ) -> dict[str, int]:
+    """Run summarise_rows."""
     out: dict[str, int] = {}
     with conn.cursor() as cur:  # conn uses dict_row: rows are dicts
         cur.execute(sql_count, params)
@@ -178,6 +190,7 @@ def summarise_rows(
 
 
 def main() -> int:
+    """Run main."""
     ap = argparse.ArgumentParser(
         description="rebuild Qdrant dense+bm25 from PG content_text"
     )
@@ -364,6 +377,7 @@ def main() -> int:
         started = time.monotonic()
 
         def flush(points: list[dict[str, Any]]) -> None:
+            """Run flush."""
             if not points:
                 return
             qc.request(

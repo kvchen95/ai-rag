@@ -95,7 +95,7 @@ def fetch_texts(
             doc_key=row["doc_key"],
             doc_name=row["filename"] or row["doc_key"],
             page_num=int(row["page_num"]),
-            bbox=list(row["bbox"] or []),
+            bbox=list(row["bbox"] if row["bbox"] else []),
             text=text,
             chunk_type=row["chunk_type"],
         )
@@ -110,9 +110,11 @@ def _text_for(row: dict[str, Any]) -> str:
     """
     if row.get("chunk_type") == "table":
         return (
-            row.get("content_text") or row.get("retrieval_text") or ""
+            row.get("content_text") or row.get("retrieval_text")
+            if row.get("content_text") or row.get("retrieval_text")
+            else ""
         ).strip()
-    return (row.get("content_text") or "").strip()
+    return (row.get("content_text") if row.get("content_text") else "").strip()
 
 
 def doc_names(
@@ -138,7 +140,9 @@ def all_doc_names(pg: PgDatabase) -> dict[str, str]:
 def mentioned_doc_keys(question: str, names: dict[str, str]) -> tuple[str, ...]:
     """从展示文件名里找问题明确点名的文档；找不到时返回空元组。."""
     tokens = [
-        token.strip() for token in (question or "").split() if token.strip()
+        token.strip()
+        for token in (question if question else "").split()
+        if token.strip()
     ]
     if not tokens:
         return ()
@@ -169,7 +173,7 @@ def drop_repeated_boilerplate(
         item = texts.get(candidate.chunk_id)
         if item is None:
             continue
-        normalised = "".join((item.text or "").split())
+        normalised = "".join((item.text if item.text else "").split())
         if not normalised:
             continue
         text_by_id[candidate.chunk_id] = normalised
@@ -205,7 +209,7 @@ def drop_header_only_candidates(
         if item is None:
             kept.append(candidate)
             continue
-        text = (item.text or "").strip()
+        text = (item.text if item.text else "").strip()
         normalised = "".join(text.split())
         header_only = (
             item.chunk_type != "table"
@@ -239,7 +243,11 @@ def dedupe_candidate_texts(
         if item is None:
             kept.append(candidate)
             continue
-        key = (item.doc_key, item.doc_name, "".join((item.text or "").split()))
+        key = (
+            item.doc_key,
+            item.doc_name,
+            "".join((item.text if item.text else "").split()),
+        )
         if key in seen:
             dropped.append(candidate.chunk_id)
         else:

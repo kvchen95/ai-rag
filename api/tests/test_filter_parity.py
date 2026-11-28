@@ -1,4 +1,4 @@
-"""过滤语义在 Qdrant 与 PG 两侧的一致性（需要真 PG + 真 Qdrant）。
+"""过滤语义在 Qdrant 与 PG 两侧的一致性（需要真 PG + 真 Qdrant）。.
 
 这是本卡唯一一类"读代码读不出来"的证据。`test_filters.py` 断言的是结构
 （该有的条件在、不该有的不在），但两边各自演进之后"结构看起来对、结果不同"
@@ -140,7 +140,7 @@ ACTIVE_ROW_IDS = {
 
 
 def _qdrant_common():
-    """Import scripts/qdrant_common.py。
+    """Import scripts/qdrant_common.py。.
 
     它不在包里，需要把 scripts/ 塞进 sys.path。
     """
@@ -152,6 +152,7 @@ def _qdrant_common():
 
 
 def _qdrant_client():
+    """Run _qdrant_client."""
     try:
         from qdrant_client import QdrantClient  # noqa: PLC0415
     except ImportError:  # pragma: no cover
@@ -167,7 +168,7 @@ def _qdrant_client():
 
 @pytest.fixture(scope="module")
 def pg(pg_dsn: str):
-    """真 PG，schema 走项目唯一的迁移入口（不自己建表）。"""
+    """真 PG，schema 走项目唯一的迁移入口（不自己建表）。."""
     proc = subprocess.run(  # noqa: S603
         [sys.executable, str(SCRIPTS_DIR / "db_migrate.py"), "--dsn", pg_dsn],
         capture_output=True,
@@ -186,7 +187,7 @@ def pg(pg_dsn: str):
 
 @pytest.fixture(scope="module")
 def seeded_pg(pg: PgDatabase, pg_dsn: str):
-    """造数：两个版本（一个 active 一个 deprecated），12 个切片覆盖各种边界。"""
+    """造数：两个版本、12 个切片覆盖边界。."""
     from psycopg.types.json import Jsonb  # noqa: PLC0415
 
     with psycopg.connect(normalize_dsn(pg_dsn), autocommit=True) as conn:
@@ -273,7 +274,7 @@ def seeded_pg(pg: PgDatabase, pg_dsn: str):
 
 @pytest.fixture(scope="module")
 def seeded_qdrant(seeded_pg: PgDatabase, pg_dsn: str):
-    """Qdrant 侧由 PG 的同一批行生成。
+    """Qdrant 侧由 PG 的同一批行生成。.
 
     payload 走项目的 build_payload，保证两边输入一致。
     """
@@ -334,9 +335,10 @@ def seeded_qdrant(seeded_pg: PgDatabase, pg_dsn: str):
 
 @pytest.fixture(scope="module")
 def qdrant_ids(seeded_qdrant) -> Callable[[RetrievalFilter], list[str]]:
-    """Qdrant 侧候选：只做前置过滤，不做版本兜底（§7.4 的兜底在召回之后）。"""
+    """Qdrant 侧候选：只做前置过滤，不做版本兜底（§7.4 的兜底在召回之后）。."""
 
     def _ids(flt: RetrievalFilter) -> list[str]:
+        """Run _ids."""
         return scroll_ids(seeded_qdrant, COLLECTION, flt)
 
     return _ids
@@ -346,12 +348,13 @@ def qdrant_ids(seeded_qdrant) -> Callable[[RetrievalFilter], list[str]]:
 def qdrant_guarded_ids(
     seeded_qdrant, seeded_pg: PgDatabase
 ) -> Callable[[RetrievalFilter], list[str]]:
-    """Qdrant 侧候选加 §7.4 版本兜底。
+    """Qdrant 侧候选加 §7.4 版本兜底。.
 
     这才是“能进精排”的集合，可与 PG 视图对齐。
     """
 
     def _ids(flt: RetrievalFilter) -> list[str]:
+        """Run _ids."""
         raw = scroll_rows(seeded_qdrant, COLLECTION, flt)
         kept, _ = drop_stale(seeded_pg, raw)
         return sorted({item["chunk_id"] for item in kept})
@@ -362,12 +365,14 @@ def qdrant_guarded_ids(
 def _both(
     pg: PgDatabase, qdrant_ids, flt: RetrievalFilter
 ) -> tuple[list[str], list[str]]:
+    """Run _both."""
     return select_ids(pg, flt), qdrant_ids(flt)
 
 
 def _both_after_guard(
     pg: PgDatabase, qdrant_guarded_ids, flt: RetrievalFilter
 ) -> tuple[list[str], list[str]]:
+    """Run _both_after_guard."""
     return select_ids(pg, flt), qdrant_guarded_ids(flt)
 
 
@@ -389,6 +394,7 @@ IDENTITIES = {
 def test_pg_and_qdrant_return_the_same_ids(
     seeded_pg: PgDatabase, qdrant_guarded_ids, name: str
 ) -> None:
+    """Run test_pg_and_qdrant_return_the_same_ids."""
     flt = RetrievalFilter(identity=IDENTITIES[name], doc_keys=(DOC_KEY,))
     pg_ids, qd_ids = _both_after_guard(seeded_pg, qdrant_guarded_ids, flt)
     assert pg_ids == qd_ids, f"{name}: PG 与 Qdrant 过滤结果不一致"
@@ -404,7 +410,7 @@ def test_pg_and_qdrant_return_the_same_ids(
 def test_no_depts_sees_only_public(
     seeded_pg: PgDatabase, qdrant_guarded_ids
 ) -> None:
-    """§5.2：无部门 = 空集 = 只能看公开。
+    """§5.2：无部门 = 空集 = 只能看公开。.
 
     不能是"看到全部"，也不是"什么都没看到"。
     """
@@ -423,7 +429,7 @@ def test_no_depts_sees_only_public(
 def test_multi_depts_is_union_not_intersection(
     seeded_pg: PgDatabase, qdrant_guarded_ids
 ) -> None:
-    """多部门是"任一命中"。
+    """多部门是"任一命中"。.
 
     若写成"必须属于全部部门"，ch_fin 与 ch_corp 都会消失。
     """
@@ -449,7 +455,7 @@ def test_multi_depts_is_union_not_intersection(
 def test_dept_and_role_are_both_honoured(
     seeded_pg: PgDatabase, qdrant_guarded_ids
 ) -> None:
-    """部门或角色任一命中即可（§5.2 是三个分支取或，不是与）。"""
+    """部门或角色任一命中即可（§5.2 是三个分支取或，不是与）。."""
     pg_ids, qd_ids = _both_after_guard(
         seeded_pg,
         qdrant_guarded_ids,
@@ -471,6 +477,7 @@ def test_dept_and_role_are_both_honoured(
 def test_admin_sees_every_active_chunk(
     seeded_pg: PgDatabase, qdrant_guarded_ids
 ) -> None:
+    """Run test_admin_sees_every_active_chunk."""
     pg_ids, qd_ids = _both_after_guard(
         seeded_pg,
         qdrant_guarded_ids,
@@ -483,7 +490,7 @@ def test_admin_sees_every_active_chunk(
 def test_unprivileged_chunk_never_appears(
     seeded_pg: PgDatabase, qdrant_guarded_ids
 ) -> None:
-    """ch_none（ACL 空且非公开）与 ch_board 对所有人都不该出现。
+    """ch_none（ACL 空且非公开）与 ch_board 对所有人都不该出现。.
 
     后者只对 board 角色可见。
     """
@@ -517,7 +524,7 @@ MARCH = TimeRange(
 def test_time_window_is_month_precise_on_both_sides(
     seeded_pg: PgDatabase, qdrant_guarded_ids
 ) -> None:
-    """这条专门防“Qdrant 只有 effective_year”的退化。
+    """这条专门防“Qdrant 只有 effective_year”的退化。.
 
     若向量库侧按整年过滤，ch_feb（二月）会被多召回。
     """
@@ -533,7 +540,7 @@ def test_time_window_is_month_precise_on_both_sides(
 def test_inferred_dates_are_excluded_from_time_filter(
     seeded_pg: PgDatabase, qdrant_guarded_ids
 ) -> None:
-    """§5.2：时间过滤只认 explicit。ch_inferred 有日期但置信度是 inferred。"""
+    """§5.2：时间过滤只认 explicit。ch_inferred 有日期但置信度是 inferred。."""
     flt = RetrievalFilter(
         identity=IDENTITIES["admin"], doc_keys=(DOC_KEY,), time_range=MARCH
     )
@@ -544,7 +551,7 @@ def test_inferred_dates_are_excluded_from_time_filter(
 def test_no_time_filter_keeps_inferred_and_undated(
     seeded_pg: PgDatabase, qdrant_guarded_ids
 ) -> None:
-    """反方向：不加时间条件时，推断日期与无日期的切片都该在（证明上一条不是"永远排除"）。"""
+    """反方向：不加时间条件时，推断日期与无日期的切片都该在（证明上一条不是"永远排除"）。."""
     flt = RetrievalFilter(identity=IDENTITIES["admin"], doc_keys=(DOC_KEY,))
     pg_ids, qd_ids = _both_after_guard(seeded_pg, qdrant_guarded_ids, flt)
     assert {"ch_inferred", "ch_no_date"} <= set(pg_ids)
@@ -557,6 +564,7 @@ def test_no_time_filter_keeps_inferred_and_undated(
 def test_scope_filter_matches_on_both_sides(
     seeded_pg: PgDatabase, qdrant_guarded_ids
 ) -> None:
+    """Run test_scope_filter_matches_on_both_sides."""
     flt = RetrievalFilter(identity=IDENTITIES["admin"], doc_keys=(DOC_KEY,))
     pg_ids, qd_ids = _both_after_guard(seeded_pg, qdrant_guarded_ids, flt)
     assert pg_ids == qd_ids and pg_ids
@@ -573,7 +581,7 @@ def test_scope_filter_matches_on_both_sides(
 def test_parity_detects_year_granularity_regression(
     seeded_pg: PgDatabase, qdrant_ids, seeded_qdrant
 ) -> None:
-    """把时间条件降级成“整年”后对拍必须失败。
+    """把时间条件降级成“整年”后对拍必须失败。.
 
     模拟 Qdrant 只有 effective_year 的旧 payload；判据从没红过，
     和被删掉是一回事。

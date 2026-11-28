@@ -1,4 +1,4 @@
-"""重建脚本跑通 + "sparse 可从 PG 重建"（详细设计.md §3.6 / §4.2 / 附录 B）。
+"""重建脚本跑通 + "sparse 可从 PG 重建"（详细设计.md §3.6 / §4.2 / 附录 B）。.
 
 验收原句有两条要在这里落地：
 
@@ -41,7 +41,7 @@ REBUILD = REPO_ROOT / "scripts" / "qdrant_rebuild.py"
 
 @pytest.fixture
 def rebuild(qdrant_reachable, embedder, collection):
-    """跑一次真重建脚本，返回 (解析后的 JSON 摘要, CompletedProcess)。
+    """跑一次真重建脚本，返回 (解析后的 JSON 摘要, CompletedProcess)。.
 
     URL/模型/集合**全部显式传入**，不读环境变量：`api/tests/conftest.py`
     的 autouse `_clean_env` 会清掉 Settings 的字段名，脚本里 `os.getenv`
@@ -50,6 +50,7 @@ def rebuild(qdrant_reachable, embedder, collection):
     """
 
     def _run(*extra: str):
+        """Run _run."""
         args = [
             sys.executable,
             str(REBUILD),
@@ -93,10 +94,12 @@ def rebuild(qdrant_reachable, embedder, collection):
 
 
 def _points_by_chunk(store) -> dict[str, dict]:
+    """Run _points_by_chunk."""
     return {p["payload"]["chunk_id"]: p["payload"] for p in _scroll_all(store)}
 
 
 def _scroll_all(store) -> list[dict]:
+    """Run _scroll_all."""
     out: list[dict] = []
     offset = None
     while True:
@@ -114,6 +117,7 @@ def _scroll_all(store) -> list[dict]:
 
 
 def _vectors_by_chunk(store) -> dict[str, dict]:
+    """Run _vectors_by_chunk."""
     from scripts.qdrant_common import DENSE_VECTOR, SPARSE_VECTOR
 
     out: dict[str, dict] = {}
@@ -134,7 +138,7 @@ def _vectors_by_chunk(store) -> dict[str, dict]:
 
 @pytest.fixture
 def active_version(conn, store, embedder, pool) -> str:
-    """一个已上线、已同步完的版本。
+    """一个已上线、已同步完的版本。.
 
     重建按 `v_active_chunks` 取数，只认双 active。翻牌后要 drain 一次：点的
     payload 状态在翻牌那一刻还是 pending（那是切片写进来时的状态），drain
@@ -155,6 +159,7 @@ def active_version(conn, store, embedder, pool) -> str:
 def test_rebuild_dry_run_reports_the_plan(
     conn, store, embedder, active_version, rebuild
 ) -> None:
+    """Run test_rebuild_dry_run_reports_the_plan."""
     summary, proc = rebuild("--dry-run")
     assert proc.returncode == 0, proc.stderr[-1500:]
     assert summary["dry_run"] is True
@@ -167,7 +172,7 @@ def test_rebuild_dry_run_reports_the_plan(
 def test_rebuild_restores_everything_after_the_collection_is_wiped(
     conn, store, embedder, active_version, rebuild, qdrant_reachable, collection
 ) -> None:
-    """核心验收：把集合清空，从 PG 全量重建，两边逐条一致。
+    """核心验收：把集合清空，从 PG 全量重建，两边逐条一致。.
 
     重建前先记下每个点的 payload 与"bm25 是否真的有 token"，重建后逐条比对——
     只比条数会把"点回来了但向量空了"这种半成品当成成功。
@@ -211,7 +216,7 @@ def test_rebuild_restores_everything_after_the_collection_is_wiped(
 def test_rebuild_is_idempotent(
     conn, store, embedder, active_version, rebuild
 ) -> None:
-    """跑两次：点数不变（point id 确定性，重放覆盖不重复）。"""
+    """跑两次：点数不变（point id 确定性，重放覆盖不重复）。."""
     first, proc1 = rebuild()
     assert proc1.returncode == 0, proc1.stderr[-1500:]
     second, proc2 = rebuild()
@@ -223,7 +228,7 @@ def test_rebuild_is_idempotent(
 def test_rebuild_only_sees_the_active_version(
     conn, store, embedder, rebuild, qdrant_reachable, collection
 ) -> None:
-    """重建按 `v_active_chunks` 取数：只有双 active 的切片会被重建。
+    """重建按 `v_active_chunks` 取数：只有双 active 的切片会被重建。.
 
     旧版（deprecated）的切片不在取数范围里——它们的点留在库里（回收窗口内不可检索）
     ，
@@ -261,7 +266,7 @@ def test_rebuild_only_sees_the_active_version(
 def test_rebuild_all_status_includes_pending(
     conn, store, embedder, rebuild, qdrant_reachable, collection
 ) -> None:
-    """`--all-status` 能重建待转正的点（给"先索引再翻牌"的流程用）。"""
+    """`--all-status` 能重建待转正的点（给"先索引再翻牌"的流程用）。."""
     version_id = seed_document(conn, key="allstatus", version_tag="v1")
     conn.commit()
     from scripts import qdrant_common as qc
@@ -276,7 +281,7 @@ def test_rebuild_all_status_includes_pending(
 
 
 def _plain_dsn() -> str:
-    """脚本吃纯 psycopg DSN（`postgresql://`），不吃 SQLAlchemy 前缀。"""
+    """脚本吃纯 psycopg DSN（`postgresql://`），不吃 SQLAlchemy 前缀。."""
     raw = (
         os.getenv("AI_RAG_TEST_DATABASE_URL") or os.getenv("DATABASE_URL") or ""
     )

@@ -1,4 +1,4 @@
-"""B4 集成验收：真 PG + Qdrant + TEI 的检索，加可注入的生成替身。
+"""B4 集成验收：真 PG + Qdrant + TEI 的检索，加可注入的生成替身。.
 
 **这一组能证明什么、不能证明什么**（读之前先看这段）：
 
@@ -39,16 +39,19 @@ pytestmark = pytest.mark.integration
 
 
 def _events(names):  # 小工具：只留事件名，断言读起来短
+    """Run _events."""
     return [event.name for event in names]
 
 
 def _delta_text(events) -> str:
+    """Run _delta_text."""
     return "".join(
         event.payload["delta"] for event in events if event.name == "token"
     )
 
 
 def _fallback(events):
+    """Run _fallback."""
     return next((event for event in events if event.name == "fallback"), None)
 
 
@@ -58,7 +61,7 @@ def _fallback(events):
 def test_pass_path_citations_come_from_the_real_chunk_rows(
     conn, store, embedder, retriever, reranker, b3_pg, settings
 ) -> None:
-    """验收原句：citations 含 doc/page/bbox/snippet/chunk_id。
+    """验收原句：citations 含 doc/page/bbox/snippet/chunk_id。.
 
     造一条真切片（页码 47、真 bbox），让它过门控与校验，断言 citations 里的
     五个字段与 `chunks` 表里的行**逐字一致**——不是与测试里写的字面量一致。
@@ -136,7 +139,7 @@ def test_pass_path_citations_come_from_the_real_chunk_rows(
 def test_pass_path_audit_row_passes_the_real_table_constraints(
     conn, store, embedder, retriever, reranker, b3_pg, settings
 ) -> None:
-    """审计行必须能插进真 `qa_log`：DB 的 CHECK 是最后一道口径闸。"""
+    """审计行必须能插进真 `qa_log`：DB 的 CHECK 是最后一道口径闸。."""
     from api.audit import AuditWriter
 
     name = unique("audit")
@@ -199,7 +202,7 @@ def test_pass_path_audit_row_passes_the_real_table_constraints(
 def test_irrelevant_question_rejects_without_calling_the_model(
     conn, store, embedder, retriever, reranker, b3_pg, settings
 ) -> None:
-    """验收原句："无证据不输出结论性幻觉"——最直接的做法是根本不调模型。"""
+    """验收原句："无证据不输出结论性幻觉"——最直接的做法是根本不调模型。."""
     name = unique("reject")
     publish(
         conn,
@@ -248,7 +251,7 @@ def test_irrelevant_question_rejects_without_calling_the_model(
 def test_rejected_audit_row_also_satisfies_the_table_constraints(
     conn, store, embedder, retriever, reranker, b3_pg, settings
 ) -> None:
-    """拒答的审计行必须带 `reject_reason`（§11.3 的配对口径，DB 只拦单列）。"""
+    """拒答的审计行必须带 `reject_reason`（§11.3 的配对口径，DB 只拦单列）。."""
     from api.audit import AuditWriter
 
     name = unique("audit_reject")
@@ -293,7 +296,7 @@ def test_rejected_audit_row_also_satisfies_the_table_constraints(
 def test_hallucinated_number_degrades_to_original_text(
     conn, store, embedder, retriever, reranker, b3_pg, settings
 ) -> None:
-    """验收原句："不可验证不输出结论性幻觉"。
+    """验收原句："不可验证不输出结论性幻觉"。.
 
     真库里只有 500 元，模型说 400 元：第三道必须拦住，出口是"只给原文"，
     而且原文必须是**库里的那一行**（页码与片段都对得上）。
@@ -356,7 +359,7 @@ def test_hallucinated_number_degrades_to_original_text(
 def test_no_llm_configured_is_the_system_tier(
     conn, store, embedder, retriever, reranker, b3_pg, settings
 ) -> None:
-    """本机真实状态：没有配置 LLM 网关。有证据、过了门控，但生成不可用。"""
+    """本机真实状态：没有配置 LLM 网关。有证据、过了门控，但生成不可用。."""
     name = unique("nollm")
     publish(
         conn,
@@ -401,6 +404,7 @@ def test_no_llm_configured_is_the_system_tier(
 def test_every_frame_is_valid_sse_and_done_is_last(
     conn, store, embedder, retriever, reranker, b3_pg, settings
 ) -> None:
+    """Run test_every_frame_is_valid_sse_and_done_is_last."""
     name = unique("frames")
     publish(
         conn,
@@ -456,7 +460,7 @@ def test_every_frame_is_valid_sse_and_done_is_last(
 def test_clarify_event_shape_when_the_gate_asks_for_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """澄清由门控触发，编排层只负责把它翻译成事件。
+    """澄清由门控触发，编排层只负责把它翻译成事件。.
 
     真数据上造"两份文档分数差 < 0.05"需要两份几乎同文的制度，成本远大于收益
     （B3 的 `test_retrieval_logic` 已穷举过那半段）。这里验的是另一半：
@@ -496,12 +500,15 @@ def test_clarify_event_shape_when_the_gate_asks_for_it(
     )
 
     class _Pipeline:
+        """_Pipeline."""
         pg = b3_pg_stub = object()
 
         def close(self) -> None:
-            return None
+            """Run close."""
+            return
 
         def run(self, *args, **kwargs):
+            """Run run."""
             return snapshot
 
     service = QaService(

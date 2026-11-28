@@ -1,4 +1,4 @@
-"""双向量入库：一个 point 同时带 dense 与 bm25（详细设计.md §3.6 / §7.1）。
+"""双向量入库：一个 point 同时带 dense 与 bm25（详细设计.md §3.6 / §7.1）。.
 
 本卡验收"点同时含 dense+bm25"在这里逐项断言。四类断言，缺一不可：
 
@@ -30,7 +30,7 @@ pytestmark = pytest.mark.integration
 
 
 def test_point_carries_dense_and_bm25_together(conn, store, embedder) -> None:
-    """核心断言：一个 point 里两个向量都在（本卡的验收原句）。"""
+    """核心断言：一个 point 里两个向量都在（本卡的验收原句）。."""
     from scripts.qdrant_common import DENSE_VECTOR, SPARSE_VECTOR
 
     version_id = seed_document(conn, key="dual", version_tag="v1")
@@ -74,7 +74,7 @@ def test_point_carries_dense_and_bm25_together(conn, store, embedder) -> None:
 
 
 def test_payload_has_every_filter_field(conn, store, embedder) -> None:
-    """Payload 必须带齐过滤字段。少一个，检索侧就是"静默不匹配"。"""
+    """Payload 必须带齐过滤字段。少一个，检索侧就是"静默不匹配"。."""
     version_id = seed_document(
         conn,
         key="payload",
@@ -136,7 +136,7 @@ def test_payload_has_every_filter_field(conn, store, embedder) -> None:
 
 
 def test_child_chunk_writes_parent_id(conn, store, embedder) -> None:
-    """子片必须带 parent_id（§3.5 父子两级：检索命中子片，作答用父片）。"""
+    """子片必须带 parent_id（§3.5 父子两级：检索命中子片，作答用父片）。."""
     version_id = seed_document(
         conn,
         key="parent",
@@ -174,7 +174,7 @@ def test_child_chunk_writes_parent_id(conn, store, embedder) -> None:
 
 
 def test_chinese_text_is_segmented_before_bm25(conn, store, embedder) -> None:
-    """整句中文必须被切成多个 token。
+    """整句中文必须被切成多个 token。.
 
     实测过这条：原文直接入库时整句只产出 1 个 token（服务端按空白/标点切词），
     于是 `{"text": "住宿费"}` 这种查询一条也召回不到。这条用例盯的就是那个回归。
@@ -215,7 +215,7 @@ def test_chinese_text_is_segmented_before_bm25(conn, store, embedder) -> None:
 
 
 def test_both_vectors_recall_the_text(conn, store, embedder) -> None:
-    """Dense 与 bm25 各自独立都能召回同一条切片。
+    """Dense 与 bm25 各自独立都能召回同一条切片。.
 
     只断言“字段存在”不够：把 bm25 的 text 传空、或把 dense 写成全零，
     结构断言照样过。
@@ -287,7 +287,7 @@ def test_both_vectors_recall_the_text(conn, store, embedder) -> None:
 
 
 def test_dense_is_backfilled_into_pg(conn, store, embedder) -> None:
-    """PG 的 embedding_dense 要回填：它让"点丢了"可以只靠库内数据修复。"""
+    """PG 的 embedding_dense 要回填：它让"点丢了"可以只靠库内数据修复。."""
     version_id = seed_document(conn, key="backfill", version_tag="v1")
     conn.commit()
     index_version(conn, store, embedder, version_id)
@@ -303,7 +303,7 @@ def test_dense_is_backfilled_into_pg(conn, store, embedder) -> None:
 
 
 def test_reindexing_is_idempotent(conn, store, embedder) -> None:
-    """重放同一版本不产生重复点（point id = uuid5(chunk_id)）。"""
+    """重放同一版本不产生重复点（point id = uuid5(chunk_id)）。."""
     version_id = seed_document(conn, key="idem", version_tag="v1")
     conn.commit()
     first = index_version(conn, store, embedder, version_id)
@@ -333,7 +333,7 @@ def test_reindexing_is_idempotent(conn, store, embedder) -> None:
 def test_unsearchable_text_is_skipped_not_fatal(
     conn, store, embedder, label, text
 ) -> None:
-    """没有可检索字符的切片跳过并计数，不让整批失败。
+    """没有可检索字符的切片跳过并计数，不让整批失败。.
 
     DB 的 `ck_chunks_text_nonempty` 只拦 `btrim` 之后为空——零宽字符能过，而它们
     在 BM25 里是 0 个 token。空稀疏向量 Qdrant 会收（实测 200），但那条切片永远
@@ -372,7 +372,7 @@ def test_unsearchable_text_is_skipped_not_fatal(
 def test_embedding_dim_mismatch_is_rejected_before_writing(
     conn, store, embedder
 ) -> None:
-    """维度与配置不一致必须在写前炸掉，不能把坏向量写进库。"""
+    """维度与配置不一致必须在写前炸掉，不能把坏向量写进库。."""
     from api.ingest.vectors import Embedder as EmbedderCls
 
     version_id = seed_document(conn, key="dimmismatch", version_tag="v1")

@@ -1,4 +1,4 @@
-"""日志与请求上下文：JSON 可解析、request_id 能串起来、不重复挂 handler。"""
+"""日志与请求上下文：JSON 可解析、request_id 能串起来、不重复挂 handler。."""
 
 from __future__ import annotations
 
@@ -20,20 +20,25 @@ from api.tests.conftest import make_settings
 
 
 class _Pg:
+    """_Pg."""
     def open(self) -> None: ...
     def close(self) -> None: ...
     def ping(self, *, timeout_s: float | None = None) -> Probe:
+        """Run ping."""
         return Probe(ok=True, latency_ms=1.0)
 
 
 class _Qdrant:
+    """_Qdrant."""
     async def start(self) -> None: ...
     async def stop(self) -> None: ...
     async def ping(self, *, timeout_s: float | None = None) -> Probe:
+        """Run ping."""
         return Probe(ok=True, latency_ms=1.0)
 
 
 def _record(event: str, **fields: object) -> logging.LogRecord:
+    """Run _record."""
     record = logging.LogRecord(
         "api.test", logging.INFO, __file__, 1, event, None, None
     )
@@ -42,6 +47,7 @@ def _record(event: str, **fields: object) -> logging.LogRecord:
 
 
 def test_formatter_outputs_one_json_line_with_request_id() -> None:
+    """Run test_formatter_outputs_one_json_line_with_request_id."""
     token = request_id_var.set("rid-123")
     try:
         line = JsonFormatter(service="ai-rag-api", env="test").format(
@@ -58,6 +64,7 @@ def test_formatter_outputs_one_json_line_with_request_id() -> None:
 
 
 def test_formatter_keeps_traceback() -> None:
+    """Run test_formatter_keeps_traceback."""
     try:
         raise ValueError("boom-detail")
     except ValueError:
@@ -71,6 +78,7 @@ def test_formatter_keeps_traceback() -> None:
 
 
 def test_configure_logging_is_idempotent() -> None:
+    """Run test_configure_logging_is_idempotent."""
     configure_logging(level="INFO", service="ai-rag-api", env="test")
     configure_logging(level="DEBUG", service="ai-rag-api", env="test")
     handlers = [
@@ -82,6 +90,7 @@ def test_configure_logging_is_idempotent() -> None:
 
 
 def test_request_id_from_headers() -> None:
+    """Run test_request_id_from_headers."""
     assert extract_request_id([(b"x-request-id", b"abc-123")]) == "abc-123"
     assert extract_request_id([(b"x-trace-id", b"trace-9")]) == "trace-9"
     traceparent = b"00-" + b"a" * 32 + b"-" + b"b" * 16 + b"-01"
@@ -90,6 +99,7 @@ def test_request_id_from_headers() -> None:
 
 
 def test_request_id_is_echoed_and_generated_when_missing() -> None:
+    """Run test_request_id_is_echoed_and_generated_when_missing."""
     app = create_app(make_settings(), pg=_Pg(), qdrant=_Qdrant())
     with TestClient(app) as client:
         echoed = client.get(
@@ -101,6 +111,7 @@ def test_request_id_is_echoed_and_generated_when_missing() -> None:
 
 
 def test_log_event_survives_missing_fields() -> None:
+    """Run test_log_event_survives_missing_fields."""
     logger = logging.getLogger("api.test.events")
     log_event(logger, "no_fields")
     log_event(logger, "with_fields", answer_id=1)

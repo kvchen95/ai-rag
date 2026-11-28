@@ -28,6 +28,11 @@ import json
 import sys
 from pathlib import Path
 
+if __package__:
+    from .resources.f2_demo_seed_msgs import MESSAGES as M
+else:  # run as a script: python3 scripts/f2_demo_seed.py
+    from resources.f2_demo_seed_msgs import MESSAGES as M
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -39,15 +44,17 @@ ACL_ROLES = ("staff",)
 
 
 def log(message: str) -> None:
+    """Run log."""
     print(message, flush=True)
 
 
 def main() -> int:
+    """Run main."""
     parser = argparse.ArgumentParser(description="seed F2 demo corpus")
     parser.add_argument("--samples", default="samples", help="samples root")
     parser.add_argument("--figures", default="figures", help="figures dir")
     parser.add_argument(
-        "--skip-figure", action="store_true", help="不造图表切片夹具"
+        "--skip-figure", action="store_true", help=M["HELP_01"]
     )
     args = parser.parse_args()
 
@@ -118,7 +125,7 @@ def main() -> int:
     for doc_key in DOC_KEYS:
         path = samples_root / f"{doc_key}.pdf"
         if not path.is_file():
-            log(f"FAIL 样本不存在：{path}")
+            log(f"{M['LOG_01']}{path}")
             return 1
         version_id = version_id_for(doc_key, file_hash(path))
         log(f"\n[docs] {doc_key}  version={version_id}  file={path}")
@@ -128,7 +135,7 @@ def main() -> int:
         )
         incomplete = [c.chunk_id for c in outcome.chunks if c.missing_fields()]
         if incomplete:
-            log(f"FAIL 有切片缺六项随行信息：{incomplete[:3]}")
+            log(f"{M['LOG_02']}{incomplete[:3]}")
             return 1
         log(f"[parse] {len(outcome.chunks)} chunk(s)  {outcome.counts()}")
 
@@ -172,7 +179,7 @@ def main() -> int:
             report = promote(pg.pool, store, embedder, version_id)
         except NotPending:
             # 幂等：上一次已经翻过牌了。重新索引一次并把向量库状态对齐即可。
-            log("[promote] 版本已 active（上一次跑过），改为重新索引")
+            log(M["LOG_03"])
             from api.ingest.vectors import index_version
 
             with pg.connection() as conn:
@@ -195,7 +202,7 @@ def main() -> int:
         )
         if not report.ok:
             log(
-                "FAIL promote 失败："
+                f"{M['LOG_04']}"
                 f"{json.dumps(report.as_dict(), ensure_ascii=False)[:800]}"
             )
             return 1
@@ -259,7 +266,7 @@ def _seed_figure_fixture(
         )
         row = cursor.fetchone()
     if not row:
-        log("FAIL 找不到可裁的正文切片")
+        log(M["LOG_05"])
         return 1
     page_num = int(row[0])
     bbox = row[1][0]
@@ -335,8 +342,7 @@ def _seed_figure_fixture(
                 page_num,
                 json.dumps([bbox]),
                 image_path,
-                "【F2 演示夹具】住宿标准段落的版面裁图"
-                "（非 VLM 转译，仅用于验证切片图展示）。",
+                M["EXECUTE_01"],
                 ["f2_demo_fixture"],
                 list(ACL_DEPTS),
                 list(ACL_ROLES),
@@ -353,7 +359,7 @@ def _seed_figure_fixture(
     store.set_status_by_version(version_id, "active")
     log(f"[index/figure] ok={report.ok} {report.as_dict()}")
     if not report.ok:
-        log("FAIL 图表切片索引失败")
+        log(M["LOG_06"])
         return 1
     return 0
 

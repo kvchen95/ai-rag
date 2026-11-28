@@ -1,4 +1,4 @@
-"""ingest_jobs 状态机与重试计数（纯逻辑，不需要数据库）。
+"""ingest_jobs 状态机与重试计数（纯逻辑，不需要数据库）。.
 
 状态机是这张卡唯一"有副作用且不可逆"的东西：一条任务被误判成 succeeded 之后，
 没有任何东西会去重跑它，切片就永远缺一份。所以这里做三件事：
@@ -37,6 +37,7 @@ EXPECTED_EDGES = {
 
 
 def test_allowed_edges_are_exactly_these() -> None:
+    """Run test_allowed_edges_are_exactly_these."""
     actual = {
         (src.value, dst.value)
         for src, targets in ALLOWED.items()
@@ -47,11 +48,12 @@ def test_allowed_edges_are_exactly_these() -> None:
 
 @pytest.mark.parametrize(("src", "dst"), sorted(EXPECTED_EDGES))
 def test_allowed_edges_pass(src: str, dst: str) -> None:
+    """Run test_allowed_edges_pass."""
     assert can_transition(src, dst)
 
 
 def test_every_other_edge_is_rejected() -> None:
-    """(5x5=25) - 5 条允许 = 20 条必须被拒。
+    """(5x5=25) - 5 条允许 = 20 条必须被拒。.
 
     逐对断言而不是抽查：这个循环红了就说明有人加了一条没想清楚的边
     （最典型的是 failed -> queued，它会让"重试次数"变成一个可以无限重来的数）。
@@ -67,12 +69,13 @@ def test_every_other_edge_is_rejected() -> None:
 
 @pytest.mark.parametrize("status", sorted(s.value for s in TERMINAL))
 def test_terminal_states_are_dead_ends(status: str) -> None:
+    """Run test_terminal_states_are_dead_ends."""
     for dst in ALL_STATUSES:
         assert not can_transition(status, dst.value), f"{status} -> {dst}"
 
 
 def test_failed_is_terminal_not_retryable() -> None:
-    """重试是 running -> queued，不是 failed -> queued。
+    """重试是 running -> queued，不是 failed -> queued。.
 
     若允许 failed -> queued，一条一直失败的任务会在每轮扫描时重新入队，
     日志被同一个问题刷满，而"重试了几次"这个数永远不涨。
@@ -82,7 +85,7 @@ def test_failed_is_terminal_not_retryable() -> None:
 
 
 def test_retry_budget_counts_retries_not_attempts() -> None:
-    """`max_retries=3` = 1 次尝试 + 3 次重试 = 最多 4 次执行。"""
+    """`max_retries=3` = 1 次尝试 + 3 次重试 = 最多 4 次执行。."""
     assert retry_budget_left("queued", 0, max_retries=3) == 3
     assert retry_budget_left("running", 2, max_retries=3) == 1
     assert retry_budget_left("queued", 3, max_retries=3) == 0
@@ -93,10 +96,12 @@ def test_retry_budget_counts_retries_not_attempts() -> None:
 
 @pytest.mark.parametrize("status", sorted(s.value for s in TERMINAL))
 def test_terminal_states_never_report_retry_budget(status: str) -> None:
+    """Run test_terminal_states_never_report_retry_budget."""
     assert retry_budget_left(status, 0, max_retries=3) == 0
 
 
 def test_failed_must_carry_a_real_error_message() -> None:
+    """Run test_failed_must_carry_a_real_error_message."""
     for bad in ("", "   ", "\n"):
         with pytest.raises(ValueError):
             _assert_error(bad)
@@ -104,7 +109,7 @@ def test_failed_must_carry_a_real_error_message() -> None:
 
 
 def test_illegal_transition_message_is_actionable() -> None:
-    """日志里要能直接看出"哪条任务、从哪到哪"——否则并发问题无从追。"""
+    """日志里要能直接看出"哪条任务、从哪到哪"——否则并发问题无从追。."""
     exc = IllegalTransition(42, "failed", "queued")
     assert "42" in str(exc) and "failed" in str(exc) and "queued" in str(exc)
     assert (exc.job_id, exc.src, exc.dst) == (42, "failed", "queued")

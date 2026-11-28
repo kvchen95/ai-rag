@@ -33,10 +33,12 @@ import qdrant_common as qc
 
 
 def env_url(name: str, default: str) -> str:
+    """Run env_url."""
     return os.getenv(name, default)
 
 
 def main() -> int:
+    """Run main."""
     ap = argparse.ArgumentParser(
         description="create/verify the kb_chunks collection"
     )

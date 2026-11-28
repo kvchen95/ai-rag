@@ -11,6 +11,7 @@ from api.docparse.chunker import chunk_blocks
 from api.docparse.docling_tables import enhance_tables
 from api.docparse.repair import repair_blocks
 from api.docparse.single import run_single as run_mineru
+from api.resources import messages as msg
 
 TableRunner = Callable[[str], list[dict[str, Any]]]
 
@@ -40,7 +41,7 @@ def _enrich(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     headings: list[tuple[int, str]] = []
     for block in blocks:
         level = block.get("heading_level")
-        text = str(block.get("text") or "").strip()
+        text = str(block.get("text") if block.get("text") else "").strip()
         if level is not None and text:
             headings = [item for item in headings if item[0] < level] + [
                 (level, text)
@@ -48,7 +49,10 @@ def _enrich(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
         enriched.append(
             {
                 **block,
-                "page_num": int(block.get("page_idx") or 0) + 1,
+                "page_num": int(
+                    block.get("page_idx") if block.get("page_idx") else 0
+                )
+                + 1,
                 "heading_path": " > ".join(item[1] for item in headings),
             }
         )
@@ -74,7 +78,9 @@ def run_full_single(
         target = Path(from_raw_dir)
         if not (target / "01_mineru_raw.json").exists():
             raise FileNotFoundError(
-                f"找不到 MinerU 原始 JSON：{target / '01_mineru_raw.json'}"
+                msg.MINERU_RAW_MISSING.format(
+                    path=target / "01_mineru_raw.json"
+                )
             )
         raw = _load_json(target / "01_mineru_raw.json")
         manifest = (
@@ -82,7 +88,9 @@ def run_full_single(
             if (target / "manifest.json").exists()
             else {}
         )
-        doc_key = str(manifest.get("doc_key") or "")
+        doc_key = str(
+            manifest.get("doc_key") if manifest.get("doc_key") else ""
+        )
         if not doc_key:
             try:
                 doc_key = target.parent.relative_to(
@@ -104,7 +112,9 @@ def run_full_single(
                 else None
             )
         )
-        page_count = int(manifest.get("page_count") or 0)
+        page_count = int(
+            manifest.get("page_count") if manifest.get("page_count") else 0
+        )
         summary = {
             "file": str(source) if source else str(target),
             "doc_key": doc_key,
@@ -135,7 +145,10 @@ def run_full_single(
     repaired = repair_blocks(raw)
     if page_count <= 0:
         page_count = max(
-            (int(block.get("page_idx") or 0) + 1 for block in repaired),
+            (
+                int((block.get("page_idx") if block.get("page_idx") else 0)) + 1
+                for block in repaired
+            ),
             default=0,
         )
     _write_json(target / "02_repaired.json", repaired)

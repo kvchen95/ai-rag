@@ -3,12 +3,17 @@
 import json
 from pathlib import Path
 
+if __package__:
+    from .resources.r2b_details_msgs import MESSAGES as M
+else:  # run as a script: python3 eval/r2b_details.py
+    from resources.r2b_details_msgs import MESSAGES as M
+
 d = json.loads(
     (Path(__file__).resolve().parent / "r2b_analysis.json").read_text(
         encoding="utf-8"
     )
 )
-print("=== 零候选（after_dedup=0）题目 ===")
+print(M['MODULE_01'])
 for r in d["records"]:
     if r["candidates_after_dedup"] == 0:
         print(
@@ -25,7 +30,7 @@ for r in d["records"]:
             "lat=",
             r["rerank_elapsed_ms"],
         )
-print("=== 分组描述 ===")
+print(M['MODULE_02'])
 for name, g in d["groups"].items():
     print(name, "n=", g["n"])
     for metric in (
@@ -37,7 +42,7 @@ for name, g in d["groups"].items():
     ):
         print("  ", metric, json.dumps(g[metric], ensure_ascii=False))
     print("   degrade", g["degrade_reasons"], "scored", g["scored_counts"])
-print("=== 有候选但 rerank 超时的应答题 top1 明细 ===")
+print(M['MODULE_03'])
 for r in d["records"]:
     if (
         r["expected"] in ("pass", "partial")

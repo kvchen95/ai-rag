@@ -39,6 +39,11 @@ import os
 import sys
 from pathlib import Path
 
+if __package__:
+    from .resources.a3_ingest_msgs import MESSAGES as M
+else:  # run as a script: python3 scripts/a3_ingest.py
+    from resources.a3_ingest_msgs import MESSAGES as M
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -66,6 +71,7 @@ EXIT_USAGE = 2
 
 
 def normalise_dsn(dsn: str) -> str:
+    """Run normalise_dsn."""
     for prefix in (
         "postgresql+psycopg://",
         "postgresql+psycopg2://",
@@ -77,6 +83,7 @@ def normalise_dsn(dsn: str) -> str:
 
 
 def resolve_dsn(arg: str | None) -> str:
+    """Run resolve_dsn."""
     if arg:
         return normalise_dsn(arg)
     env = os.getenv("DATABASE_URL") or os.getenv("PG_DSN")
@@ -92,6 +99,7 @@ def resolve_dsn(arg: str | None) -> str:
 
 
 def build_embedder(args: argparse.Namespace) -> Embedder:
+    """Run build_embedder."""
     return Embedder(
         base_url=args.embedding_url
         or os.getenv("EMBEDDING_BASE_URL", "http://127.0.0.1:7997/v1"),
@@ -104,6 +112,7 @@ def build_embedder(args: argparse.Namespace) -> Embedder:
 
 
 def build_store(args: argparse.Namespace) -> QdrantVectorStore:
+    """Run build_store."""
     return QdrantVectorStore(
         base_url=args.qdrant_url
         or os.getenv("QDRANT_URL", "http://127.0.0.1:6333"),
@@ -114,6 +123,7 @@ def build_store(args: argparse.Namespace) -> QdrantVectorStore:
 
 
 def build_pool(dsn: str, *, size: int = 4) -> ConnectionPool:
+    """Run build_pool."""
     return ConnectionPool(conninfo=dsn, min_size=1, max_size=size, open=True)
 
 
@@ -121,6 +131,7 @@ def build_pool(dsn: str, *, size: int = 4) -> ConnectionPool:
 
 
 def emit(payload: dict, *, args: argparse.Namespace, human: str) -> None:
+    """Run emit."""
     if args.json:
         print(json.dumps(payload, ensure_ascii=False, default=str))
     else:
@@ -135,6 +146,7 @@ def emit(payload: dict, *, args: argparse.Namespace, human: str) -> None:
 
 
 def cmd_index(args: argparse.Namespace) -> int:
+    """Run cmd_index."""
     dsn = resolve_dsn(args.dsn)
     pool = build_pool(dsn)
     embedder = build_embedder(args)
@@ -168,6 +180,7 @@ def cmd_index(args: argparse.Namespace) -> int:
 
 
 def cmd_promote(args: argparse.Namespace) -> int:
+    """Run cmd_promote."""
     dsn = resolve_dsn(args.dsn)
     pool = build_pool(dsn)
     embedder = build_embedder(args)
@@ -202,6 +215,7 @@ def cmd_promote(args: argparse.Namespace) -> int:
 
 
 def _promote_summary(payload: dict) -> str:
+    """Run _promote_summary."""
     index = payload.get("index") or {}
     flip_payload = payload.get("flip") or {}
     drain_payload = payload.get("drain") or {}
@@ -226,6 +240,7 @@ def _promote_summary(payload: dict) -> str:
 
 
 def cmd_flip(args: argparse.Namespace) -> int:
+    """Run cmd_flip."""
     dsn = resolve_dsn(args.dsn)
     pool = build_pool(dsn)
     store = build_store(args)
@@ -275,6 +290,7 @@ def cmd_flip(args: argparse.Namespace) -> int:
 
 
 def cmd_rollback(args: argparse.Namespace) -> int:
+    """Run cmd_rollback."""
     dsn = resolve_dsn(args.dsn)
     pool = build_pool(dsn)
     store = build_store(args)
@@ -319,6 +335,7 @@ def cmd_rollback(args: argparse.Namespace) -> int:
 
 
 def cmd_sync(args: argparse.Namespace) -> int:
+    """Run cmd_sync."""
     dsn = resolve_dsn(args.dsn)
     pool = build_pool(dsn)
     store = build_store(args)
@@ -345,6 +362,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
 
 
 def cmd_reconcile(args: argparse.Namespace) -> int:
+    """Run cmd_reconcile."""
     dsn = resolve_dsn(args.dsn)
     pool = build_pool(dsn)
     store = build_store(args)
@@ -380,6 +398,7 @@ def cmd_reconcile(args: argparse.Namespace) -> int:
 
 
 def cmd_reclaim(args: argparse.Namespace) -> int:
+    """Run cmd_reclaim."""
     dsn = resolve_dsn(args.dsn)
     pool = build_pool(dsn)
     store = build_store(args)
@@ -453,6 +472,7 @@ DRIFT_SQL = (
 
 
 def cmd_status(args: argparse.Namespace) -> int:
+    """Run cmd_status."""
     dsn = resolve_dsn(args.dsn)
     pool = build_pool(dsn)
     store = build_store(args)
@@ -500,6 +520,7 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Run build_parser."""
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument(
         "--dsn", help="postgresql:// DSN (default: $DATABASE_URL)"
@@ -524,7 +545,7 @@ def build_parser() -> argparse.ArgumentParser:
     common.add_argument("--verbose", "-v", action="store_true")
 
     ap = argparse.ArgumentParser(
-        description="A3: 双向量入库 / 翻牌 / 同步 / 对账 / 回收"
+        description=M["DESCRIPTION_01"]
     )
     sub = ap.add_subparsers(dest="command", required=True)
 
@@ -607,6 +628,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run main."""
     args = build_parser().parse_args(argv)
     try:
         return int(args.func(args))

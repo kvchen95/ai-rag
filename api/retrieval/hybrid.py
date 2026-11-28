@@ -39,6 +39,7 @@ import httpx
 
 from api.filters import RetrievalFilter
 from api.observability import get_logger, log_event
+from api.resources import messages as msg
 from api.trace import trace as trace_event
 from scripts.qdrant_common import DENSE_VECTOR, SPARSE_VECTOR, bm25_vector
 
@@ -232,7 +233,7 @@ def dedupe_parent_children(
     把配置错误静默变成"全留"，所以直接抛。
     """
     if keep < 0:
-        raise ValueError(f"parent_child_keep 必须 >= 0，实际 {keep}")
+        raise ValueError(msg.PARENT_CHILD_KEEP_INVALID.format(keep=keep))
     seen: dict[str, int] = {}
     kept: list[Candidate] = []
     dropped: list[Candidate] = []
@@ -270,11 +271,9 @@ def build_batch_body(
     dict）：内容相同的两份仍然可能在未来某次改动里漂移，同一个对象不会。
     """
     if not query_text.strip():
-        raise ValueError(
-            "query_text 不能为空：空的 BM25 查询会退化成'全库等权'"
-        )
+        raise ValueError(msg.QUERY_TEXT_EMPTY)
     if not dense_query:
-        raise ValueError("dense_query 不能为空")
+        raise ValueError(msg.DENSE_QUERY_EMPTY)
 
     filter_json = qdrant_filter_json(flt)
     body = {
@@ -358,11 +357,9 @@ class HybridRetriever:
         稀疏侧在这里现场生成——`bm25_vector()` 是纯字符串操作，没有 IO。
         """
         if not query_text.strip():
-            raise ValueError(
-                "query_text 不能为空：空的 BM25 查询会退化成'全库等权'"
-            )
+            raise ValueError(msg.QUERY_TEXT_EMPTY)
         if not dense_query:
-            raise ValueError("dense_query 不能为空")
+            raise ValueError(msg.DENSE_QUERY_EMPTY)
 
         body, filter_json = build_batch_body(
             query_text, dense_query, flt, top_k=top_k
@@ -378,7 +375,10 @@ class HybridRetriever:
                     f"Qdrant batch query -> HTTP {response.status_code}: "
                     f"{response.text[:400]}"
                 )
-            result = (response.json() or {}).get("result") or []
+            body = response.json() if response.json() else {}
+            result = body.get("result")
+            if result is None:
+                result = []
         except httpx.HTTPError as exc:
             raise HybridRetrievalError(f"Qdrant unreachable: {exc}") from exc
 
@@ -388,15 +388,27 @@ class HybridRetriever:
             )
         for route in result:
             rows: list[tuple[str, float]] = []
-            for point in route.get("points") or []:
-                payload = point.get("payload") or {}
+            points = route.get("points")
+            if points is None:
+                points = []
+            for point in points:
+                payload = point.get("payload")
+                if payload is None:
+                    payload = {}
                 chunk_id = payload.get("chunk_id")
                 if not chunk_id:
                     # payload 缺 chunk_id 的点无法回 PG、无法引用，收进来只会让
                     # 后续步骤拿到一个空编号。跳过并计数（下面日志里能看出来）。
                     continue
                 payloads[chunk_id] = payload
-                rows.append((chunk_id, float(point.get("score") or 0.0)))
+                rows.append(
+                    (
+                        chunk_id,
+                        float(
+                            point.get("score") if point.get("score") else 0.0
+                        ),
+                    )
+                )
             routes.append(rows)
 
         # 本地链路：两路原始名单先落盘，再看融合/去重。排障时“正确切片是否进过

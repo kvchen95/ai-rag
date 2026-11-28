@@ -61,14 +61,14 @@ LEASE_SECONDS = 60
 
 # --------------------------------------------------------------- desired state
 
+# 期望变了就重置重试计数与失败态：上一轮的失败是"上一件事"的失败，
+# 不该让一次新的翻牌继承它、一上来就没额度。
 UPSERT_DESIRED_SQL = """
 INSERT INTO vector_sync_tasks (version_id, doc_key, desired_status, status)
 VALUES (%(version_id)s, %(doc_key)s, %(desired)s, 'pending')
 ON CONFLICT (version_id) DO UPDATE
 SET doc_key      = EXCLUDED.doc_key,
     desired_status = EXCLUDED.desired_status,
-    -- 期望变了就重置重试计数与失败态：上一轮的失败是"上一件事"的失败，
-    -- 不该让一次新的翻牌继承它、一上来就没额度。
     status       = CASE
                      WHEN vector_sync_tasks.desired_status
                           IS DISTINCT FROM EXCLUDED.desired_status

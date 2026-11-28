@@ -36,6 +36,7 @@ from api.filters import RetrievalFilter, build_filter
 from api.identity import IdentitySnapshot
 from api.observability import get_logger, log_event
 from api.query import NeedsClarification, QueryPlan, understand
+from api.resources import messages as msg
 from api.retrieval.gate import (
     GateConfig,
     GateDecision,
@@ -113,7 +114,10 @@ class QueryEmbedder:
             raise EmbeddingUnavailableError(
                 f"embedding -> HTTP {resp.status_code}: {resp.text[:300]}"
             )
-        data = (resp.json() or {}).get("data") or []
+        body = resp.json() if resp.json() else {}
+        data = body.get("data")
+        if data is None:
+            data = []
         if len(data) != 1:
             raise EmbeddingUnavailableError(
                 f"embedding returned {len(data)} vectors for 1 text"
@@ -381,7 +385,7 @@ class RetrievalPipeline:
         if plan.out_of_scope:
             # §6.3 边界表：明显超出库范围的直接拒答、不检索。
             return self._reject_without_retrieval(
-                question, plan, "超出库范围，未检索", started
+                question, plan, msg.OUT_OF_SCOPE_NO_RETRIEVAL, started
             )
 
         effective_range = (
@@ -412,7 +416,7 @@ class RetrievalPipeline:
                 else:
                     # T04：结构化 metadata 无命中时 Fail-Closed，不全库回退。
                     return self._reject_without_retrieval(
-                        question, plan, "文档选择无命中", started
+                        question, plan, msg.DOC_SELECT_MISS, started
                     )
         flt = build_filter(
             identity, time_range=effective_range, doc_keys=effective_doc_keys
@@ -645,7 +649,9 @@ class RetrievalPipeline:
         """
         from api.time_range import normalise_time
 
-        detail = f"指代「{exc.pronoun}」有 {len(exc.candidates)} 个候选，未检索"
+        detail = msg.PRONOUN_CANDIDATES.format(
+            pronoun=exc.pronoun, count=len(exc.candidates)
+        )
         trace_event("retrieval.short_circuit", mode="clarify", reason=detail)
         plan = QueryPlan(
             retrieval_text=question,

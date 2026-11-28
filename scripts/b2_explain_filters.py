@@ -25,6 +25,11 @@ import os
 import sys
 from pathlib import Path
 
+if __package__:
+    from .resources.b2_explain_filters_msgs import MESSAGES as M
+else:  # run as a script: python3 scripts/b2_explain_filters.py
+    from resources.b2_explain_filters_msgs import MESSAGES as M
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
@@ -46,7 +51,7 @@ CASES: dict[str, RetrievalFilter] = {
             user_id="u_both", depts=("fin",), roles=("staff",)
         ),
         time_range=TimeRange(
-            20260301, 20260331, "month", "三月", "assumed_year"
+            20260301, 20260331, "month", M["TIME_RANGE_01"], "assumed_year"
         ),
     ),
     "admin": RetrievalFilter(
@@ -56,6 +61,7 @@ CASES: dict[str, RetrievalFilter] = {
 
 
 def explain(db: PgDatabase, flt: RetrievalFilter, *, ordered: bool) -> dict:
+    """Run explain."""
     where, params = flt.pg_where("c", source=PgSource.CHUNKS)
     order = " ORDER BY chunk_id" if ordered else ""
     sql = (
@@ -67,6 +73,7 @@ def explain(db: PgDatabase, flt: RetrievalFilter, *, ordered: bool) -> dict:
 
 
 def walk(node: dict, depth: int = 0) -> list[str]:
+    """Run walk."""
     bits = [f"{'  ' * depth}{node.get('Node Type')}"]
     if node.get("Index Name"):
         bits.append(f"idx={node['Index Name']}")
@@ -82,6 +89,7 @@ def walk(node: dict, depth: int = 0) -> list[str]:
 
 
 def main() -> int:
+    """Run main."""
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--dsn",
@@ -90,7 +98,7 @@ def main() -> int:
     )
     args = ap.parse_args()
     if not args.dsn:
-        print("ERROR: 需要 --dsn 或 DATABASE_URL", file=sys.stderr)
+        print(M["PRINT_01"], file=sys.stderr)
         return 2
 
     db = PgDatabase(args.dsn, min_size=1, max_size=2, connect_timeout_s=5)
@@ -99,20 +107,20 @@ def main() -> int:
     try:
         total = db.fetch_one("SELECT count(*) AS n FROM chunks")["n"]
         print(
-            f"chunks 总行数: {total}"
-            f"（过滤预算 {FILTER_BUDGET_MS}ms，§7.5 召回 30ms 的一部分）\n"
+            f"{M['PRINT_02']}{total}"
+            f"{M['PRINT_03']}{FILTER_BUDGET_MS}{M['PRINT_04']}"
         )
         if total < 5000:
-            print("警告：行数太少，计划器一律 Seq Scan，结论仅供参考\n")
+            print(M["PRINT_05"])
 
         for name, flt in CASES.items():
             for ordered in (True, False):
                 doc = explain(db, flt, ordered=ordered)
                 ms = float(doc["Execution Time"])
-                label = f"{name}{' (带 ORDER BY)' if ordered else ' (纯过滤)'}"
+                label = f"{name}{M['LABEL_01'] if ordered else M['LABEL_02']}"
                 print(f"=== {label} ===")
                 print("\n".join(walk(doc["Plan"])))
-                print(f"  执行时间: {ms:.2f}ms\n")
+                print(f"{M['PRINT_06']}{ms:.2f}ms\n")
                 if ms > FILTER_BUDGET_MS:
                     problems.append(
                         f"{label}: {ms:.2f}ms > {FILTER_BUDGET_MS}ms"
@@ -121,7 +129,7 @@ def main() -> int:
         db.close()
 
     if problems:
-        print("超出预算:\n  " + "\n  ".join(problems))
+        print(M["PRINT_07"] + "\n  ".join(problems))
         return 1
     print(f"ALL FILTER PLANS WITHIN {FILTER_BUDGET_MS}ms")
     return 0

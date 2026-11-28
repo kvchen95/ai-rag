@@ -21,6 +21,7 @@ from typing import Any, Protocol
 
 from api.docparse.mineru_client import MineruError
 from api.observability import get_logger, log_event
+from api.resources import messages as msg
 
 logger = get_logger("api.docparse.single")
 
@@ -41,7 +42,7 @@ def _fingerprint() -> ModuleType:
             "_ai_rag_fingerprint", path
         )
         if spec is None or spec.loader is None:  # pragma: no cover
-            raise RuntimeError(f"无法加载 {path}")
+            raise RuntimeError(msg.SINGLE_LOAD_FAILED.format(path=path))
         module = importlib.util.module_from_spec(spec)
         # dataclass 在 exec 时会按 __module__ 回查 sys.modules，必须先登记。
         sys.modules[spec.name] = module
@@ -72,8 +73,7 @@ def _stdlib_page_count(path: Path) -> int:
         count = max(counts) if counts else 0
     if count == 0:
         raise RuntimeError(
-            f"无法从 {path} 读出页数；请安装 pypdfium2 后重试"
-            "（dry-run 不能瞎猜页数）"
+            msg.SINGLE_PAGE_COUNT_FAILED.format(path=path)
         )
     return count
 
@@ -137,7 +137,7 @@ def _default_client() -> MineruLike:
     env = {**dotenv_values(), **os.environ}
     token = env.get("MINERU_API_KEY", "").strip()
     if not token:
-        raise GateError("MINERU_API_KEY 未设置：不提交任何付费任务")
+        raise GateError(msg.MINERU_KEY_UNSET)
     from api.docparse.mineru_client import MineruClient
 
     return MineruClient(
@@ -157,7 +157,7 @@ def _extract_content_list(zip_bytes: bytes) -> Any:
             if name.endswith("content_list.json") or name == "content_list.json"
         ]
         if not names:
-            raise RuntimeError("MinerU ZIP 里没有 content_list.json")
+            raise RuntimeError(msg.ZIP_NO_CONTENT_LIST)
         return json.loads(archive.read(names[0]).decode("utf-8"))
 
 
@@ -174,7 +174,9 @@ def _download_with_retry(
             if attempt < attempts:
                 time.sleep(min(2**attempt, 8))
     assert last is not None
-    raise MineruError(f"下载失败（已重试 {attempts} 次）：{last}")
+    raise MineruError(
+        msg.SINGLE_DOWNLOAD_FAILED.format(attempts=attempts, error=last)
+    )
 
 
 def _write_manifest(target: Path, manifest: dict[str, Any]) -> None:
@@ -195,16 +197,16 @@ def _resume_single(
 ) -> dict[str, Any]:
     """Run _resume_single."""
     if not target.is_dir():
-        raise FileNotFoundError(f"输出目录不存在：{target}")
+        raise FileNotFoundError(
+            msg.SINGLE_OUTPUT_MISSING.format(target=target)
+        )
     task_path = target / "mineru_task.json"
     task: dict[str, Any] = {}
     if task_path.exists():
         task = json.loads(task_path.read_text(encoding="utf-8"))
     batch_id = resume_batch_id or task.get("batch_id")
     if not batch_id:
-        raise GateError(
-            "恢复下载需要 batch_id（--batch-id 或目录内 mineru_task.json）"
-        )
+        raise GateError(msg.SINGLE_RESUME_NEEDS_BATCH)
     paid = client or _default_client()
     paid.poll_interval_s = poll_interval_s
     paid.poll_timeout_s = poll_timeout_s
@@ -292,7 +294,9 @@ def run_single(
 
     source = Path(path)
     if not source.exists():
-        raise FileNotFoundError(f"文件不存在：{source}")
+        raise FileNotFoundError(
+            msg.SINGLE_FILE_MISSING.format(source=source)
+        )
 
     page_count = local_page_count(source)
     sha256 = _fingerprint().file_hash(source)
@@ -318,10 +322,7 @@ def run_single(
                 {
                     **summary,
                     "kind": "dry_run",
-                    "note": (
-                        "预检：未调用 MinerU，未产生解析结果；"
-                        "去掉 DRY_RUN=1 才会提交付费任务"
-                    ),
+                    "note": msg.SINGLE_DRY_RUN_NOTE,
                     "planned_files": [
                         "01_mineru_raw.zip",
                         "01_mineru_raw.json",
@@ -341,10 +342,12 @@ def run_single(
 
     # 付费闸门：先看页数上限，再构造客户端/发请求。
     if max_pages is None:
-        raise GateError("必须显式给 --max-pages，才允许提交付费解析任务")
+        raise GateError(msg.SINGLE_MAX_PAGES_REQUIRED)
     if page_count > max_pages:
         raise GateError(
-            f"页数 {page_count} 超过 --max-pages {max_pages}，未提交任务"
+            msg.SINGLE_PAGE_LIMIT.format(
+                pages=page_count, max_pages=max_pages
+            )
         )
 
     paid = client or _default_client()

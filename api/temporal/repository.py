@@ -53,7 +53,7 @@ def _row_to_fact(row: dict[str, Any]) -> TemporalFact:
         subject=str(row["subject"]),
         metric=str(row["metric"]),
         value=Decimal(str(row["value"])),
-        unit=str(row.get("unit") or ""),
+        unit=str(row.get("unit") if row.get("unit") else ""),
         period_start=str(row["period_start"]),
         period_end=str(row["period_end"]),
         period_granularity=str(row.get("period_granularity") or "range"),
@@ -61,7 +61,9 @@ def _row_to_fact(row: dict[str, Any]) -> TemporalFact:
         doc_key=str(row["doc_key"]),
         role=str(row.get("role") or "reported"),
         confidence=str(row.get("confidence") or "explicit"),
-        provenance=dict(row.get("provenance") or {}),
+        provenance=dict(
+            row.get("provenance") if row.get("provenance") else {}
+        ),
     )
 
 

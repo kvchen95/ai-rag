@@ -35,6 +35,7 @@ from api.parse.model import (
 )
 from api.parse.reader import FigureBuilder, ReaderConfig, read_pdf
 from api.parse.tables import table_content_text
+from api.resources import parsing
 
 
 def _region_counts(page: PageLayout) -> dict[str, int]:
@@ -489,7 +490,7 @@ def _caption_for(region: Region, page: PageLayout) -> str | None:
     只在同页找，且必须在区域上方（图注在下的情况也有，但那种排版在本期样本里
     没有出现，猜它会把正文第一行当图注）。
     """
-    keywords = ("table ", "figure ", "表 ", "图 ", "表：", "图：", "表1", "图1")
+    keywords = parsing.CAPTION_KEYWORDS
     best: tuple[float, str] | None = None
     for other in page.regions:
         if other is region or other.kind is not RegionKind.TEXT:
@@ -518,7 +519,7 @@ def _unit_for(region: Region, page: PageLayout) -> str | None:
             continue
         for line in other.lines:
             text = line.text.strip()
-            if "单位" not in text:
+            if parsing.UNIT_HEADER_MARKER not in text:
                 continue
             gap = region.rect.top - line.rect.bottom
             if best is None or gap < best[0]:

@@ -1,4 +1,4 @@
-"""确定性计算工具：只执行结构化算式，不解析自然语言里的算术。"""
+"""确定性计算工具：只执行结构化算式，不解析自然语言里的算术。."""
 
 from __future__ import annotations
 
@@ -14,17 +14,20 @@ from api.generate.calculator import (
 
 
 def test_percentage_difference_is_executed_exactly() -> None:
+    """Run test_percentage_difference_is_executed_exactly."""
     calculated = execute_expression("45.46% - 37.90%")
     assert calculated.value == Decimal("7.56")
     assert calculated.inputs == (Decimal("45.46"), Decimal("37.90"))
 
 
 def test_parentheses_and_percentage_ratio_are_supported() -> None:
+    """Run test_parentheses_and_percentage_ratio_are_supported."""
     calculated = execute_expression("(100 - 80) / 100 * 100%")
     assert calculated.value == Decimal("20")
 
 
 def test_calculation_result_can_be_rounded() -> None:
+    """Run test_calculation_result_can_be_rounded."""
     result = validate_calculation(
         "4,472,044,952.74 / 2,846,508,812.66",
         "约 1.57 倍",
@@ -35,6 +38,7 @@ def test_calculation_result_can_be_rounded() -> None:
 
 
 def test_ratio_expression_can_report_percentage() -> None:
+    """Run test_ratio_expression_can_report_percentage."""
     result = validate_calculation(
         "(9099020774.81 - 5464235057.15) / 5464235057.15",
         "≈66.52%",
@@ -44,6 +48,7 @@ def test_ratio_expression_can_report_percentage() -> None:
 
 
 def test_calculation_rejects_wrong_result() -> None:
+    """Run test_calculation_rejects_wrong_result."""
     assert (
         validate_calculation(
             "45.46% - 37.90%", "7.65 个百分点", "45.46%；37.90%"
@@ -53,6 +58,7 @@ def test_calculation_rejects_wrong_result() -> None:
 
 
 def test_calculation_rejects_input_missing_from_evidence() -> None:
+    """Run test_calculation_rejects_input_missing_from_evidence."""
     assert (
         validate_calculation("45.46% - 37.90%", "7.56 个百分点", "45.46%")
         is None
@@ -65,5 +71,6 @@ def test_calculation_rejects_input_missing_from_evidence() -> None:
 def test_calculation_rejects_unsafe_or_invalid_expression(
     expression: str,
 ) -> None:
+    """Run test_calculation_rejects_unsafe_or_invalid_expression."""
     with pytest.raises(CalculationError):
         execute_expression(expression)

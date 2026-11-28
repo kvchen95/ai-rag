@@ -1,4 +1,4 @@
-"""失败契约类型与不变量检查器的回归。"""
+"""失败契约类型与不变量检查器的回归。."""
 
 from __future__ import annotations
 
@@ -14,12 +14,14 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_result_variants_are_explicit() -> None:
+    """Run test_result_variants_are_explicit."""
     assert Ok(1).ok is True
     assert Fail("NO_EVIDENCE", "missing").ok is False
     assert Degraded(1, "RERANK_DOWN", "timeout").degraded is True
 
 
 def test_degrade_requires_reason_and_code() -> None:
+    """Run test_degrade_requires_reason_and_code."""
     with pytest.raises(ValueError):
         degrade(1, code="", reason="x")
     with pytest.raises(ValueError):
@@ -27,6 +29,7 @@ def test_degrade_requires_reason_and_code() -> None:
 
 
 def _checker():
+    """Run _checker."""
     spec = importlib.util.spec_from_file_location(
         "check_invariants", ROOT / "scripts/check_invariants.py"
     )
@@ -38,6 +41,7 @@ def _checker():
 
 
 def test_checker_flags_broad_except_empty_return(tmp_path: Path) -> None:
+    """Run test_checker_flags_broad_except_empty_return."""
     checker = _checker()
     source = tmp_path / "bad.py"
     source.write_text(
@@ -53,6 +57,7 @@ def test_checker_flags_broad_except_empty_return(tmp_path: Path) -> None:
 
 
 def test_checker_flags_or_empty_and_silent_pass(tmp_path: Path) -> None:
+    """Run test_checker_flags_or_empty_and_silent_pass."""
     checker = _checker()
     source = tmp_path / "bad.py"
     source.write_text(

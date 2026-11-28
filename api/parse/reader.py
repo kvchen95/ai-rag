@@ -587,7 +587,7 @@ def detect_title(pages: Sequence[PageLayout]) -> str | None:
     best = max(
         candidates, key=lambda line: (round(line.font_size, 1), len(line.text))
     )
-    return best.text.strip() or None
+    return (best.text.strip() if best.text.strip() else None)
 
 
 __all__ = [

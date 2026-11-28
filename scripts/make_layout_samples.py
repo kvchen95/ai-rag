@@ -37,6 +37,11 @@ import sys
 import zlib
 from pathlib import Path
 
+if __package__:
+    from .resources.make_layout_samples_msgs import MESSAGES as M
+else:  # run as a script: python3 scripts/make_layout_samples.py
+    from resources.make_layout_samples_msgs import MESSAGES as M
+
 PAGE_W = 595.0
 PAGE_H = 842.0
 
@@ -45,6 +50,7 @@ CATALOG = b"<< /Type /Catalog /Pages 2 0 R >>"
 
 
 def _esc(text: str) -> str:
+    """Run _esc."""
     return text.replace("\\", r"\\").replace("(", r"\(").replace(")", r"\)")
 
 
@@ -56,6 +62,7 @@ class PdfBuilder:
     """
 
     def __init__(self) -> None:
+        """Initialize the instance."""
         self._objects: list[bytes] = []
         self._pages: list[int] = []
         self._font_id = self._add(
@@ -65,6 +72,7 @@ class PdfBuilder:
         self._add(CATALOG)  # obj 3: Catalog
 
     def _add(self, body: bytes) -> int:
+        """Run _add."""
         self._objects.append(body)
         return len(self._objects)
 
@@ -79,12 +87,14 @@ class PdfBuilder:
     def line(
         x0: float, y0: float, x1: float, y1: float, width: float = 0.8
     ) -> str:
+        """Run line."""
         return f"{width} w {x0:.2f} {y0:.2f} m {x1:.2f} {y1:.2f} l S"
 
     @staticmethod
     def rect(
         x0: float, y0: float, w: float, h: float, *, fill: bool = True
     ) -> str:
+        """Run rect."""
         op = "f" if fill else "S"
         return f"{x0:.2f} {y0:.2f} {w:.2f} {h:.2f} re {op}"
 
@@ -139,6 +149,7 @@ class PdfBuilder:
         self._pages.append(page_id)
 
     def build(self) -> bytes:
+        """Run build."""
         kids = b" ".join(str(pid).encode() + b" 0 R" for pid in self._pages)
         self._objects[1] = (
             b"<< /Type /Pages /Kids ["
@@ -281,6 +292,7 @@ def table_pages() -> list[list[str]]:
     def draw_table(
         page_ops: list[str], data: list[list[str]], y_top: float
     ) -> None:
+        """Run draw_table."""
         for index in range(len(data) + 1):
             y = y_top - index * row_h
             page_ops.append(PdfBuilder.line(72.0, y, 523.0, y))
@@ -519,6 +531,7 @@ SAMPLES = {
 
 
 def build(name: str) -> bytes:
+    """Run build."""
     kind = SAMPLES[name]
     builder = PdfBuilder()
     if kind == "table":
@@ -551,15 +564,16 @@ def build(name: str) -> bytes:
 
 
 def main() -> int:
+    """Run main."""
     ap = argparse.ArgumentParser(
         description="generate layout sample PDFs (stdlib only)"
     )
     ap.add_argument(
         "--root",
         required=True,
-        help="输出根目录（建议 api/tests/fixtures/pdf 或 /tmp/...）",
+        help=M["HELP_01"],
     )
-    ap.add_argument("--force", action="store_true", help="覆盖已存在的文件")
+    ap.add_argument("--force", action="store_true", help=M["HELP_02"])
     args = ap.parse_args()
 
     root = Path(args.root)

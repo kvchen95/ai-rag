@@ -1,4 +1,4 @@
-"""审计写入的集成测试（真 PG，由 AI_RAG_TEST_DATABASE_URL 指过去）。
+"""审计写入的集成测试（真 PG，由 AI_RAG_TEST_DATABASE_URL 指过去）。.
 
 表结构不在这里建：schema 的唯一权威是 `db/migrations/*.sql` +
 `scripts/db_migrate.py`（DA1 卡）。这里先跑他们的 runner 把库准备好，
@@ -30,7 +30,7 @@ TEST_USER = "u_b1_test"
 
 @pytest.fixture(scope="module")
 def migrated(pg_dsn: str) -> str:
-    """用项目唯一的迁移入口把库准备好（幂等，已应用的文件会跳过）。"""
+    """用项目唯一的迁移入口把库准备好（幂等，已应用的文件会跳过）。."""
     proc = subprocess.run(  # noqa: S603 - 固定脚本路径，参数全部来自测试
         [sys.executable, str(MIGRATE_SCRIPT), "--dsn", pg_dsn],
         capture_output=True,
@@ -51,6 +51,7 @@ def migrated(pg_dsn: str) -> str:
 
 @pytest.fixture
 def db(migrated: str):
+    """Run db."""
     database = PgDatabase(migrated, min_size=1, max_size=2, connect_timeout_s=3)
     database.open()
     try:
@@ -61,6 +62,7 @@ def db(migrated: str):
 
 @pytest.fixture(autouse=True)
 def _cleanup(pg_dsn: str):
+    """Run _cleanup."""
     yield
     with psycopg.connect(normalize_dsn(pg_dsn), autocommit=True) as conn:
         conn.execute(
@@ -69,6 +71,7 @@ def _cleanup(pg_dsn: str):
 
 
 def _entry(**overrides: object) -> QaLogEntry:
+    """Run _entry."""
     payload: dict[str, object] = {
         "user_id": TEST_USER,
         "user_depts": ["fin", "corp"],
@@ -90,6 +93,7 @@ def _entry(**overrides: object) -> QaLogEntry:
 
 
 def test_audit_row_round_trips(db: PgDatabase) -> None:
+    """Run test_audit_row_round_trips."""
     result = AuditWriter(db, retention_days=365).record(_entry())
     assert result.ok is True and isinstance(result.audit_id, int)
 
@@ -110,7 +114,7 @@ def test_audit_row_round_trips(db: PgDatabase) -> None:
 
 
 def test_admin_flag_is_recorded(db: PgDatabase) -> None:
-    """§5.1：管理员跨部门访问必须在审计里可辨，否则事后无法还原。"""
+    """§5.1：管理员跨部门访问必须在审计里可辨，否则事后无法还原。."""
     result = AuditWriter(db).record(_entry(is_admin=True, user_depts=[]))
     assert result.ok
     row = db.fetch_one(
@@ -121,6 +125,7 @@ def test_admin_flag_is_recorded(db: PgDatabase) -> None:
 
 
 def test_reject_row_keeps_reason_code(db: PgDatabase) -> None:
+    """Run test_reject_row_keeps_reason_code."""
     result = AuditWriter(db).record(
         _entry(
             gate1_verdict="reject_low",
@@ -170,6 +175,7 @@ _BAD_ROWS = {
 
 @pytest.mark.parametrize("case", list(_BAD_ROWS))
 def test_database_rejects_bad_rows(pg_dsn: str, case: str) -> None:
+    """Run test_database_rejects_bad_rows."""
     with (
         psycopg.connect(normalize_dsn(pg_dsn), autocommit=True) as conn,
         pytest.raises(psycopg.errors.IntegrityError),
@@ -178,7 +184,7 @@ def test_database_rejects_bad_rows(pg_dsn: str, case: str) -> None:
 
 
 def test_audit_failure_is_reported_not_raised() -> None:
-    """审计写不进去时调用方拿到 ok=False，业务结果不被改写。
+    """审计写不进去时调用方拿到 ok=False，业务结果不被改写。.
 
     但日志里必须有 ERROR。
     """
@@ -193,6 +199,7 @@ def test_audit_failure_is_reported_not_raised() -> None:
 
 
 def test_purge_expired_keeps_recent_rows(db: PgDatabase) -> None:
+    """Run test_purge_expired_keeps_recent_rows."""
     writer = AuditWriter(db, retention_days=365)
     old = writer.record(_entry())
     fresh = writer.record(_entry())

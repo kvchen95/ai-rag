@@ -1,4 +1,4 @@
-"""扫描 + ingest_jobs 的集成测试（真 PG）。
+"""扫描 + ingest_jobs 的集成测试（真 PG）。.
 
 只验文档与库层说了算的东西——判定表、纯函数、状态机已经在单元用例里测过，
 这里再测一遍是重复。这里验四件离开真库就没意义的事：
@@ -50,6 +50,7 @@ SAMPLE_B = "itest/b-办法-2025版.pdf"
 
 @pytest.fixture(scope="module")
 def migrated(pg_dsn: str) -> str:
+    """Run migrated."""
     proc = subprocess.run(  # noqa: S603 - 固定脚本路径
         [sys.executable, str(MIGRATE_SCRIPT), "--dsn", pg_dsn],
         capture_output=True,
@@ -67,6 +68,7 @@ def migrated(pg_dsn: str) -> str:
 
 @pytest.fixture
 def db(migrated: str):
+    """Run db."""
     database = PgDatabase(migrated, min_size=1, max_size=4, connect_timeout_s=3)
     database.open()
     try:
@@ -77,6 +79,7 @@ def db(migrated: str):
 
 @pytest.fixture(autouse=True)
 def _cleanup(pg_dsn: str):
+    """Run _cleanup."""
     yield
     with psycopg.connect(normalize_dsn(pg_dsn), autocommit=True) as conn:
         # 顺序：切片 -> 版本 -> 任务 -> 文档（FK 是 RESTRICT）。
@@ -88,7 +91,7 @@ def _cleanup(pg_dsn: str):
 
 @pytest.fixture
 def samples(tmp_path: Path) -> Path:
-    """两个样本文件的临时目录。
+    """两个样本文件的临时目录。.
 
     文件名带年份/版本后缀，顺带验归一化在真路径上成立；放在 `itest/` 子目录下，
     让 doc_key 落在测试命名空间里（清理与断言都按 `itest/%` 走）。
@@ -101,6 +104,7 @@ def samples(tmp_path: Path) -> Path:
 
 
 def _counts(db: PgDatabase) -> dict[str, int]:
+    """Run _counts."""
     row = db.fetch_one(
         """
         SELECT (SELECT count(*) FROM documents
@@ -121,6 +125,7 @@ def _counts(db: PgDatabase) -> dict[str, int]:
 def test_cold_scan_creates_document_version_and_job(
     db: PgDatabase, samples: Path
 ) -> None:
+    """Run test_cold_scan_creates_document_version_and_job."""
     report = scan_samples(db, samples, max_retries=3)
 
     assert report.counts == {"add": 2, "change": 0, "skip": 0, "fail": 0}
@@ -162,7 +167,7 @@ def test_cold_scan_creates_document_version_and_job(
 def test_rescan_skips_everything_and_writes_nothing(
     db: PgDatabase, samples: Path
 ) -> None:
-    """验收第一条：重复扫描跳过。
+    """验收第一条：重复扫描跳过。.
 
     光看计数不够——跳过必须是"真的没写库"，所以版本数与任务数也要一模一样。
     """
@@ -179,7 +184,7 @@ def test_rescan_skips_everything_and_writes_nothing(
 def test_rescan_after_version_failed_reports_the_reason(
     db: PgDatabase, samples: Path
 ) -> None:
-    """同内容但上次解析失败：跳过，但原因码必须是 version_failed。
+    """同内容但上次解析失败：跳过，但原因码必须是 version_failed。.
 
     §2.2 里 failed 是终态，同一内容不自动重解析；报告里混成 unchanged 的话，
     运维只会看到"skipped 一直很大"而看不出这个文件一直失败。
@@ -212,7 +217,7 @@ def test_rescan_after_version_failed_reports_the_reason(
 def test_content_revert_to_deprecated_version_is_reported(
     db: PgDatabase, samples: Path
 ) -> None:
-    """内容回退到已下线版本：不能建新版本（唯一约束会拒），要报 content_revert。
+    """内容回退到已下线版本时，不能新建版本，必须报 content_revert。.
 
     这时唯一的正解是走 §4.4 的回滚（把旧版翻回 active），扫描不替人做这个决定。
     """
@@ -245,7 +250,7 @@ def test_content_revert_to_deprecated_version_is_reported(
 def test_concurrent_scan_raises_scan_in_progress(
     db: PgDatabase, samples: Path
 ) -> None:
-    """验收第一条：并发 scan 返回 409（库层异常，接口映射成 409）。
+    """验收第一条：并发 scan 返回 409（库层异常，接口映射成 409）。.
 
     锁挂在另一条连接上模拟“另一个进程正在扫”——同一进程里用两个
     PgDatabase 也行，但那样测的更像“同进程重入”，而真实并发是两个 api
@@ -267,7 +272,7 @@ def test_concurrent_scan_raises_scan_in_progress(
 def test_scan_does_not_start_when_samples_dir_is_missing(
     db: PgDatabase, tmp_path: Path
 ) -> None:
-    """目录不存在 != 目录为空。
+    """目录不存在 != 目录为空。.
 
     前者是挂载/路径配错，报 0 条会让运维以为一切正常。
     """
@@ -278,6 +283,7 @@ def test_scan_does_not_start_when_samples_dir_is_missing(
 def test_empty_samples_dir_is_a_clean_noop(
     db: PgDatabase, tmp_path: Path
 ) -> None:
+    """Run test_empty_samples_dir_is_a_clean_noop."""
     root = tmp_path / "empty"
     root.mkdir()
     report = scan_samples(db, root)
@@ -292,7 +298,7 @@ def test_empty_samples_dir_is_a_clean_noop(
 def test_fingerprint_change_creates_pending_version_and_leaves_active_alone(
     db: PgDatabase, samples: Path
 ) -> None:
-    """验收第二条。这是整张卡最关键的一条，所以四处都断言：
+    """验收第二条。这是整张卡最关键的一条，所以四处都断言：.
 
     - 新版本出现且状态是 pending（等 A3 翻牌）；
     - 旧版本的 status / activated_at 一个字节都没变；
@@ -381,7 +387,7 @@ def test_fingerprint_change_creates_pending_version_and_leaves_active_alone(
 def test_reverting_content_back_to_previous_fingerprint_is_not_a_new_version(
     db: PgDatabase, samples: Path
 ) -> None:
-    """内容改回旧版（指纹撞上历史版本）时不能建第三个版本。
+    """内容改回旧版（指纹撞上历史版本）时不能建第三个版本。.
 
     唯一约束会拒，也不能当 unchanged 混过去——要报 content_revert，
     让人去走 §4.4 的回滚翻牌。
@@ -442,7 +448,7 @@ def test_reverting_content_back_to_previous_fingerprint_is_not_a_new_version(
 def test_unreadable_file_records_failed_job_without_touching_versions(
     db: PgDatabase, samples: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """§3.1「文件读不到 -> 记失败，不动已有版本」。
+    """§3.1「文件读不到 -> 记失败，不动已有版本」。.
 
     用 monkeypatch 让其中一份文件的 `file_hash` 抛 PermissionError，而不是 chmod
     0o000：测试在 root 容器里跑，root 能读 000 文件，权限位在那里根本造不出
@@ -455,6 +461,7 @@ def test_unreadable_file_records_failed_job_without_touching_versions(
     real_hash = scan_module.file_hash
 
     def _unreadable(path, **kwargs):
+        """Run _unreadable."""
         if path.name == Path(SAMPLE_A).name:
             raise PermissionError(13, "Permission denied", str(path))
         return real_hash(path, **kwargs)
@@ -486,7 +493,7 @@ def test_unreadable_file_records_failed_job_without_touching_versions(
 def test_doc_key_collision_fails_both_files_and_keeps_others(
     db: PgDatabase, tmp_path: Path
 ) -> None:
-    """§4.4「两份文档 doc_key 撞车 -> 拒绝入库，不改编号规则」。
+    """§4.4「两份文档 doc_key 撞车 -> 拒绝入库，不改编号规则」。.
 
     撞车的两份都判失败（不只后来那份）：谁先谁后取决于文件名排序，
     只拒后者会让结果随改名而变。其余文件照常入库——一个命名冲突不该废掉整轮。
@@ -520,7 +527,7 @@ def test_doc_key_collision_fails_both_files_and_keeps_others(
 def test_job_lifecycle_with_retry_then_success(
     db: PgDatabase, samples: Path
 ) -> None:
-    """Queued -> running -> (失败 x3) -> succeeded，四次之后成功。
+    """Queued -> running -> (失败 x3) -> succeeded，四次之后成功。.
 
     重试是同一行原地累加 retry_count，不是新插一行：否则"失败过几次"这个数
     会散在多行里，统计口径就说不清了。
@@ -567,6 +574,7 @@ def test_job_lifecycle_with_retry_then_success(
 def test_job_success_clears_previous_error(
     db: PgDatabase, samples: Path
 ) -> None:
+    """Run test_job_success_clears_previous_error."""
     scan_samples(db, samples)
     with db.session() as conn:
         job = job_store.claim_next_job(conn, doc_key=DOC_A)
@@ -592,6 +600,7 @@ def test_job_success_clears_previous_error(
 def test_cancel_only_applies_to_open_jobs(
     db: PgDatabase, samples: Path
 ) -> None:
+    """Run test_cancel_only_applies_to_open_jobs."""
     scan_samples(db, samples)
     with db.session() as conn:
         # 必须按 DOC_A 定向领取：全局 claim 会领到库里别的（真实）queued job，
@@ -611,6 +620,7 @@ def test_cancel_only_applies_to_open_jobs(
 
 
 def test_open_job_count_tracks_queue(db: PgDatabase, samples: Path) -> None:
+    """Run test_open_job_count_tracks_queue."""
     with db.session() as conn:
         assert job_store.open_job_count(conn, doc_key=DOC_A) == 0
     scan_samples(db, samples)
@@ -648,7 +658,7 @@ BAD_ROWS = {
 
 @pytest.mark.parametrize("case", list(BAD_ROWS))
 def test_002_constraints_reject_bad_rows(pg_dsn: str, case: str) -> None:
-    """每条 CHECK 都喂一次坏数据。没红过的约束和被删掉是一回事。"""
+    """每条 CHECK 都喂一次坏数据。没红过的约束和被删掉是一回事。."""
     with (
         psycopg.connect(normalize_dsn(pg_dsn), autocommit=True) as conn,
         pytest.raises(psycopg.errors.IntegrityError),
@@ -657,7 +667,7 @@ def test_002_constraints_reject_bad_rows(pg_dsn: str, case: str) -> None:
 
 
 def test_one_open_job_per_version(pg_dsn: str) -> None:
-    """部分唯一索引：同一版本同时只能有一个未结束任务。
+    """部分唯一索引：同一版本同时只能有一个未结束任务。.
 
     重复扫描靠指纹判重已经不会入队两次，这条是兜底——并发扫描、重放、worker
     重投都不该让同一版本被解析两遍（两遍会写出两份切片）。
@@ -699,7 +709,7 @@ def test_one_open_job_per_version(pg_dsn: str) -> None:
 def test_version_id_is_derived_so_same_content_cannot_get_two_versions(
     db: PgDatabase, samples: Path
 ) -> None:
-    """同内容必然得到同一个 version_id。
+    """同内容必然得到同一个 version_id。.
 
     再加上 `UNIQUE (doc_key, file_hash)`，两条独立的约束都指向
     “同一内容只有一个版本行”。
@@ -718,7 +728,7 @@ def test_version_id_is_derived_so_same_content_cannot_get_two_versions(
 
 @pytest.fixture(autouse=True)
 def _has_chmod(tmp_path: Path) -> None:
-    """在读不到文件那条用例里改权限位。
+    """在读不到文件那条用例里改权限位。.
 
     Windows 挂载盘上 chmod 不生效，跳过更诚实。
     """
@@ -735,7 +745,7 @@ def _has_chmod(tmp_path: Path) -> None:
 
 
 def test_samples_are_clean_after_the_suite(pg_dsn: str) -> None:
-    """本测试套件不许在库里留下 itest/ 前缀之外的东西。
+    """本测试套件不许在库里留下 itest/ 前缀之外的东西。.
 
     留脏数据最典型的后果是"下一张卡（A2/A3）跑起来发现版本数对不上"，
     而那时已经很难判断是谁写的。

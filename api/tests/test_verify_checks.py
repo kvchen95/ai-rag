@@ -1,4 +1,4 @@
-"""五道校验与三档降级（详细设计.md §10.1 / §10.3）。
+"""五道校验与三档降级（详细设计.md §10.1 / §10.3）。.
 
 按 facts 单一事实源契约校验：Fact(text, evidence_ids)。
 """
@@ -39,6 +39,7 @@ def _cand(
     page_num: int = 47,
     score: float = 0.62,
 ) -> Candidate:
+    """Run _cand."""
     return Candidate(
         chunk_id=chunk_id,
         doc_key=doc_key,
@@ -57,6 +58,7 @@ def _text(
     doc_key: str = "policy/travel",
     page_num: int = 47,
 ) -> ChunkText:
+    """Run _text."""
     return ChunkText(
         chunk_id=chunk_id,
         doc_key=doc_key,
@@ -70,6 +72,7 @@ def _text(
 
 @pytest.fixture
 def pack():
+    """Run pack."""
     return build_evidence_pack(
         [_cand("ch_a"), _cand("ch_b", page_num=48, score=0.55)],
         {
@@ -83,17 +86,21 @@ def pack():
 
 
 def _draft(*facts: Fact, status: str = "answered") -> Draft:
+    """Run _draft."""
     return Draft(status=status, facts=tuple(facts))  # type: ignore[arg-type]
 
 
 class _Judge(LlmClient):
+    """_Judge."""
     def __init__(self, verdict: str = "SUPPORTED") -> None:
+        """Initialize the instance."""
         self.verdict = verdict
         self.temperatures: list[float] = []
         self.calls: int = 0
         self.messages: list[list[dict[str, str]]] = []
 
     def complete(self, messages, *, temperature: float = 0.0) -> str:
+        """Run complete."""
         self.calls += 1
         self.temperatures.append(temperature)
         self.messages.append(messages)
@@ -105,11 +112,13 @@ class _Judge(LlmClient):
 
 
 def test_first_check_passes_when_every_evidence_id_exists(pack) -> None:
+    """Run test_first_check_passes_when_every_evidence_id_exists."""
     draft = _draft(Fact("每人每天 500 元", ("ch_a",)))
     assert check_citation_range(draft, pack) is None
 
 
 def test_first_check_rejects_unknown_evidence_id(pack) -> None:
+    """Run test_first_check_rejects_unknown_evidence_id."""
     draft = _draft(Fact("每人每天 500 元", ("ch_z",)))
     failure = check_citation_range(draft, pack)
     assert failure is not None
@@ -118,6 +127,7 @@ def test_first_check_rejects_unknown_evidence_id(pack) -> None:
 
 
 def test_first_check_scans_all_facts(pack) -> None:
+    """Run test_first_check_scans_all_facts."""
     draft = _draft(
         Fact("每人每天 500 元", ("ch_a",)),
         Fact("交通费 100 元", ("ch_missing",)),
@@ -132,6 +142,7 @@ def test_first_check_scans_all_facts(pack) -> None:
 
 
 def test_second_check_passes_when_every_fact_has_evidence(pack) -> None:
+    """Run test_second_check_passes_when_every_fact_has_evidence."""
     draft = _draft(
         Fact("每人每天 500 元", ("ch_a",)),
         Fact("交通费 100 元", ("ch_b",)),
@@ -140,6 +151,7 @@ def test_second_check_passes_when_every_fact_has_evidence(pack) -> None:
 
 
 def test_second_check_rejects_fact_without_evidence_ids(pack) -> None:
+    """Run test_second_check_rejects_fact_without_evidence_ids."""
     draft = _draft(Fact("每人每天 500 元", ()))
     failure = check_every_claim_cited(draft, pack)
     assert failure is not None
@@ -148,11 +160,13 @@ def test_second_check_rejects_fact_without_evidence_ids(pack) -> None:
 
 
 def test_second_check_rejects_no_facts(pack) -> None:
+    """Run test_second_check_rejects_no_facts."""
     draft = _draft(status="answered")
     assert check_every_claim_cited(draft, pack) is not None
 
 
 def test_second_check_rejects_empty_fact_text(pack) -> None:
+    """Run test_second_check_rejects_empty_fact_text."""
     draft = _draft(Fact("   ", ()))
     assert check_every_claim_cited(draft, pack) is not None
 
@@ -161,11 +175,13 @@ def test_second_check_rejects_empty_fact_text(pack) -> None:
 
 
 def test_third_check_passes_when_numbers_are_grounded(pack) -> None:
+    """Run test_third_check_passes_when_numbers_are_grounded."""
     draft = _draft(Fact("住宿费标准为每人每天 500 元", ("ch_a",)))
     assert check_grounding(draft, pack) is None
 
 
 def test_third_check_rejects_a_number_not_in_the_evidence(pack) -> None:
+    """Run test_third_check_rejects_a_number_not_in_the_evidence."""
     draft = _draft(Fact("住宿费标准一般是 400 元", ("ch_a",)))
     failure = check_grounding(draft, pack)
     assert failure is not None
@@ -174,6 +190,7 @@ def test_third_check_rejects_a_number_not_in_the_evidence(pack) -> None:
 
 
 def test_third_check_checks_only_the_cited_evidence(pack) -> None:
+    """Run test_third_check_checks_only_the_cited_evidence."""
     draft = _draft(Fact("住宿费标准为每人每天 500 元", ("ch_b",)))
     failure = check_grounding(draft, pack)
     assert failure is not None
@@ -181,6 +198,7 @@ def test_third_check_checks_only_the_cited_evidence(pack) -> None:
 
 
 def test_third_check_rejects_an_unlocatable_clause_number(pack) -> None:
+    """Run test_third_check_rejects_an_unlocatable_clause_number."""
     draft = _draft(Fact("依据第十九条，住宿费标准为每人每天 500 元", ("ch_a",)))
     failure = check_grounding(draft, pack)
     assert failure is not None
@@ -188,6 +206,7 @@ def test_third_check_rejects_an_unlocatable_clause_number(pack) -> None:
 
 
 def test_third_check_accepts_chinese_number_written_differently(pack) -> None:
+    """Run test_third_check_accepts_chinese_number_written_differently."""
     draft = _draft(Fact("住宿费标准为每人每天五百元", ("ch_a",)))
     assert check_grounding(draft, pack) is None
 
@@ -196,6 +215,7 @@ def test_third_check_accepts_chinese_number_written_differently(pack) -> None:
 
 
 def test_fourth_check_passes_when_judge_says_supported(pack) -> None:
+    """Run test_fourth_check_passes_when_judge_says_supported."""
     report = verify_draft(
         _draft(Fact("每人每天 500 元", ("ch_a",))),
         pack,
@@ -208,6 +228,7 @@ def test_fourth_check_passes_when_judge_says_supported(pack) -> None:
 
 
 def test_fourth_check_fails_when_judge_says_not_supported(pack) -> None:
+    """Run test_fourth_check_fails_when_judge_says_not_supported."""
     report = verify_draft(
         _draft(Fact("每人每天 500 元", ("ch_a",))),
         pack,
@@ -222,6 +243,7 @@ def test_fourth_check_fails_when_judge_says_not_supported(pack) -> None:
 def test_missing_judge_client_fails_closed_but_is_auditable_as_skipped(
     pack,
 ) -> None:
+    """缺少判别客户端时 fail-closed，但审计记为 skipped。."""
     report = verify_draft(
         _draft(Fact("每人每天 500 元", ("ch_a",))), pack, question="住宿标准"
     )
@@ -232,6 +254,7 @@ def test_missing_judge_client_fails_closed_but_is_auditable_as_skipped(
 
 
 def test_composite_question_calls_judge_once_with_full_answer(pack) -> None:
+    """Run test_composite_question_calls_judge_once_with_full_answer."""
     client = _Judge("SUPPORTED")
     report = verify_draft(
         _draft(
@@ -255,6 +278,7 @@ def test_composite_question_calls_judge_once_with_full_answer(pack) -> None:
 
 
 def test_single_fact_question_still_calls_judge_once(pack) -> None:
+    """Run test_single_fact_question_still_calls_judge_once."""
     client = _Judge("SUPPORTED")
     report = verify_draft(
         _draft(Fact("每人每天 500 元", ("ch_a",))),
@@ -271,6 +295,7 @@ def test_single_fact_question_still_calls_judge_once(pack) -> None:
 
 
 def test_fifth_check_rejects_two_values_for_the_same_attribute(pack) -> None:
+    """Run test_fifth_check_rejects_two_values_for_the_same_attribute."""
     draft = _draft(
         Fact("住宿费限额为 500 元", ("ch_a",)),
         Fact("住宿费限额为 800 元", ("ch_a",)),
@@ -282,6 +307,7 @@ def test_fifth_check_rejects_two_values_for_the_same_attribute(pack) -> None:
 
 
 def test_fifth_check_allows_different_attributes(pack) -> None:
+    """Run test_fifth_check_allows_different_attributes."""
     draft = _draft(
         Fact("住宿费限额为 500 元", ("ch_a",)),
         Fact("交通费限额为 100 元", ("ch_b",)),
@@ -290,6 +316,7 @@ def test_fifth_check_allows_different_attributes(pack) -> None:
 
 
 def test_fifth_check_allows_the_same_value_twice(pack) -> None:
+    """Run test_fifth_check_allows_the_same_value_twice."""
     draft = _draft(
         Fact("住宿费限额为 500 元", ("ch_a",)),
         Fact("住宿费限额为 500 元", ("ch_a",)),
@@ -301,6 +328,7 @@ def test_fifth_check_allows_the_same_value_twice(pack) -> None:
 
 
 def test_checks_stop_at_the_first_failure(pack) -> None:
+    """Run test_checks_stop_at_the_first_failure."""
     report = verify_draft(
         _draft(Fact("每人每天 500 元", ("ch_z",))),
         pack,
@@ -315,6 +343,7 @@ def test_checks_stop_at_the_first_failure(pack) -> None:
 
 
 def test_checks_run_in_the_documented_order(pack) -> None:
+    """Run test_checks_run_in_the_documented_order."""
     assert CHECKS == (
         CHECK_CITATION_RANGE,
         CHECK_EVERY_CLAIM,
@@ -325,6 +354,7 @@ def test_checks_run_in_the_documented_order(pack) -> None:
 
 
 def test_all_five_run_on_a_clean_draft(pack) -> None:
+    """Run test_all_five_run_on_a_clean_draft."""
     report = verify_draft(
         _draft(Fact("每人每天 500 元", ("ch_a",))),
         pack,
@@ -339,6 +369,7 @@ def test_all_five_run_on_a_clean_draft(pack) -> None:
 
 
 def test_unknown_status_refuses_without_running_checks(pack) -> None:
+    """Run test_unknown_status_refuses_without_running_checks."""
     draft = _draft(Fact("未找到可验证依据。", ()), status="unknown")
     report = verify_draft(draft, pack, question="q", judge_client=_Judge())
     assert report.passed is False
@@ -353,12 +384,14 @@ def test_unknown_status_refuses_without_running_checks(pack) -> None:
 
 
 def test_every_check_has_a_tier_and_a_code() -> None:
+    """Run test_every_check_has_a_tier_and_a_code."""
     for check in (*CHECKS, CHECK_DRAFT_STATUS):
         assert check in TIER_BY_CHECK
     assert set(TIER_BY_CHECK.values()) >= {FALLBACK_ORIGINAL_ONLY}
 
 
 def test_content_failures_all_degrade_to_original_only(pack) -> None:
+    """Run test_content_failures_all_degrade_to_original_only."""
     cases = [
         _draft(Fact("每人每天 500 元", ("ch_z",))),
         _draft(Fact("每人每天 500 元", ("ch_a",)), Fact("另外还有餐补", ())),
@@ -380,6 +413,7 @@ def test_content_failures_all_degrade_to_original_only(pack) -> None:
 def test_failed_verification_still_carries_evidence_for_the_original_text(
     pack,
 ) -> None:
+    """校验失败时仍附带原文证据。."""
     report = verify_draft(
         _draft(Fact("住宿费标准一般是 400 元", ("ch_a",))),
         pack,
@@ -394,6 +428,7 @@ def test_failed_verification_still_carries_evidence_for_the_original_text(
 
 
 def test_passed_report_carries_the_citation_mapping(pack) -> None:
+    """Run test_passed_report_carries_the_citation_mapping."""
     report = verify_draft(
         _draft(
             Fact("每人每天 500 元", ("ch_a",)),
@@ -412,6 +447,7 @@ def test_passed_report_carries_the_citation_mapping(pack) -> None:
 
 
 def test_report_audit_is_json_safe_and_names_the_failing_check(pack) -> None:
+    """Run test_report_audit_is_json_safe_and_names_the_failing_check."""
     report = verify_draft(
         _draft(Fact("住宿费标准一般是 400 元", ("ch_a",))),
         pack,
@@ -425,6 +461,7 @@ def test_report_audit_is_json_safe_and_names_the_failing_check(pack) -> None:
 
 
 def test_parse_then_verify_end_to_end(pack) -> None:
+    """Run test_parse_then_verify_end_to_end."""
     draft = parse_draft(
         '{"status":"answered",'
         '"facts":[{"text":"根据经验，这类费用一般是 400 元",'
@@ -439,6 +476,7 @@ def test_parse_then_verify_end_to_end(pack) -> None:
 
 
 def test_fact_without_evidence_ids_fails_explicitly(pack) -> None:
+    """Run test_fact_without_evidence_ids_fails_explicitly."""
     draft = _draft(Fact("每人每天 500 元", ()))
     failure = check_every_claim_cited(draft, pack)
     assert failure is not None

@@ -1,4 +1,4 @@
-"""`POST /api/v1/ingest/scan` 与 `GET /api/v1/documents/{doc_key}` 的契约。
+"""`POST /api/v1/ingest/scan` 与 `GET /api/v1/documents/{doc_key}` 的契约。.
 
 单元层只验**接口自己的责任**：状态码、响应体形状、错误码映射、`doc_key:path`
 能不能带斜杠。扫描逻辑本身由集成用例覆盖——这里用替身把扫描替掉，正是为了
@@ -31,7 +31,7 @@ from api.tests.conftest import make_settings
 
 
 class _Pg:
-    """只需要 open/close/ping/session。
+    """只需要 open/close/ping/session。.
 
     扫描与查询被替身接管后，路由不会真的读库。
     """
@@ -39,39 +39,47 @@ class _Pg:
     def open(self) -> None: ...
     def close(self) -> None: ...
     def ping(self, *, timeout_s: float | None = None) -> Probe:
+        """Run ping."""
         return Probe(ok=True, latency_ms=1.0)
 
     @contextmanager
     def session(self) -> Iterator[Any]:
+        """Run session."""
         yield object()
 
 
 class _Qdrant:
+    """_Qdrant."""
     async def start(self) -> None: ...
     async def stop(self) -> None: ...
     async def ping(self, *, timeout_s: float | None = None) -> Probe:
+        """Run ping."""
         return Probe(ok=True, latency_ms=1.0)
 
 
 def _client(**overrides: object) -> TestClient:
+    """Run _client."""
     return TestClient(
         create_app(make_settings(**overrides), pg=_Pg(), qdrant=_Qdrant())
     )
 
 
 def _patch_scan(monkeypatch: pytest.MonkeyPatch, behaviour: Any) -> None:
+    """Run _patch_scan."""
     from api.routers import ingest as ingest_router
 
     monkeypatch.setattr(ingest_router, "scan_samples", behaviour)
 
 
 def _patch_doc(monkeypatch: pytest.MonkeyPatch, behaviour: Any) -> None:
+    """Run _patch_doc."""
     from api.routers import ingest as ingest_router
 
     monkeypatch.setattr(ingest_router, "get_document", behaviour)
 
 
 def test_scan_returns_counts_and_items(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run test_scan_returns_counts_and_items."""
     report = ScanReport(
         items=[
             ScanItem(
@@ -109,9 +117,10 @@ def test_scan_returns_counts_and_items(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_scan_conflict_is_409_with_contract_error_body(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """验收第一条的接口侧：并发扫描返回 409，且错误体与其它错误同源。"""
+    """验收第一条的接口侧：并发扫描返回 409，且错误体与其它错误同源。."""
 
     def boom(*_a: object, **_kw: object) -> None:
+        """Run boom."""
         raise ScanInProgress()
 
     _patch_scan(monkeypatch, boom)
@@ -130,12 +139,13 @@ def test_scan_conflict_is_409_with_contract_error_body(
 def test_scan_missing_samples_dir_is_500_and_says_why(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """“目录不存在”不能伪装成“扫到 0 个文件”。
+    """“目录不存在”不能伪装成“扫到 0 个文件”。.
 
     那会让运维以为一切正常。
     """
 
     def boom(*_a: object, **_kw: object) -> None:
+        """Run boom."""
         raise SamplesRootMissing(__import__("pathlib").Path("/nowhere"))
 
     _patch_scan(monkeypatch, boom)
@@ -149,12 +159,13 @@ def test_scan_missing_samples_dir_is_500_and_says_why(
 def test_document_accepts_doc_key_with_slashes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """`policy/travel-cn` 是路径参数里带斜杠的唯一写法：路由必须用 `:path`。"""
+    """`policy/travel-cn` 是路径参数里带斜杠的唯一写法：路由必须用 `:path`。."""
     from api.routers import ingest as ingest_router
 
     seen: list[str] = []
 
     def fake_get_document(_conn: Any, doc_key: str) -> dict[str, Any]:
+        """Run fake_get_document."""
         seen.append(doc_key)
         return {
             "doc_key": doc_key,
@@ -190,6 +201,7 @@ def test_document_accepts_doc_key_with_slashes(
 
 
 def test_missing_document_is_404(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run test_missing_document_is_404."""
     _patch_doc(monkeypatch, lambda _conn, _key: None)
     with _client() as client:
         resp = client.get("/api/v1/documents/policy/ghost")
@@ -202,22 +214,28 @@ def test_missing_document_is_404(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_document_payload_includes_retry_budget(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """`retry_budget_left` 是"还要等几轮"的唯一来源，接口必须透出它。"""
+    """`retry_budget_left` 是"还要等几轮"的唯一来源，接口必须透出它。."""
 
     class _FakeConn:
+        """_FakeConn."""
         def __enter__(self) -> _FakeConn:
+            """Enter the context manager."""
             return self
 
         def __exit__(self, *_: object) -> None:
-            return None
+            """Exit the context manager."""
+            return
 
     class _FakePg:
+        """_FakePg."""
         def open(self) -> None: ...
         def close(self) -> None: ...
         def ping(self, *, timeout_s: float | None = None) -> Probe:
+            """Run ping."""
             return Probe(ok=True, latency_ms=1.0)
 
         def session(self) -> _FakeConn:
+            """Run session."""
             return _FakeConn()
 
     _patch_doc(
@@ -273,6 +291,7 @@ def test_document_payload_includes_retry_budget(
 def test_last_error_only_from_failed_job(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Run test_last_error_only_from_failed_job."""
     from datetime import datetime
 
     from api.routers import ingest as ingest_router
@@ -318,7 +337,7 @@ def test_last_error_only_from_failed_job(
 
 
 def test_scan_route_is_registered_under_api_v1() -> None:
-    """路径前缀写死在附录 C 里，改前缀等于改契约。"""
+    """路径前缀写死在附录 C 里，改前缀等于改契约。."""
     with _client() as client:
         paths = {route.path for route in client.app.routes}  # type: ignore[attr-defined]
     assert "/api/v1/ingest/scan" in paths

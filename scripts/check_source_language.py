@@ -42,6 +42,7 @@ ALLOW_DIRS = {"prompts", "resources", "locales", "i18n"}
 
 
 def _docstring_ids(tree: ast.AST) -> set[int]:
+    """Run _docstring_ids."""
     ids: set[int] = set()
     for node in ast.walk(tree):
         if isinstance(
@@ -59,6 +60,7 @@ def _docstring_ids(tree: ast.AST) -> set[int]:
 
 
 def _skip_path(path: Path, root: Path) -> bool:
+    """Run _skip_path."""
     try:
         parts = path.relative_to(root).parts
     except ValueError:
@@ -69,6 +71,7 @@ def _skip_path(path: Path, root: Path) -> bool:
 
 
 def _allowed(path: Path, root: Path) -> bool:
+    """Run _allowed."""
     try:
         parts = path.relative_to(root).parts
     except ValueError:
@@ -77,6 +80,7 @@ def _allowed(path: Path, root: Path) -> bool:
 
 
 def scan_file(path: Path, root: Path) -> list[dict[str, object]]:
+    """Run scan_file."""
     if _allowed(path, root) or _skip_path(path, root):
         return []
     try:
@@ -111,6 +115,7 @@ def scan_file(path: Path, root: Path) -> list[dict[str, object]]:
 
 
 def iter_files(root: Path) -> list[Path]:
+    """Run iter_files."""
     return sorted(
         path
         for path in root.rglob("*.py")
@@ -119,6 +124,7 @@ def iter_files(root: Path) -> list[Path]:
 
 
 def _git_root(path: Path) -> Path:
+    """Run _git_root."""
     result = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"],
         cwd=path,
@@ -132,6 +138,7 @@ def _git_root(path: Path) -> Path:
 
 
 def _changed_lines(root: Path, base: str) -> dict[str, set[int]]:
+    """Run _changed_lines."""
     result = subprocess.run(
         [
             "git",
@@ -177,6 +184,7 @@ def _changed_lines(root: Path, base: str) -> dict[str, set[int]]:
 
 
 def main() -> int:
+    """Run main."""
     parser = argparse.ArgumentParser()
     parser.add_argument("root", nargs="?", default=".")
     parser.add_argument("--all", action="store_true")

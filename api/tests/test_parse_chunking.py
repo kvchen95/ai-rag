@@ -1,4 +1,4 @@
-"""切片：父子两级、尺寸边界、六项随行信息（§3.5 / 附录 A.3）。
+"""切片：父子两级、尺寸边界、六项随行信息（§3.5 / 附录 A.3）。.
 
 验收第三条是"切片字段缺失被校验拦截"。这条的可执行形式有两层：
 
@@ -40,6 +40,7 @@ ACL = Acl(is_public=False, allowed_depts=("fin",), allowed_roles=("staff",))
 
 
 def _chunk(**overrides: object) -> Chunk:
+    """Run _chunk."""
     base: dict[str, object] = {
         "chunk_id": "ch_aaaaaaaaaaaa",
         "doc_key": "policy/x",
@@ -77,7 +78,7 @@ PERMISSION_CASES = [
 def test_each_accompanying_field_is_enforced(
     field: str, overrides: dict[str, object]
 ) -> None:
-    """六项随行信息里每一项都要有反例：缺一项，后面就有一处功能不可用。"""
+    """六项随行信息里每一项都要有反例：缺一项，后面就有一处功能不可用。."""
     chunk = _chunk(**overrides)
     assert field in chunk.missing_fields()
     with pytest.raises(IncompleteChunk):
@@ -85,13 +86,14 @@ def test_each_accompanying_field_is_enforced(
 
 
 def test_complete_chunk_passes() -> None:
+    """Run test_complete_chunk_passes."""
     chunk = _chunk()
     assert chunk.missing_fields() == []
     assert chunk.require_complete() is chunk
 
 
 def test_acl_that_denies_everyone_is_rejected() -> None:
-    """既不是公开、又没有任何放行项 = 谁都看不到。
+    """既不是公开、又没有任何放行项 = 谁都看不到。.
 
     这几乎一定是漏填，而不是"真的谁都不许看"（真那样就不该入库）。
     数据库拦不住这条：`allowed_depts` 的空数组是合法值。
@@ -101,12 +103,13 @@ def test_acl_that_denies_everyone_is_rejected() -> None:
 
 
 def test_public_chunk_needs_no_depts_or_roles() -> None:
+    """Run test_public_chunk_needs_no_depts_or_roles."""
     chunk = _chunk(is_public=True, allowed_depts=(), allowed_roles=())
     assert chunk.missing_fields() == []
 
 
 def test_explicit_confidence_without_a_date_is_rejected() -> None:
-    """声称"这是原文显式时间"却拿不出日期 —— 时间过滤会把这个谎当成真。"""
+    """声称"这是原文显式时间"却拿不出日期 —— 时间过滤会把这个谎当成真。."""
     chunk = _chunk(
         effective_date=None, effective_year=None, date_confidence="explicit"
     )
@@ -114,6 +117,7 @@ def test_explicit_confidence_without_a_date_is_rejected() -> None:
 
 
 def test_inferred_confidence_without_a_date_is_fine() -> None:
+    """Run test_inferred_confidence_without_a_date_is_fine."""
     chunk = _chunk(
         effective_date=None, effective_year=None, date_confidence="inferred"
     )
@@ -121,28 +125,31 @@ def test_inferred_confidence_without_a_date_is_fine() -> None:
 
 
 def test_effective_year_must_match_the_date() -> None:
-    """派生列必须与日期自洽，否则时间过滤会按错误的年去筛。"""
+    """派生列必须与日期自洽，否则时间过滤会按错误的年去筛。."""
     chunk = _chunk(effective_date=20250301, effective_year=2024)
     assert "effective_year(mismatched)" in chunk.missing_fields()
 
 
 def test_table_chunk_without_md_is_rejected() -> None:
+    """Run test_table_chunk_without_md_is_rejected."""
     chunk = _chunk(chunk_type="table", table_md=None)
     assert "table_md" in chunk.missing_fields()
 
 
 def test_figure_chunk_without_image_path_is_rejected() -> None:
+    """Run test_figure_chunk_without_image_path_is_rejected."""
     chunk = _chunk(chunk_type="figure", image_path=None)
     assert "image_path" in chunk.missing_fields()
 
 
 def test_self_parent_is_rejected() -> None:
+    """Run test_self_parent_is_rejected."""
     chunk = _chunk(parent_id="ch_aaaaaaaaaaaa")
     assert "parent_id(self)" in chunk.missing_fields()
 
 
 def test_validate_reports_the_total_count() -> None:
-    """一次报全：修一条跑一次会让人以为是"修完这条还有下一条"。"""
+    """一次报全：修一条跑一次会让人以为是"修完这条还有下一条"。."""
     bad = [_chunk(page_num=0), _chunk(version_id="")]
     with pytest.raises(IncompleteChunk) as excinfo:
         validate_chunks(bad)
@@ -151,7 +158,7 @@ def test_validate_reports_the_total_count() -> None:
 
 
 def test_as_row_matches_the_database_columns() -> None:
-    """`as_row()` 的键必须与迁移的列名逐字一致——它直接喂 INSERT。
+    """`as_row()` 的键必须与迁移的列名逐字一致——它直接喂 INSERT。.
 
     `table_cells` 与 `notes` 在 004 迁移里补上了（001 漏了）：前者是 §3.3
     "三份表示"的第三份（校验阶段对齐数字用），后者是"这条证据的来源"。
@@ -185,6 +192,7 @@ def test_as_row_matches_the_database_columns() -> None:
 
 
 def test_as_row_refuses_incomplete_chunks() -> None:
+    """Run test_as_row_refuses_incomplete_chunks."""
     with pytest.raises(IncompleteChunk):
         _chunk(page_num=0).as_row()
 
@@ -193,13 +201,14 @@ def test_as_row_refuses_incomplete_chunks() -> None:
 
 
 def test_chunk_id_is_deterministic() -> None:
-    """同一份文件重跑必须得到同一批编号，否则"两次解析是否一致"没法比。"""
+    """同一份文件重跑必须得到同一批编号，否则"两次解析是否一致"没法比。."""
     first = chunk_id_for("v#abc", page_num=2, kind="child", index=5, part=0)
     second = chunk_id_for("v#abc", page_num=2, kind="child", index=5, part=0)
     assert first == second
 
 
 def test_chunk_id_differs_on_every_input() -> None:
+    """Run test_chunk_id_differs_on_every_input."""
     base = chunk_id_for("v#abc", page_num=2, kind="child", index=5)
     variants = {
         chunk_id_for("v#xyz", page_num=2, kind="child", index=5),
@@ -212,7 +221,7 @@ def test_chunk_id_differs_on_every_input() -> None:
 
 
 def test_chunk_id_is_filesystem_safe() -> None:
-    """编号要进 `figures/{chunk_id}.webp` 这个**文件路径**。
+    """编号要进 `figures/{chunk_id}.webp` 这个**文件路径**。.
 
     第一版用 `version_id + 序号` 拼，得到 `policy/travel-cn#a91f#c001000-000`
     ——目录不存在，`#` 在 URL 里还是 fragment 分隔符，取图必 404。
@@ -227,6 +236,7 @@ def test_chunk_id_is_filesystem_safe() -> None:
 
 
 def test_image_path_is_relative_and_matches_the_doc_shape() -> None:
+    """Run test_image_path_is_relative_and_matches_the_doc_shape."""
     assert image_path_for("ch_abc123def456") == "figures/ch_abc123def456.webp"
 
 
@@ -234,7 +244,7 @@ def test_image_path_is_relative_and_matches_the_doc_shape() -> None:
 
 
 def _long_text(chars: int) -> str:
-    """造一段可切的长文本：**每句都不一样**。
+    """造一段可切的长文本：**每句都不一样**。.
 
     第一版用的是同一句话重复，结果测试里的"重叠长度探测"会在重复内容上匹配到
     一个假的长重叠（496 字），把"切分丢字"变成假阳性。夹具必须可辨识。
@@ -248,16 +258,18 @@ def _long_text(chars: int) -> str:
 
 
 def test_short_text_is_one_piece() -> None:
+    """Run test_short_text_is_one_piece."""
     assert build_child_pieces("短句。") == ["短句。"]
 
 
 def test_pieces_respect_the_upper_bound() -> None:
+    """Run test_pieces_respect_the_upper_bound."""
     pieces = build_child_pieces(_long_text(4000))
     assert all(len(piece) <= CHILD_MAX_CHARS for piece in pieces)
 
 
 def test_pieces_cover_the_whole_text() -> None:
-    """切分不能丢字：拼起来（去重叠）必须等于原文。"""
+    """切分不能丢字：拼起来（去重叠）必须等于原文。."""
     text = _long_text(3000)
     pieces = build_child_pieces(text)
     rebuilt = pieces[0]
@@ -271,7 +283,7 @@ def test_pieces_cover_the_whole_text() -> None:
 
 
 def _overlap(built: str, piece: str) -> int:
-    """`piece` 与已拼好的文本的重叠长度（最长公共后缀/前缀）。
+    """`piece` 与已拼好的文本的重叠长度（最长公共后缀/前缀）。.
 
     只看最后 `CHILD_MAX_CHARS` 个字符：再长的重叠不可能是"回退 64 字"造成的，
     而且重复文本会让暴力搜索匹配到一个假的长重叠。
@@ -284,6 +296,7 @@ def _overlap(built: str, piece: str) -> int:
 
 
 def test_overlap_is_about_the_configured_size() -> None:
+    """Run test_overlap_is_about_the_configured_size."""
     pieces = build_child_pieces(_long_text(2000))
     assert len(pieces) >= 4
     for previous, current in zip(pieces, pieces[1:], strict=False):
@@ -292,7 +305,7 @@ def test_overlap_is_about_the_configured_size() -> None:
 
 
 def test_absurd_overlap_degrades_to_at_most_half_a_piece() -> None:
-    """`overlap` 配得比 `max_chars` 还大时，钳到一半，绝不退化成"每字一片"。
+    """`overlap` 配得比 `max_chars` 还大时，钳到一半，绝不退化成"每字一片"。.
 
     第一版只在 `overlap >= max_chars` 时取 1 字步进，实测把 1500 字切成 1401 片
     ——不是死循环，但等价于"每字一片"，既慢又完全丢掉语义。
@@ -303,11 +316,12 @@ def test_absurd_overlap_degrades_to_at_most_half_a_piece() -> None:
 
 
 def test_zero_max_chars_returns_nothing() -> None:
-    """`max_chars=0` 是无效配置，返回空列表而不是切出单个字符。"""
+    """`max_chars=0` 是无效配置，返回空列表而不是切出单个字符。."""
     assert build_child_pieces("abc", max_chars=0, overlap=64) == []
 
 
 def test_empty_text_yields_nothing() -> None:
+    """Run test_empty_text_yields_nothing."""
     assert build_child_pieces("   ") == []
 
 
@@ -325,11 +339,12 @@ def test_empty_text_yields_nothing() -> None:
 def test_split_sentences_keeps_the_punctuation(
     text: str, expected: list[str]
 ) -> None:
+    """Run test_split_sentences_keeps_the_punctuation."""
     assert split_sentences(text) == expected
 
 
 def test_split_long_text_prefers_soft_break_points() -> None:
-    """硬切只在单句超长时发生，且尽量在逗号/空格处断。
+    """硬切只在单句超长时发生，且尽量在逗号/空格处断。.
 
     把 `CNY 500` 切成 `CNY 5` + `00` 会让数字检索彻底失效。
     """
@@ -343,13 +358,14 @@ def test_split_long_text_prefers_soft_break_points() -> None:
 
 
 def test_parent_slices_respect_the_upper_bound() -> None:
+    """Run test_parent_slices_respect_the_upper_bound."""
     text = "\n".join(_long_text(400) for _ in range(8))
     pieces = parent_slices(text, max_chars=PARENT_MAX_CHARS)
     assert all(len(piece) <= PARENT_MAX_CHARS for piece in pieces)
 
 
 def test_parent_slices_prefer_paragraph_boundaries() -> None:
-    """§3.5：按章节标题切，不按字数硬切。"""
+    """§3.5：按章节标题切，不按字数硬切。."""
     paragraphs = [f"段落{i}：" + "内容" * 60 for i in range(6)]
     pieces = parent_slices("\n".join(paragraphs), max_chars=PARENT_MAX_CHARS)
     for piece in pieces:
@@ -358,7 +374,7 @@ def test_parent_slices_prefer_paragraph_boundaries() -> None:
 
 
 def test_parent_slices_split_an_oversized_paragraph_again() -> None:
-    """一章超过 2048 字时要再切一层（§3.5 边界表）。"""
+    """一章超过 2048 字时要再切一层（§3.5 边界表）。."""
     single = "非常长的段落。" * 800
     pieces = parent_slices(single, max_chars=PARENT_MAX_CHARS)
     assert len(pieces) > 1
@@ -369,7 +385,7 @@ def test_parent_slices_split_an_oversized_paragraph_again() -> None:
 
 
 def _region(text: str, *, lines: int = 3) -> Region:
-    """造一个有 `lines` 行的正文区域（正文按空格均分到各行）。"""
+    """造一个有 `lines` 行的正文区域（正文按空格均分到各行）。."""
     words = text.split(" ")
     per_line = max(1, len(words) // lines)
     chunks = [
@@ -400,6 +416,7 @@ def _region(text: str, *, lines: int = 3) -> Region:
 
 
 def test_parent_and_child_relationship_is_well_formed() -> None:
+    """Run test_parent_and_child_relationship_is_well_formed."""
     from api.parse.chunking import build_child_chunks, build_parent_chunk
     from api.parse.dates import BusinessDate
 
@@ -437,6 +454,7 @@ def test_parent_and_child_relationship_is_well_formed() -> None:
 
 
 def test_child_chunks_need_matching_id_count() -> None:
+    """Run test_child_chunks_need_matching_id_count."""
     from api.parse.chunking import build_child_chunks
     from api.parse.dates import BusinessDate
 
@@ -456,12 +474,13 @@ def test_child_chunks_need_matching_id_count() -> None:
 
 
 def test_child_piece_count_matches_the_pieces() -> None:
+    """Run test_child_piece_count_matches_the_pieces."""
     region = _region(_long_text(1200), lines=4)
     assert child_piece_count(region) == len(build_child_pieces(region.text))
 
 
 def test_child_bbox_covers_only_its_own_lines() -> None:
-    """子片的 bbox 取"它覆盖的那几行"的并集，不是整段。
+    """子片的 bbox 取"它覆盖的那几行"的并集，不是整段。.
 
     整段的 bbox 会让前端高亮框住一大块，用户看不出是哪一句。
     """
@@ -495,6 +514,7 @@ def test_child_bbox_covers_only_its_own_lines() -> None:
 
 
 def test_table_chunk_keeps_all_three_representations() -> None:
+    """Run test_table_chunk_keeps_all_three_representations."""
     from api.parse.chunking import build_table_chunk
     from api.parse.dates import BusinessDate
 

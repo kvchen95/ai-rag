@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+from api.resources import messages as msg
+
 
 class MineruError(RuntimeError):
     """MinerU 请求失败或返回无法解释的状态。."""
@@ -53,7 +55,7 @@ class MineruClient:
     ) -> None:
         """Initialize the instance."""
         if not token:
-            raise ValueError("MINERU_API_KEY 不能为空")
+            raise ValueError(msg.MINERU_KEY_EMPTY)
         self.base_url = base_url.rstrip("/")
         self.token = token
         self.timeout_s = timeout_s
@@ -97,11 +99,15 @@ class MineruClient:
             detail = exc.read()[:300].decode("utf-8", "replace")
             raise MineruError(f"MinerU HTTP {exc.code}: {detail}") from exc
         except urllib.error.URLError as exc:  # pragma: no cover - 网络不可达
-            raise MineruError(f"MinerU 网络错误：{exc.reason}") from exc
+            raise MineruError(
+                msg.MINERU_NETWORK_ERROR.format(reason=exc.reason)
+            ) from exc
         try:
             parsed = json.loads(body.decode("utf-8"))
         except (ValueError, UnicodeDecodeError) as exc:  # pragma: no cover
-            raise MineruError(f"MinerU 返回非 JSON: {exc}") from exc
+            raise MineruError(
+                msg.MINERU_NOT_JSON.format(error=exc)
+            ) from exc
         if parsed.get("code") != 0:
             raise MineruError(
                 f"MinerU code={parsed.get('code')}: {parsed.get('msg')} "
@@ -120,13 +126,15 @@ class MineruClient:
                 "language": "ch",
             },
         )
-        data = response.get("data") or {}
+        data = response.get("data")
+        if data is None:
+            data = {}
         batch_id = data.get("batch_id")
-        urls = data.get("file_urls") or []
+        urls = data.get("file_urls")
+        if urls is None:
+            urls = []
         if not batch_id or len(urls) != 1:
-            raise MineruError(
-                "申请上传链接失败：batch_id 或 file_urls 形状不对"
-            )
+            raise MineruError(msg.MINERU_UPLOAD_SHAPE)
         self._put_binary(urls[0], path.read_bytes())
         return str(batch_id)
 
@@ -151,7 +159,11 @@ class MineruClient:
             response = conn.getresponse()
             response.read()
             if response.status not in (200, 201):
-                raise MineruError(f"上传 PDF 失败：HTTP {response.status}")
+                raise MineruError(
+                    msg.MINERU_UPLOAD_FAILED.format(
+                        status=response.status
+                    )
+                )
         finally:
             conn.close()
 
@@ -160,23 +172,32 @@ class MineruClient:
         deadline = time.monotonic() + self.poll_timeout_s
         while True:
             response = self._api(f"/extract-results/batch/{batch_id}")
-            results = ((response.get("data") or {}).get("extract_result")) or []
+            body = response.get("data")
+            if body is None:
+                body = {}
+            results = body.get("extract_result")
+            if results is None:
+                results = []
             if not results:
-                raise MineruError("批量查询结果里没有 extract_result")
+                raise MineruError(msg.MINERU_NO_EXTRACT_RESULT)
             item = results[0]
             state = item.get("state")
             if state == "done":
                 url = item.get("full_zip_url")
                 if not url:
-                    raise MineruError("done 但没有 full_zip_url")
+                    raise MineruError(msg.MINERU_DONE_NO_ZIP)
                 return str(url)
             if state == "failed":
                 raise MineruError(
-                    f"MinerU 解析失败：{item.get('err_msg') or '未知原因'}"
+                    msg.MINERU_PARSE_FAILED.format(
+                        reason=item.get("err_msg") or msg.MINERU_UNKNOWN_REASON
+                    )
                 )
             if time.monotonic() >= deadline:
                 raise MineruError(
-                    f"轮询超时（{self.poll_timeout_s:.0f}s），最后状态 {state}"
+                    msg.MINERU_POLL_TIMEOUT.format(
+                        timeout=self.poll_timeout_s, state=state
+                    )
                 )
             time.sleep(self.poll_interval_s)
 
@@ -188,9 +209,13 @@ class MineruClient:
             ) as response:
                 return response.read()
         except urllib.error.HTTPError as exc:  # pragma: no cover
-            raise MineruError(f"下载解析结果失败：HTTP {exc.code}") from exc
+            raise MineruError(
+                msg.MINERU_DOWNLOAD_HTTP.format(code=exc.code)
+            ) from exc
         except urllib.error.URLError as exc:  # pragma: no cover
-            raise MineruError(f"下载解析结果失败：{exc.reason}") from exc
+            raise MineruError(
+                msg.MINERU_DOWNLOAD_ERROR.format(reason=exc.reason)
+            ) from exc
 
     def download(self, url: str) -> bytes:
         """Run download."""

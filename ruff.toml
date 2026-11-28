@@ -31,9 +31,6 @@ known-first-party = ["api"]
 # Prompt/resource files intentionally hold long prose.
 "api/prompts/**" = ["E501"]
 "api/resources/**" = ["E501"]
-# Test and tooling modules are not public library APIs.
-"api/tests/**" = ["D100", "D101", "D102", "D103", "D107", "D415"]
-"scripts/**" = ["D100", "D101", "D102", "D103", "D107"]
 
 [lint.flake8-tidy-imports.banned-api]
 "api.llm_json".msg = "deterministic modules must not import the generation model"

@@ -42,7 +42,7 @@ def scroll_rows(
             with_vectors=False,
         )
         for point in points:
-            payload = dict(point.payload or {})
+            payload = dict(point.payload if point.payload else {})
             chunk_id = payload.get("chunk_id")
             if chunk_id:
                 rows[str(chunk_id)] = payload

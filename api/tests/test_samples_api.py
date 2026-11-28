@@ -1,4 +1,4 @@
-"""样本与切片图两条只读接口的契约。
+"""样本与切片图两条只读接口的契约。.
 
 覆盖 `/api/v1/samples/{doc_key}.pdf` 与
 `/api/v1/chunks/{chunk_id}/figure`。
@@ -35,7 +35,7 @@ FIN_HEADERS = {
 
 
 class FakePg:
-    """只回答两个问题：这份文档可见吗、这个切片可见吗。"""
+    """只回答两个问题：这份文档可见吗、这个切片可见吗。."""
 
     def __init__(
         self,
@@ -43,31 +43,36 @@ class FakePg:
         visible: bool = True,
         image_path: str | None = "figures/ch_1.webp",
     ) -> None:
+        """Initialize the instance."""
         self.visible = visible
         self.image_path = image_path
         self.queries: list[str] = []
 
     def fetch_one(self, sql: str, params: Any = None) -> dict[str, Any] | None:
+        """Run fetch_one."""
         self.queries.append(sql)
         if "FROM chunks" in sql:
             return {"image_path": self.image_path} if self.image_path else None
         return {"?column?": 1} if self.visible else None
 
     def fetch_all(self, sql: str, params: Any = None) -> list[dict[str, Any]]:
+        """Run fetch_all."""
         self.queries.append(sql)
         return []
 
     def execute(
         self, sql: str, params: Any = None
     ) -> int:  # pragma: no cover - 只读路由
+        """Run execute."""
         raise AssertionError("这些接口不许写库")
 
     def ping(self, timeout_s: float | None = None) -> dict[str, Any]:
-        """/healthz 会调用它；这些用例不测健康检查，给个固定形状即可。"""
+        """/healthz 会调用它；这些用例不测健康检查，给个固定形状即可。."""
         return {"ok": True, "latency_ms": 0.0, "error": None}
 
 
 def _client(tmp_path: Path, pg: FakePg) -> TestClient:
+    """Run _client."""
     settings = make_settings(
         AUTH_MODE="mock_header",
         INGEST_SAMPLES_DIR=str(tmp_path / "samples"),
@@ -78,6 +83,7 @@ def _client(tmp_path: Path, pg: FakePg) -> TestClient:
 
 @pytest.fixture()
 def samples_root(tmp_path: Path) -> Path:
+    """Run samples_root."""
     root = tmp_path / "samples"
     (root / "policy").mkdir(parents=True)
     (root / "policy" / "travel-cn.pdf").write_bytes(b"%PDF-1.4\n% sample\n")
@@ -87,6 +93,7 @@ def samples_root(tmp_path: Path) -> Path:
 def test_serves_the_pdf_when_visible(
     samples_root: Path, tmp_path: Path
 ) -> None:
+    """Run test_serves_the_pdf_when_visible."""
     with _client(tmp_path, FakePg(visible=True)) as client:
         response = client.get(
             "/api/v1/samples/policy/travel-cn.pdf", headers=FIN_HEADERS
@@ -99,6 +106,7 @@ def test_serves_the_pdf_when_visible(
 def test_404_when_the_sample_file_is_missing(
     samples_root: Path, tmp_path: Path
 ) -> None:
+    """Run test_404_when_the_sample_file_is_missing."""
     with _client(tmp_path, FakePg(visible=True)) as client:
         response = client.get(
             "/api/v1/samples/policy/expense-cn.pdf", headers=FIN_HEADERS
@@ -114,6 +122,7 @@ def test_404_when_the_sample_file_is_missing(
 def test_403_when_the_identity_cannot_see_the_document(
     samples_root: Path, tmp_path: Path
 ) -> None:
+    """Run test_403_when_the_identity_cannot_see_the_document."""
     with _client(tmp_path, FakePg(visible=False)) as client:
         response = client.get(
             "/api/v1/samples/policy/travel-cn.pdf", headers=FIN_HEADERS
@@ -126,6 +135,7 @@ def test_403_when_the_identity_cannot_see_the_document(
 def test_401_before_touching_the_disk(
     samples_root: Path, tmp_path: Path
 ) -> None:
+    """Run test_401_before_touching_the_disk."""
     pg = FakePg(visible=True)
     with _client(tmp_path, pg) as client:
         response = client.get("/api/v1/samples/policy/travel-cn.pdf")
@@ -144,6 +154,7 @@ def test_401_before_touching_the_disk(
 def test_path_traversal_is_a_404(
     doc_key: str, samples_root: Path, tmp_path: Path
 ) -> None:
+    """Run test_path_traversal_is_a_404."""
     with _client(tmp_path, FakePg(visible=True)) as client:
         response = client.get(
             f"/api/v1/samples/{doc_key}.pdf", headers=FIN_HEADERS
@@ -154,6 +165,7 @@ def test_path_traversal_is_a_404(
 def test_figure_served_when_the_webp_exists(
     samples_root: Path, tmp_path: Path
 ) -> None:
+    """Run test_figure_served_when_the_webp_exists."""
     figures = tmp_path / "figures"
     figures.mkdir()
     (figures / "ch_1.webp").write_bytes(b"RIFFxxxxWEBPVP8 ")
@@ -169,6 +181,7 @@ def test_figure_served_when_the_webp_exists(
 def test_figure_404_when_the_chunk_has_no_image(
     samples_root: Path, tmp_path: Path
 ) -> None:
+    """Run test_figure_404_when_the_chunk_has_no_image."""
     with _client(tmp_path, FakePg(visible=True, image_path=None)) as client:
         response = client.get("/api/v1/chunks/ch_2/figure", headers=FIN_HEADERS)
     assert response.status_code == 404
@@ -178,6 +191,7 @@ def test_figure_404_when_the_file_was_never_written(
     samples_root: Path, tmp_path: Path
 ) -> None:
     # 库里有 image_path，盘上没有文件（回收脚本删了图但没删行）。
+    """Run test_figure_404_when_the_file_was_never_written."""
     with _client(
         tmp_path, FakePg(visible=True, image_path="figures/ch_9.webp")
     ) as client:
@@ -189,6 +203,7 @@ def test_figure_404_when_the_file_was_never_written(
 def test_figure_403_when_the_chunk_is_not_visible(
     samples_root: Path, tmp_path: Path
 ) -> None:
+    """Run test_figure_403_when_the_chunk_is_not_visible."""
     figures = tmp_path / "figures"
     figures.mkdir()
     (figures / "ch_1.webp").write_bytes(b"RIFFxxxx")

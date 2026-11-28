@@ -19,10 +19,15 @@ from __future__ import annotations
 import os
 import sys
 
+if __package__:
+    from .resources.b2_explain_acl_probe_msgs import MESSAGES as M
+else:  # run as a script: python3 scripts/b2_explain_acl_probe.py
+    from resources.b2_explain_acl_probe_msgs import MESSAGES as M
+
 try:
     import psycopg
 except ImportError:
-    print("ERROR: 需要 psycopg（在 api 容器里跑）", file=sys.stderr)
+    print(M["PRINT_01"], file=sys.stderr)
     sys.exit(3)
 
 DSN = (os.getenv("DATABASE_URL") or "").replace(
@@ -39,16 +44,16 @@ QUERY = (
         )
 
 TRIALS = [
-    ("A 现状", []),
+    (M["TRIALS_01"], []),
     (
-        "B +is_public 部分索引",
+        M["TRIALS_02"],
         [
             "CREATE INDEX ix_tmp_pub ON chunks (is_public) WHERE status ="
             " 'active'"
         ],
     ),
     (
-        "C +depts/roles 部分索引（已有，重建为部分索引）",
+        M["TRIALS_03"],
         [
             "CREATE INDEX ix_tmp_depts ON chunks USING gin (allowed_depts)"
             " WHERE status = 'active'",
@@ -57,7 +62,7 @@ TRIALS = [
         ],
     ),
     (
-        "D B+C 全套",
+        M["TRIALS_04"],
         [
             "CREATE INDEX ix_tmp_pub ON chunks (is_public) WHERE status ="
             " 'active'",
@@ -77,6 +82,7 @@ DROPS = [
 
 
 def plan(conn) -> tuple[str, float, str]:
+    """Run plan."""
     row = conn.execute(
         "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) " + QUERY
     ).fetchone()
@@ -84,6 +90,7 @@ def plan(conn) -> tuple[str, float, str]:
     root = doc["Plan"]
 
     def walk(node, acc):
+        """Run walk."""
         acc.append(node.get("Node Type", ""))
         for child in node.get("Plans", []) or []:
             walk(child, acc)
@@ -94,14 +101,15 @@ def plan(conn) -> tuple[str, float, str]:
 
 
 def main() -> int:
+    """Run main."""
     if not DSN:
-        print("ERROR: DATABASE_URL 未设置", file=sys.stderr)
+        print(M["PRINT_02"], file=sys.stderr)
         return 2
     with psycopg.connect(DSN, autocommit=True) as conn:
         total = conn.execute("SELECT count(*) FROM chunks").fetchone()[0]
         print(f"chunks={total}")
         if total < 5000:
-            print("行数太少，计划器一律 Seq Scan，结论不可信。先灌种子数据。")
+            print(M["PRINT_03"])
             return 1
         for name, creates in TRIALS:
             with conn.cursor() as cur:
@@ -110,12 +118,12 @@ def main() -> int:
                 cur.execute("ANALYZE chunks")
                 kinds, ms, rows = plan(conn)
                 print(
-                    f"{name}\n  节点: {kinds}\n"
-                    f"  时间: {ms:.2f}ms  plan_rows: {rows}"
+                    f"{name}{M['PRINT_04']}{kinds}"
+                    f"{M['PRINT_05']}{ms:.2f}ms  plan_rows: {rows}"
                 )
                 for sql in DROPS:
                     cur.execute(sql)
-        print("\n临时索引已全部删除")
+        print(M["PRINT_06"])
     return 0
 
 

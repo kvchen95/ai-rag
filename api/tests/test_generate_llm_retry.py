@@ -1,4 +1,4 @@
-"""LLM 网关 resilience 回归：共享 keep-alive 连接池 + 有界重试。
+"""LLM 网关 resilience 回归：共享 keep-alive 连接池 + 有界重试。.
 
 根因（2026-11-24 实测）：LlmClient.complete 每次调用都
 `with httpx.Client(...)`，
@@ -20,24 +20,29 @@ from api.generate.llm import (
 
 
 class _FakeResponse:
+    """_FakeResponse."""
     def __init__(self, status_code: int, payload: dict) -> None:
+        """Initialize the instance."""
         self.status_code = status_code
         self._payload = payload
         self.text = str(payload)[:200]
 
     def json(self) -> dict:
+        """Run json."""
         return self._payload
 
 
 class _ScriptedClient:
-    """按脚本依次返回 response 或抛异常；记录调用次数。"""
+    """按脚本依次返回 response 或抛异常；记录调用次数。."""
 
     def __init__(self, *steps) -> None:
+        """Initialize the instance."""
         self.steps = list(steps)
         self.calls = 0
         self.is_closed = False
 
     def post(self, path, *, json=None, timeout=None):
+        """Run post."""
         self.calls += 1
         step = self.steps.pop(0)
         if isinstance(step, BaseException):
@@ -45,6 +50,7 @@ class _ScriptedClient:
         return step
 
     def close(self) -> None:
+        """Run close."""
         self.is_closed = True
 
 
@@ -63,6 +69,7 @@ _OK = _FakeResponse(
 
 
 def _client(**kw) -> LlmClient:
+    """Run _client."""
     return LlmClient(
         base_url="https://gw.example/v1",
         model="m",
@@ -74,6 +81,7 @@ def _client(**kw) -> LlmClient:
 
 
 def test_retries_transient_ssl_eof_then_succeeds(monkeypatch):
+    """Run test_retries_transient_ssl_eof_then_succeeds."""
     fake = _ScriptedClient(
         httpx.ConnectError(
             "[SSL: UNEXPECTED_EOF_WHILE_READING] "
@@ -92,6 +100,7 @@ def test_retries_transient_ssl_eof_then_succeeds(monkeypatch):
 
 
 def test_does_not_retry_4xx(monkeypatch):
+    """Run test_does_not_retry_4xx."""
     fake = _ScriptedClient(_FakeResponse(400, {"error": "bad request"}))
     monkeypatch.setattr(llm_mod, "_shared_client", lambda *a, **k: fake)
     with pytest.raises(GenerationRejected):
@@ -100,6 +109,7 @@ def test_does_not_retry_4xx(monkeypatch):
 
 
 def test_stops_at_max_attempts(monkeypatch):
+    """Run test_stops_at_max_attempts."""
     err = httpx.ConnectError("SSL EOF")
     fake = _ScriptedClient(err, err, err, err, err)
     monkeypatch.setattr(llm_mod, "_shared_client", lambda *a, **k: fake)
@@ -109,6 +119,7 @@ def test_stops_at_max_attempts(monkeypatch):
 
 
 def test_shared_client_reuses_pool_for_same_config():
+    """Run test_shared_client_reuses_pool_for_same_config."""
     llm_mod.reset_shared_clients()
     a = llm_mod._shared_client("https://gw.example/v1", "k", 30.0)
     b = llm_mod._shared_client("https://gw.example/v1/", "k", 30.0)

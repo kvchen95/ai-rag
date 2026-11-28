@@ -1,4 +1,4 @@
-"""对账：以 PG 为准覆盖向量库（详细设计.md §4.2 / §4.3）。
+"""对账：以 PG 为准覆盖向量库（详细设计.md §4.2 / §4.3）。.
 
 验收原句是"同步失败可对账修复"。这句话要成立，得逐条证明四件事：
 
@@ -30,7 +30,7 @@ pytestmark = pytest.mark.integration
 
 
 def _seed_active(conn, store, embedder, *, pool, key: str) -> tuple[str, str]:
-    """建一个已上线**且已同步完**的版本，返回 (version_id, doc_key)。
+    """建一个已上线**且已同步完**的版本，返回 (version_id, doc_key)。.
 
     翻牌之后必须跑一次 drain：翻牌只写“期望状态”，Qdrant 里的 payload
     还是 pending。不 drain 就做对账，第一条断言会先撞上这处真实的
@@ -52,7 +52,7 @@ def _seed_active(conn, store, embedder, *, pool, key: str) -> tuple[str, str]:
 def test_dry_run_reports_status_mismatch_without_touching_anything(
     conn, store, embedder, pool
 ) -> None:
-    """状态漂移：dry-run 必须列出来，而且**一个字节都不改**。"""
+    """状态漂移：dry-run 必须列出来，而且**一个字节都不改**。."""
     v1, dk = _seed_active(conn, store, embedder, pool=pool, key="dryrun")
     # 直接改 Qdrant 的 payload：模拟同步漏掉一条
     chunk_id = sorted(chunk_rows(conn, v1))[0]
@@ -72,7 +72,7 @@ def test_dry_run_reports_status_mismatch_without_touching_anything(
 
 
 def test_dry_run_reports_missing_point(conn, store, embedder, pool) -> None:
-    """点丢了（被误删）也要能看见。"""
+    """点丢了（被误删）也要能看见。."""
     v1, dk = _seed_active(conn, store, embedder, pool=pool, key="missing")
     chunk_id = sorted(chunk_rows(conn, v1))[0]
     from scripts.qdrant_common import point_id_for
@@ -85,7 +85,7 @@ def test_dry_run_reports_missing_point(conn, store, embedder, pool) -> None:
 
 
 def test_dry_run_reports_orphan_point(conn, store, embedder, pool) -> None:
-    """Qdrant 有点、PG 没有（切片被删/版本被回收）→ 孤儿。"""
+    """Qdrant 有点、PG 没有（切片被删/版本被回收）→ 孤儿。."""
     v1, dk = _seed_active(conn, store, embedder, pool=pool, key="orphan")
     chunk_id = sorted(chunk_rows(conn, v1))[0]
     # 只删 PG 行（绕过回收流程，模拟"删库行时向量库不可用，点留在那里"）
@@ -101,7 +101,7 @@ def test_dry_run_reports_orphan_point(conn, store, embedder, pool) -> None:
 
 
 def test_dry_run_reports_version_mismatch(conn, store, embedder, pool) -> None:
-    """payload.version_id 与 PG 不一致要能看见。
+    """payload.version_id 与 PG 不一致要能看见。.
 
     **不自动修**：版本号错乱属于数据事故。
     """
@@ -135,6 +135,7 @@ def test_dry_run_reports_version_mismatch(conn, store, embedder, pool) -> None:
 
 
 def test_reconcile_heals_status_mismatch(conn, store, embedder, pool) -> None:
+    """Run test_reconcile_heals_status_mismatch."""
     v1, dk = _seed_active(conn, store, embedder, pool=pool, key="healstatus")
     chunk_id = sorted(chunk_rows(conn, v1))[0]
     store.set_status_by_chunk_ids([chunk_id], "deprecated")
@@ -153,7 +154,7 @@ def test_reconcile_heals_status_mismatch(conn, store, embedder, pool) -> None:
 def test_reconcile_heals_missing_point_without_calling_embedding(
     conn, store, embedder, pool, monkeypatch
 ) -> None:
-    """补点用 PG 里已存的 embedding_dense，**不调编码服务**。
+    """补点用 PG 里已存的 embedding_dense，**不调编码服务**。.
 
     这条很实际：编码服务挂了的时候，"向量库丢了点"仍然可修（§4.2 的分工）。
     """
@@ -164,6 +165,7 @@ def test_reconcile_heals_missing_point_without_calling_embedding(
     store.delete_points([point_id_for(chunk_id)])
 
     def _boom(*_args, **_kwargs):
+        """Run _boom."""
         raise AssertionError("reconcile must not call the embedding service")
 
     monkeypatch.setattr(QdrantVectorStore, "upsert", QdrantVectorStore.upsert)
@@ -179,6 +181,7 @@ def test_reconcile_heals_missing_point_without_calling_embedding(
 
 
 def test_reconcile_heals_orphan_point(conn, store, embedder, pool) -> None:
+    """Run test_reconcile_heals_orphan_point."""
     v1, dk = _seed_active(conn, store, embedder, pool=pool, key="healorphan")
     chunk_id = sorted(chunk_rows(conn, v1))[0]
     conn.execute("DELETE FROM chunks WHERE chunk_id = %s", (chunk_id,))
@@ -196,7 +199,7 @@ def test_reconcile_heals_orphan_point(conn, store, embedder, pool) -> None:
 
 
 def test_reconcile_report_is_json_safe(conn, store, embedder, pool) -> None:
-    """报告要能直接进 JSON（运维脚本/日志都要它）。"""
+    """报告要能直接进 JSON（运维脚本/日志都要它）。."""
     import json
 
     v1, dk = _seed_active(conn, store, embedder, pool=pool, key="jsonsafe")
@@ -211,7 +214,7 @@ def test_reconcile_report_is_json_safe(conn, store, embedder, pool) -> None:
 def test_missing_dense_vector_stays_unfixed_with_a_reason(
     conn, store, embedder, pool
 ) -> None:
-    """PG 里没有向量、Qdrant 又丢了点：修不了，必须留在 remaining 并说明原因。
+    """PG 里没有向量、Qdrant 又丢了点：修不了，必须留在 remaining 并说明原因。.
 
     不假装修好是关键：`remaining == 0` 是"真的干净"的判据，如果这里悄悄放过，
     线上就永远有一个召不回的切片而没人知道。
@@ -243,7 +246,7 @@ def test_missing_dense_vector_stays_unfixed_with_a_reason(
 
 
 def test_drift_log_records_and_clears(conn, store, embedder, pool) -> None:
-    """修好之后，漂移账上那条 open 记录要被销账（不是留一堆假装还在漂）。"""
+    """修好之后，漂移账上那条 open 记录要被销账（不是留一堆假装还在漂）。."""
     v1, dk = _seed_active(conn, store, embedder, pool=pool, key="clearlog")
     chunk_id = sorted(chunk_rows(conn, v1))[0]
     store.set_status_by_chunk_ids([chunk_id], "deprecated")
@@ -284,7 +287,7 @@ def test_drift_log_records_and_clears(conn, store, embedder, pool) -> None:
 def test_reclaim_purges_only_versions_past_the_window(
     conn, store, embedder, pool, tmp_path
 ) -> None:
-    """24h 窗口：刚下线的版本不删，过窗口的才删。
+    """24h 窗口：刚下线的版本不删，过窗口的才删。.
 
     这是回滚门的实体：窗口内还能翻回来（§4.4），过窗口只能重跑。
     """
@@ -367,7 +370,7 @@ def test_reclaim_purges_only_versions_past_the_window(
 def test_reclaim_backfills_unknown_deprecated_at_instead_of_deleting(
     conn, store, embedder, tmp_path
 ) -> None:
-    """`deprecated_at IS NULL` 的行：补时间戳并跳过本轮，绝不"立刻删"。
+    """`deprecated_at IS NULL` 的行：补时间戳并跳过本轮，绝不"立刻删"。.
 
     这类行是别的模块直接改状态留下的。按"刚下线"处理最多晚一轮，按"已过期"处理
     会删掉一个还能回滚的版本——两者代价不对等。
@@ -407,6 +410,7 @@ def test_reclaim_backfills_unknown_deprecated_at_instead_of_deleting(
 def test_reclaim_dry_run_touches_nothing(
     conn, store, embedder, pool, tmp_path
 ) -> None:
+    """Run test_reclaim_dry_run_touches_nothing."""
     v1 = seed_document(
         conn, key="dryreclaim", version_tag="v1", version_status="active"
     )
@@ -456,7 +460,7 @@ def test_reclaim_dry_run_touches_nothing(
 
 
 def test_reclaim_deletes_figures(conn, store, embedder, tmp_path) -> None:
-    """切片图一起清；样本原件不删（§4.3）。"""
+    """切片图一起清；样本原件不删（§4.3）。."""
     v1 = seed_document(conn, key="figs", version_tag="v1")
     conn.commit()
     figures = tmp_path / "figures"
@@ -483,7 +487,7 @@ def test_reclaim_deletes_figures(conn, store, embedder, tmp_path) -> None:
 
 
 def test_reclaim_only_version_requires_deprecated(conn, tmp_path) -> None:
-    """定向回收也只接受 deprecated。
+    """定向回收也只接受 deprecated。.
 
     active 版本被“顺手删掉”是最坏的一种误操作。
     """

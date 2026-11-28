@@ -25,6 +25,11 @@ import sys
 import tempfile
 from pathlib import Path
 
+if __package__:
+    from .resources.b2_mutation_check_msgs import MESSAGES as M
+else:  # run as a script: python3 scripts/b2_mutation_check.py
+    from resources.b2_mutation_check_msgs import MESSAGES as M
+
 REPO = Path(__file__).resolve().parent.parent
 PYTEST_TARGETS = [
     "api/tests/test_filter_parity.py",
@@ -33,6 +38,7 @@ PYTEST_TARGETS = [
 
 
 def run(targets: list[str]) -> tuple[int, str]:
+    """Run run."""
     env = dict(os.environ)
     # 本机 ALL_PROXY 会把 127.0.0.1 也代理走，Qdrant 直连会失败。
     for var in ("ALL_PROXY", "all_proxy"):
@@ -56,20 +62,21 @@ def run(targets: list[str]) -> tuple[int, str]:
 
 
 def mutate(path: Path, old: str, new: str) -> None:
+    """Run mutate."""
     text = path.read_text(encoding="utf-8")
-    assert old in text, f"变异锚点未找到: {old[:60]!r} in {path.name}"
+    assert old in text, f"{M['MUTATE_01']}{old[:60]!r} in {path.name}"
     path.write_text(text.replace(old, new, 1), encoding="utf-8")
 
 
 MUTATIONS = [
     {
-        "name": "depts 交集改包含（&& → <@）",
+        "name": M["NAME_01"],
         "file": "api/filters.py",
         "old": 'or_parts.append(f"{prefix}allowed_depts && %s::text[]")',
         "new": 'or_parts.append(f"{prefix}allowed_depts <@ %s::text[]")',
     },
     {
-        "name": "Qdrant 去掉 date_confidence 条件",
+        "name": M["NAME_02"],
         "file": "api/filters.py",
         "old": """            must.append(
                 FieldCondition(
@@ -77,35 +84,34 @@ MUTATIONS = [
                     match=MatchValue(value=EXPLICIT_CONFIDENCE),
         )
             )""",
-        "new": "            pass  # 变异：去掉只认显式时间的条件",
+        "new": M["NEW_01"],
     },
     {
-        "name": "admin 仍带 public 分支",
+        "name": M["NAME_03"],
         "file": "api/filters.py",
         "old": """        if self.is_admin:
             return ()""",
-        "new": """        if self.is_admin:
-            return (BRANCH_PUBLIC,)  # 变异：改成只放宽到 public""",
+        "new": M["NEW_02"],
     },
     {
-        "name": "去掉版本兜底（§7.4）",
+        "name": M["NAME_04"],
         "file": "api/version_guard.py",
         "old": (
             "        if expected is not None and item.get(\"version_id\") "
             "== expected:\n"
             "            kept.append(item)"
         ),
-        "new": """        if True:  # 变异：不做版本兜底
-            kept.append(item)""",
+        "new": M["NEW_03"],
     },
 ]
 
 
 def main() -> int:
+    """Run main."""
     baseline_rc, baseline_tail = run(PYTEST_TARGETS)
     print(f"baseline rc={baseline_rc} :: {baseline_tail}")
     if baseline_rc != 0:
-        print("基线不绿，变异测试无意义。先修基线。")
+        print(M["PRINT_01"])
         return 1
 
     undetected: list[str] = []
@@ -120,7 +126,7 @@ def main() -> int:
             rc, tail = run(PYTEST_TARGETS)
             if rc == 0:
                 undetected.append(mut["name"])
-                print(f"[{mut['name']}] STILL GREEN（判据无效）:: {tail}")
+                print(f"[{mut['name']}{M['PRINT_02']}{tail}")
             else:
                 print(f"[{mut['name']}] RED (expected) :: {tail}")
         finally:
@@ -130,10 +136,10 @@ def main() -> int:
     restored_rc, restored_tail = run(PYTEST_TARGETS)
     print(f"restored rc={restored_rc} :: {restored_tail}")
     if restored_rc != 0:
-        print("还原后不绿：脚本改坏了文件，请检查 git diff。")
+        print(M["PRINT_03"])
         return 1
     if undetected:
-        print("\n以下变异没有被发现（判据无效）:")
+        print(M["PRINT_04"])
         for name in undetected:
             print(f"  - {name}")
         return 1

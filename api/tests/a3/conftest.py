@@ -1,4 +1,4 @@
-"""A3 测试夹具：真 PG + 真 Qdrant（每个用例一个独立集合）+ 真 TEI。
+"""A3 测试夹具：真 PG + 真 Qdrant（每个用例一个独立集合）+ 真 TEI。.
 
 三条原则：
 
@@ -38,15 +38,17 @@ NS = "a3test"
 
 
 def doc_key(name: str) -> str:
+    """Run doc_key."""
     return f"{NS}/{name}"
 
 
 def version_of(name: str, tag: str) -> str:
+    """Run version_of."""
     return f"{NS}/{name}#{tag}"
 
 
 def fake_hash(tag: str) -> str:
-    """64 位小写十六进制（`ck_doc_versions_hash_sha256` 的形状要求）。
+    """64 位小写十六进制（`ck_doc_versions_hash_sha256` 的形状要求）。.
 
     用 tag 派生而不是随机：同一 tag 在同一用例里重跑会撞上
     `uq_doc_versions_doc_hash`，
@@ -59,7 +61,7 @@ def fake_hash(tag: str) -> str:
 
 @pytest.fixture(scope="session")
 def a3_dsn() -> str:
-    """真 PG 的 DSN。
+    """真 PG 的 DSN。.
 
     名字不叫 `pg_dsn`：`api/tests/conftest.py` 已经有一个 module 作用域的同名
     fixture，
@@ -77,7 +79,7 @@ def a3_dsn() -> str:
 
 @pytest.fixture(scope="session")
 def migrated(a3_dsn: str) -> str:
-    """Schema 走项目唯一的迁移入口（不自己建表）。"""
+    """Schema 走项目唯一的迁移入口（不自己建表）。."""
     import subprocess
     import sys
 
@@ -103,6 +105,7 @@ def migrated(a3_dsn: str) -> str:
 
 @pytest.fixture(scope="session")
 def pool(migrated: str) -> ConnectionPool:
+    """Run pool."""
     database = ConnectionPool(
         conninfo=normalize_dsn(migrated), min_size=1, max_size=4, open=True
     )
@@ -114,6 +117,7 @@ def pool(migrated: str) -> ConnectionPool:
 
 @pytest.fixture(scope="session")
 def qdrant_reachable() -> str:
+    """Run qdrant_reachable."""
     if not QDRANT_URL:
         pytest.skip("QDRANT_URL is not set (integration needs a real Qdrant)")
     try:
@@ -128,6 +132,7 @@ def qdrant_reachable() -> str:
 
 @pytest.fixture(scope="session")
 def embedder() -> Embedder:
+    """Run embedder."""
     if not EMBEDDING_URL:
         pytest.skip(
             "EMBEDDING_BASE_URL is not set (integration needs a real TEI)"
@@ -151,7 +156,7 @@ def embedder() -> Embedder:
 
 @pytest.fixture(scope="function")
 def collection(qdrant_reachable: str) -> str:
-    """每个用例一个独立集合（dense 512/Cosine + bm25/idf + payload 索引）。
+    """每个用例一个独立集合（dense 512/Cosine + bm25/idf + payload 索引）。.
 
     集合形状不在这里手抄：直接用 `scripts/qdrant_common`（DA1 的唯一真源），
     否则测试集合与真实集合会用两套参数，测过的东西上不了线。
@@ -169,6 +174,7 @@ def collection(qdrant_reachable: str) -> str:
 
 @pytest.fixture(scope="function")
 def store(qdrant_reachable: str, collection: str) -> QdrantVectorStore:
+    """Run store."""
     s = QdrantVectorStore(base_url=qdrant_reachable, collection=collection)
     try:
         yield s
@@ -178,7 +184,7 @@ def store(qdrant_reachable: str, collection: str) -> QdrantVectorStore:
 
 @pytest.fixture(autouse=True)
 def _cleanup_rows(pool: ConnectionPool):
-    """用例前后清掉 `a3test/` 命名空间。
+    """用例前后清掉 `a3test/` 命名空间。.
 
     顺序：drift 账 -> 同步任务 -> 切片 -> 版本 -> 任务 -> 文档。
     `vector_sync_tasks` 挂了 `ON DELETE CASCADE` 到 doc_versions，但显式删一遍更
@@ -192,6 +198,7 @@ def _cleanup_rows(pool: ConnectionPool):
 
 
 def _purge(pool: ConnectionPool) -> None:
+    """Run _purge."""
     with pool.connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -219,7 +226,7 @@ def _purge(pool: ConnectionPool) -> None:
 
 @pytest.fixture(scope="function")
 def conn(pool: ConnectionPool):
-    """一条连接（事务由用例自己管）。多用例共享同一个 pool，连接是短借的。"""
+    """一条连接（事务由用例自己管）。多用例共享同一个 pool，连接是短借的。."""
     with pool.connection() as connection:
         yield connection
 
@@ -237,7 +244,7 @@ def seed_document(
     activate: bool = False,
     doc_status: str | None = None,
 ) -> str:
-    """建一个文档 + 一个版本 + 若干切片。返回 version_id。
+    """建一个文档 + 一个版本 + 若干切片。返回 version_id。.
 
     `chunks` 里每项可给：content_text（必填）、chunk_type、page_num、is_public、
     allowed_depts、allowed_roles、effective_date、date_confidence、status。
@@ -277,6 +284,7 @@ def seed_document(
 
 
 def default_chunks(key: str, tag: str) -> list[dict]:
+    """Run default_chunks."""
     return [
         {
             "chunk_id": f"ch_{NS}_{key}_{tag}_1".replace("/", "_"),
@@ -317,6 +325,7 @@ def _insert_chunk(
     status: str = "pending",
     parent_id: str | None = None,
 ) -> None:
+    """Run _insert_chunk."""
     effective_year = effective_date // 10000 if effective_date else None
     with conn.cursor() as cur:
         cur.execute(
@@ -354,6 +363,7 @@ def _insert_chunk(
 
 
 def chunk_rows(conn, version_id: str) -> dict[str, dict]:
+    """Run chunk_rows."""
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             "SELECT chunk_id, status, content_text, embedding_dense "
@@ -384,7 +394,7 @@ __all__ = [
 
 
 def insert_chunk(conn, **kwargs) -> None:
-    """给需要额外切片的用例（跨版本补片、造孤立切片）直接插一条。
+    """给需要额外切片的用例（跨版本补片、造孤立切片）直接插一条。.
 
     参数见 `_insert_chunk`：version_id / key / chunk_id / content_text 必填。
     """

@@ -353,7 +353,13 @@ class PageSpace:
         空间（未旋转页面）的宽高与它互换。实测：`/Rotate 90` 的 A4 页
         `page.width=842, height=595`，而内容流里的坐标范围是 0..595 × 0..842。
         """
-        rotation = normalize_rotation(int(getattr(page, "rotation", 0) or 0))
+        rotation = normalize_rotation(
+            int(
+                getattr(page, "rotation", 0)
+                if getattr(page, "rotation", 0)
+                else 0
+            )
+        )
         display_w, display_h = float(page.width), float(page.height)
         if rotation in (90, 270):
             return cls(rotation, display_h, display_w)

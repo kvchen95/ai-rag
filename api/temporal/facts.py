@@ -13,22 +13,14 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-_METRIC = re.compile(
-    r"营业收入|营收|营业成本|净利润|归母净利润|扣非净利润|研发投入|研发费用|"
-    r"经营活动产生的现金流量净额|总资产|所有者权益|毛利率|净利率|基本每股收益"
-)
-_CURRENT = (
-    "本期数",
-    "本期金额",
-    "本报告期",
-    "本报告期金额",
-    "期末余额",
-    "本期末",
-)
-_PRIOR = ("上年同期数", "上年同期金额", "上年同期", "上期数", "上期", "上年末")
-_YTD = ("年初至报告期末", "年初至报告期末金额", "本年累计")
-_HEADER_SUFFIX = re.compile(r"[（(](?:元|万元|亿元|%|％|人民币)[）)]$")
-_SKIP = {"", "-", "—", "/", "不适用", "n/a", "na"}
+from api.resources import finance_terms
+
+_METRIC = finance_terms.METRIC
+_CURRENT = finance_terms.CURRENT
+_PRIOR = finance_terms.PRIOR
+_YTD = finance_terms.YTD
+_HEADER_SUFFIX = finance_terms.HEADER_SUFFIX
+_SKIP = finance_terms.SKIP_VALUES
 
 
 def _clean_header(value: str) -> str:
@@ -123,9 +115,15 @@ def _cells(line: str) -> list[str]:
 def _header_kind(header: str) -> str | None:
     """Run _header_kind."""
     text = (header or "").strip()
-    if any(marker in text for marker in ("变化幅度", "增减变动", "同比增速")):
+    if any(marker in text for marker in finance_terms.CHANGE_MARKERS):
         return None
-    if "年初至报告期末" in text or "累计" in text:
+    if any(
+        marker in text
+        for marker in (
+            finance_terms.HEADER_YTD_PREFIX,
+            finance_terms.HEADER_YTD_MARKER,
+        )
+    ):
         return "ytd"
     if any(marker in text for marker in _PRIOR):
         return "prior"

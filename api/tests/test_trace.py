@@ -1,4 +1,4 @@
-"""本地链路追踪文件的行为用例（不碰 PG/Qdrant/数据库）。"""
+"""本地链路追踪文件的行为用例（不碰 PG/Qdrant/数据库）。."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from api.trace import reset_trace, trace
 
 
 def test_trace_writes_one_json_line_with_request_id(monkeypatch, tmp_path):
+    """Run test_trace_writes_one_json_line_with_request_id."""
     path = tmp_path / "trace.jsonl"
     monkeypatch.setenv("AI_RAG_TRACE_FILE", str(path))
     monkeypatch.setenv("AI_RAG_TRACE_ENABLED", "1")
@@ -32,6 +33,7 @@ def test_trace_writes_one_json_line_with_request_id(monkeypatch, tmp_path):
 
 
 def test_trace_disabled_by_env_writes_no_file(monkeypatch, tmp_path):
+    """Run test_trace_disabled_by_env_writes_no_file."""
     path = tmp_path / "trace.jsonl"
     monkeypatch.setenv("AI_RAG_TRACE_FILE", str(path))
     monkeypatch.setenv("AI_RAG_TRACE_ENABLED", "0")
@@ -43,6 +45,7 @@ def test_trace_disabled_by_env_writes_no_file(monkeypatch, tmp_path):
 
 
 def test_trace_clips_long_text_but_keeps_numbers(monkeypatch, tmp_path):
+    """Run test_trace_clips_long_text_but_keeps_numbers."""
     path = tmp_path / "trace.jsonl"
     monkeypatch.setenv("AI_RAG_TRACE_FILE", str(path))
     monkeypatch.delenv("AI_RAG_TRACE_ENABLED", raising=False)

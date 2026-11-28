@@ -15,6 +15,11 @@ import sys
 import time
 from pathlib import Path
 
+if __package__:
+    from .resources.b2_explain_seed_msgs import MESSAGES as M
+else:  # run as a script: python3 scripts/b2_explain_seed.py
+    from resources.b2_explain_seed_msgs import MESSAGES as M
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
@@ -31,6 +36,7 @@ ROLES = ["staff", "approver", "auditor"]
 
 
 def build_rows(n: int) -> list[tuple]:
+    """Run build_rows."""
     rows = []
     for i in range(n):
         is_public = i % 10 == 0
@@ -50,7 +56,7 @@ def build_rows(n: int) -> list[tuple]:
                 "text",
                 1 + (i % 50),
                 Jsonb([]),
-                f"种子正文 {i}",
+                f"{M['APPEND_01']}{i}",
                 eff_date,
                 year,
                 confidence,
@@ -64,6 +70,7 @@ def build_rows(n: int) -> list[tuple]:
 
 
 def main() -> int:
+    """Run main."""
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--dsn",
@@ -71,10 +78,10 @@ def main() -> int:
         or os.getenv("AI_RAG_TEST_DATABASE_URL"),
     )
     ap.add_argument("--rows", type=int, default=20000)
-    ap.add_argument("--keep", action="store_true", help="跑完不清理")
+    ap.add_argument("--keep", action="store_true", help=M["HELP_01"])
     args = ap.parse_args()
     if not args.dsn:
-        print("ERROR: 需要 --dsn 或 DATABASE_URL", file=sys.stderr)
+        print(M["PRINT_01"], file=sys.stderr)
         return 2
 
     dsn = normalize_dsn(args.dsn)
@@ -113,8 +120,8 @@ def main() -> int:
         conn.execute("ANALYZE chunks")
         total = conn.execute("SELECT count(*) FROM chunks").fetchone()[0]
         print(
-            f"seeded rows={len(rows)} (总行数 {total}) "
-            f"用时 {time.monotonic() - started:.1f}s"
+            f"seeded rows={len(rows)}{M['PRINT_02']}{total}"
+            f"{M['PRINT_03']}{time.monotonic() - started:.1f}s"
         )
         if not args.keep:
             conn.execute("DELETE FROM chunks WHERE doc_key = %s", (DOC_KEY,))
@@ -123,7 +130,7 @@ def main() -> int:
             )
             conn.execute("DELETE FROM documents WHERE doc_key = %s", (DOC_KEY,))
             left = conn.execute("SELECT count(*) FROM chunks").fetchone()[0]
-            print(f"cleaned: 剩余 {left} 行")
+            print(f"{M['PRINT_04']}{left}{M['PRINT_05']}")
     return 0
 
 

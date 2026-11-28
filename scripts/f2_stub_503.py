@@ -29,7 +29,9 @@ BODY = {
 
 
 class Handler(BaseHTTPRequestHandler):
+    """Handler."""
     def do_POST(self) -> None:  # noqa: N802 - http.server 约定的方法名
+        """Run do_POST."""
         length = int(self.headers.get("content-length") or 0)
         if length:
             self.rfile.read(length)
@@ -41,10 +43,12 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def log_message(self, format: str, *args: object) -> None:
+        """Run log_message."""
         print(f"[stub-503] {format % args}", flush=True)
 
 
 def main() -> int:
+    """Run main."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8098)
     args = parser.parse_args()

@@ -1,7 +1,9 @@
+"""Module."""
 from api.docparse.finalize import render_final_markdown
 
 
 def test_render_final_markdown_keeps_structure():
+    """Run test_render_final_markdown_keeps_structure."""
     blocks = [
         {"type": "header", "text": "页眉", "page_num": 1},
         {"type": "text", "text": "第一段", "heading_level": 1, "page_num": 1},

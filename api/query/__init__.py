@@ -34,6 +34,7 @@ from typing import Any, Literal
 
 from api.observability import get_logger, log_event
 from api.resources import lexicon
+from api.resources import messages as msg
 from api.temporal import TemporalScope, build_temporal_scope
 from api.time_range import TimeNormalisation, normalise_time
 from api.trace import trace as trace_event
@@ -42,12 +43,8 @@ logger = get_logger("api.query.understand")
 
 Mode = Literal["single", "multi"]
 
-# 指代词（§6.1 表格第一列的"那它呢""这个流程"）。
-# 只收短指代：长句里的"这个"多半是限定词（"这个标准是多少"已经有实体了），
-# 当成指代去替换反而会把问句改坏。
-_PRONOUNS = re.compile(
-    r"那它呢|那这个呢|这个流程|那个流程|这份|那份|它呢|这个|那个|这些|那些|前者|后者"
-)
+# 指代词（§6.1 表格第一列的"那它呢""这个流程"）；词表见 lexicon。
+_PRONOUNS = re.compile(lexicon.PRONOUN_PATTERN)
 # 触发多跳的说法（§6.3 表格）。
 _MULTI_MARKERS = tuple(lexicon.MULTI_HOP_MARKERS)
 # 明显超范围（§6.3 边界表最后一行）。
@@ -89,7 +86,11 @@ class NeedsClarificationError(Exception):
         """Initialize the instance."""
         self.pronoun = pronoun
         self.candidates = list(candidates)
-        super().__init__(f"指代 {pronoun!r} 有多个候选: {self.candidates}")
+        super().__init__(
+            msg.PRONOUN_AMBIGUOUS.format(
+                pronoun=pronoun, candidates=self.candidates
+            )
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -351,7 +352,7 @@ def understand(
     """
     original = (question or "").strip()
     if not original:
-        raise ValueError("question 不能为空")
+        raise ValueError(msg.QUESTION_REQUIRED)
 
     trace: list[RewriteStep] = []
     notes: list[str] = []
@@ -398,11 +399,13 @@ def understand(
         entities = extract_entities(operated)
     mode, multi_hits = detect_mode(rewritten)
     if multi_hits:
-        notes.append(f"多跳预判命中: {', '.join(multi_hits)}")
+        notes.append(
+            msg.MULTIHOP_NOTE.format(hits=", ".join(multi_hits))
+        )
 
     scope_hit = is_out_of_scope(rewritten)
     if scope_hit:
-        notes.append(f"超出库范围: {scope_hit}")
+        notes.append(msg.OUT_OF_SCOPE_NOTE.format(hit=scope_hit))
 
     plan = QueryPlan(
         retrieval_text=rewritten,

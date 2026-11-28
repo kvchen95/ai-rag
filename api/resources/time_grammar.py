@@ -1,4 +1,4 @@
-"""时间语法：显式日期/年月/季度/半年/年的正则、未解析词与口径说明。
+"""时间语法：显式日期、季度、半年、年的正则与口径说明。.
 
 对应详细设计.md §5.3 与 §3.5。运行时代码不直接写中文时间词，统一从这里取。
 """
@@ -80,6 +80,9 @@ UNPARSED_MARKERS = (
 # 半年的两种取值（与 `TimeRange.granularity == "half_year"` 配套）。
 HALF_YEAR_FIRST = "上半年"
 HALF_YEAR_SECOND = "下半年"
+
+# 财年起始月的合法区间校验。
+FISCAL_START_INVALID = "fiscal_start_month 必须是 1..12，实际 {value}"
 
 # --- 归一说明文案（进答案与审计，必须是给人看的一句话）---
 NOTE_FISCAL_START = "财年以 {start_month} 月起算（不是自然年）"

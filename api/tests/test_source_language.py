@@ -1,4 +1,4 @@
-"""跨仓库中文源码规则。"""
+"""跨仓库中文源码规则。."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _checker():
+    """Run _checker."""
     spec = importlib.util.spec_from_file_location(
         "check_source_language", ROOT / "scripts/check_source_language.py"
     )
@@ -23,6 +24,7 @@ def _checker():
 def test_chinese_literal_is_flagged_but_docstring_is_allowed(
     tmp_path: Path,
 ) -> None:
+    """Run test_chinese_literal_is_flagged_but_docstring_is_allowed."""
     checker = _checker()
     source = tmp_path / "bad.py"
     source.write_text(
@@ -38,6 +40,7 @@ def test_chinese_literal_is_flagged_but_docstring_is_allowed(
 
 
 def test_resource_directory_is_allowed(tmp_path: Path) -> None:
+    """Run test_resource_directory_is_allowed."""
     checker = _checker()
     source = tmp_path / "prompts" / "answer.py"
     source.parent.mkdir()

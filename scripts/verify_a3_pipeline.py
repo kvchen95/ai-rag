@@ -35,6 +35,11 @@ import sys
 import tempfile
 from pathlib import Path
 
+if __package__:
+    from .resources.verify_a3_pipeline_msgs import MESSAGES as M
+else:  # run as a script: python3 scripts/verify_a3_pipeline.py
+    from resources.verify_a3_pipeline_msgs import MESSAGES as M
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -74,6 +79,7 @@ FAILURES: list[str] = []
 
 
 def check(label: str, condition: bool, detail: str = "") -> None:
+    """Run check."""
     mark = "PASS" if condition else "FAIL"
     print(f"  [{mark}] {label}" + (f"  ({detail})" if detail else ""))
     if not condition:
@@ -127,6 +133,7 @@ def cli(*args: str, expect_rc: int = 0) -> dict:
 
 
 def sql(query: str, params: tuple = ()) -> list[dict]:
+    """Run sql."""
     with psycopg.connect(DSN, row_factory=dict_row) as conn:
         with conn.cursor() as cur:
             cur.execute(query, params)
@@ -138,6 +145,7 @@ def sql(query: str, params: tuple = ()) -> list[dict]:
 def seed(
     key_suffix: str, version_id: str, status: str, chunks: list[tuple[str, str]]
 ) -> None:
+    """Run seed."""
     with psycopg.connect(DSN) as conn, conn.cursor() as cur:
         cur.execute(
             "INSERT INTO documents (doc_key, filename, status) VALUES (%s, %s,"
@@ -172,6 +180,7 @@ def seed(
 
 
 def cleanup() -> None:
+    """Run cleanup."""
     with psycopg.connect(DSN) as conn, conn.cursor() as cur:
         for table in (
             "vector_drift_log",
@@ -207,6 +216,7 @@ def cleanup() -> None:
 
 
 def qdrant_points() -> dict[str, dict]:
+    """Run qdrant_points."""
     import httpx
 
     out: dict[str, dict] = {}
@@ -257,9 +267,10 @@ def set_payload_wrong(chunk_id: str, status: str) -> None:
 
 
 def main() -> int:
+    """Run main."""
     figures = Path(tempfile.mkdtemp(prefix="a3figs-"))
     print("=" * 78)
-    print("A3 端到端演练（真 CLI / 真 PG / 真 Qdrant / 真 TEI）")
+    print(M["PRINT_01"])
     print(f"doc_key={DOC}  figures={figures}")
     print("=" * 78)
 
@@ -267,7 +278,7 @@ def main() -> int:
         cleanup()
 
         # --- 1. 造数据 --------------------------------------------------------
-        print("\n[1] 造一个待上线版本 v1（3 条切片）")
+        print(M["PRINT_02"])
         seed(
             "1",
             V1,
@@ -275,15 +286,15 @@ def main() -> int:
             [
                 (
                     f"{CHUNK_PREFIX}_1",
-                    "住宿费标准：总监级每人每天 800 元，经理级 600 元。",
+                    M["SEED_01"],
                 ),
                 (
                     f"{CHUNK_PREFIX}_2",
-                    "市内交通费凭票报销，单次不超过 100 元。",
+                    M["SEED_02"],
                 ),
                 (
                     f"{CHUNK_PREFIX}_3",
-                    "出差需提前 3 个工作日在系统内提交申请。",
+                    M["SEED_03"],
                 ),
             ],
         )
@@ -291,57 +302,57 @@ def main() -> int:
         rows = sql(
             "SELECT count(*) AS n FROM chunks WHERE doc_key = %s", (DOC,)
         )
-        check("v1 有 3 条切片", rows[0]["n"] == 3, f"chunks={rows[0]['n']}")
+        check(M["CHECK_01"], rows[0]["n"] == 3, f"chunks={rows[0]['n']}")
 
         # --- 2. promote v1 ----------------------------------------------------
-        print("\n[2] promote v1：索引 -> 翻牌 -> 同步 -> 对账")
+        print(M["PRINT_03"])
         out = cli("promote", V1)
-        check("promote 成功", out.get("ok") is True, str(out.get("error")))
-        check("写进 3 个点", out["index"]["points"] == 3, str(out["index"]))
+        check(M["CHECK_02"], out.get("ok") is True, str(out.get("error")))
+        check(M["CHECK_03"], out["index"]["points"] == 3, str(out["index"]))
         check(
-            "翻牌激活 3 条切片",
+            M["CHECK_04"],
             out["flip"]["activated_chunks"] == 3,
             str(out["flip"]),
         )
         check(
-            "同步全部完成",
+            M["CHECK_05"],
             out["drain"]["done"] >= 1 and out["drain"]["failed"] == 0,
             str(out["drain"]),
         )
         check(
-            "对账无残留",
+            M["CHECK_06"],
             out["reconcile"]["remaining"] == 0,
             str(out["reconcile"]["drift_counts"]),
         )
 
         # --- 3. status --------------------------------------------------------
-        print("\n[3] status：看现状")
+        print(M["PRINT_04"])
         st = cli("status", "--doc-key", DOC)
         check(
-            "版本 1 个 active",
+            M["CHECK_07"],
             st["versions"] == {"active": 1},
             str(st["versions"]),
         )
         check(
-            "切片 3 个 active", st["chunks"] == {"active": 3}, str(st["chunks"])
+            M["CHECK_08"], st["chunks"] == {"active": 3}, str(st["chunks"])
         )
         check(
-            "无双 active", st["double_active"] == [], str(st["double_active"])
+            M["CHECK_09"], st["double_active"] == [], str(st["double_active"])
         )
         check(
-            "无待同步",
+            M["CHECK_10"],
             st["vector_sync_pending"] == 0,
             str(st["vector_sync_pending"]),
         )
-        check("无未修漂移", st["open_drift"] == {}, str(st["open_drift"]))
+        check(M["CHECK_11"], st["open_drift"] == {}, str(st["open_drift"]))
         check(
-            "集合里 3 个点",
+            M["CHECK_12"],
             st["qdrant_points"] >= 3,
             f"points={st['qdrant_points']}",
         )
 
         # --- 4. 新版 v2 -------------------------------------------------------
-        print("\n[4] 造 v2（模拟文件字节变了）：v1 仍应继续服务")
+        print(M["PRINT_05"])
         seed(
             "2",
             V2,
@@ -349,34 +360,34 @@ def main() -> int:
             [
                 (
                     f"{CHUNK_PREFIX}_4",
-                    "住宿费标准：总监级每人每天 900 元，经理级 700 元。",
+                    M["SEED_04"],
                 ),
                 (
                     f"{CHUNK_PREFIX}_5",
-                    "市内交通费凭票报销，单次不超过 120 元。",
+                    M["SEED_05"],
                 ),
                 (
                     f"{CHUNK_PREFIX}_6",
-                    "出差需提前 2 个工作日在系统内提交申请。",
+                    M["SEED_06"],
                 ),
             ],
         )
         before = qdrant_points()
         check(
-            "v1 的 3 个点仍存在",
+            M["CHECK_13"],
             len([p for p in before.values() if p["version_id"] == V1]) == 3,
         )
         check(
-            "v2 还没写点（未 promote）",
+            M["CHECK_14"],
             not [p for p in before.values() if p["version_id"] == V2],
         )
 
         # --- 5. promote v2 ----------------------------------------------------
-        print("\n[5] promote v2：v1 应立刻下线，v2 生效")
+        print(M["PRINT_06"])
         out2 = cli("promote", V2)
-        check("promote v2 成功", out2.get("ok") is True, str(out2.get("error")))
+        check(M["CHECK_15"], out2.get("ok") is True, str(out2.get("error")))
         check(
-            "旧版是 v1",
+            M["CHECK_16"],
             out2["flip"]["previous_active"] == V1,
             str(out2["flip"]),
         )
@@ -388,54 +399,58 @@ def main() -> int:
             p["status"] for p in after.values() if p["version_id"] == V2
         }
         check(
-            "v1 的点全部 deprecated",
+            M["CHECK_17"],
             v1_states == {"deprecated"},
             str(v1_states),
         )
-        check("v2 的点全部 active", v2_states == {"active"}, str(v2_states))
+        check(M["CHECK_18"], v2_states == {"active"}, str(v2_states))
 
         st = cli("status", "--doc-key", DOC)
         check(
-            "版本 1 active + 1 deprecated",
+            M["CHECK_19"],
             st["versions"] == {"active": 1, "deprecated": 1},
             str(st["versions"]),
         )
         check(
-            "切片 3 active + 3 deprecated",
+            M["CHECK_20"],
             st["chunks"] == {"active": 3, "deprecated": 3},
             str(st["chunks"]),
         )
         check(
-            "仍然无双 active",
+            M["CHECK_21"],
             st["double_active"] == [],
             str(st["double_active"]),
         )
 
         # --- 6. 破坏同步 -> 对账修复
         # -------------------------------------------
-        print("\n[6] 手工把一条 payload 改错，验证对账能看见并修好")
+        print(M["PRINT_07"])
         set_payload_wrong(f"{CHUNK_PREFIX}_4", "deprecated")
         dr = cli("reconcile", "--doc-key", DOC, "--dry-run", expect_rc=1)
         check(
-            "dry-run 看见这处漂移",
+            M["CHECK_22"],
             dr["drift_counts"] == {"status_mismatch": 1},
             str(dr["drift_counts"]),
         )
         check(
-            "dry-run 没修（仍是 1 处）",
+            M["CHECK_23"],
             dr["remaining"] == 1,
             str(dr["remaining"]),
         )
 
         fixed = cli("reconcile", "--doc-key", DOC)
-        check("对账修好了", fixed["remaining"] == 0, str(fixed["drift_counts"]))
         check(
-            "修好后再对账是干净的",
+            M["CHECK_24"],
+            fixed["remaining"] == 0,
+            str(fixed["drift_counts"]),
+        )
+        check(
+            M["CHECK_25"],
             cli("reconcile", "--doc-key", DOC)["remaining"] == 0,
         )
 
         # --- 7. 回收 ----------------------------------------------------------
-        print("\n[7] 把 v1 的下线时间推到 25 小时前，跑回收")
+        print(M["PRINT_08"])
         sql(
             "UPDATE doc_versions SET deprecated_at = now() - interval '25"
             " hours' "
@@ -451,32 +466,32 @@ def main() -> int:
             "--figures-dir",
             str(figures),
         )
-        check("回收了 1 个版本", rec["purged"] == 1, str(rec["purged"]))
-        check("删了 3 条切片", rec["chunks"] == 3, str(rec["chunks"]))
-        check("删了 1 张图", rec["figures"] == 1, str(rec["figures"]))
+        check(M["CHECK_26"], rec["purged"] == 1, str(rec["purged"]))
+        check(M["CHECK_27"], rec["chunks"] == 3, str(rec["chunks"]))
+        check(M["CHECK_28"], rec["figures"] == 1, str(rec["figures"]))
         check(
-            "图文件真的不在了",
+            M["CHECK_29"],
             not (figures / f"{CHUNK_PREFIX}_1.webp").exists(),
         )
         remaining = qdrant_points()
         check(
-            "v1 的点已从 Qdrant 删除",
+            M["CHECK_30"],
             not [p for p in remaining.values() if p["version_id"] == V1],
             str({p["version_id"] for p in remaining.values()}),
         )
         check(
-            "v2 的点还在",
+            M["CHECK_31"],
             len([p for p in remaining.values() if p["version_id"] == V2]) == 3,
         )
         st = cli("status", "--doc-key", DOC)
         check(
-            "版本状态 = active + purged",
+            M["CHECK_32"],
             st["versions"] == {"active": 1, "purged": 1},
             str(st["versions"]),
         )
 
         # --- 8. 全量重建 ------------------------------------------------------
-        print("\n[8] 集合清空后从 PG 全量重建，逐条比对")
+        print(M["PRINT_09"])
         import httpx
 
         before_rebuild = qdrant_points()
@@ -494,7 +509,7 @@ def main() -> int:
                     "on_disk_payload": True,
                 },
             )
-        print("  集合已清空，准备重建")
+        print(M["PRINT_10"])
 
         env = dict(os.environ)
         env["PYTHONPATH"] = str(REPO_ROOT)
@@ -530,21 +545,21 @@ def main() -> int:
         if proc.returncode != 0:
             print(proc.stdout[-2000:])
             print(proc.stderr[-3000:], file=sys.stderr)
-        check("重建脚本 rc=0", proc.returncode == 0, proc.stderr[-300:])
+        check(M["CHECK_33"], proc.returncode == 0, proc.stderr[-300:])
         summary = (
             json.loads(proc.stdout.strip().splitlines()[-1])
             if proc.returncode == 0
             else {}
         )
         check(
-            "重建了 3 个点（v2 的 3 条 active）",
+            M["CHECK_34"],
             summary.get("upserted") == 3,
             str(summary),
         )
 
         after_rebuild = qdrant_points()
         check(
-            "重建后点数与重建前一致",
+            M["CHECK_35"],
             len(after_rebuild)
             == len(
                 [p for p in before_rebuild.values() if p["version_id"] == V2]
@@ -563,7 +578,7 @@ def main() -> int:
                 expected["version_id"],
             ):
                 mismatches.append((chunk_id, expected, point))
-        check("逐条 payload 一致", not mismatches, str(mismatches[:3]))
+        check(M["CHECK_36"], not mismatches, str(mismatches[:3]))
 
         # 关键：重建后的点同时带 dense 与 bm25，且 bm25 有 token
         with httpx.Client(
@@ -577,7 +592,7 @@ def main() -> int:
             points_full = resp.json()["result"]
         both = [p for p in points_full if set(p["vector"]) == {"dense", "bm25"}]
         check(
-            "每个点同时有 dense+bm25",
+            M["CHECK_37"],
             len(both) == len(points_full),
             f"{len(both)}/{len(points_full)}",
         )
@@ -585,7 +600,7 @@ def main() -> int:
             p for p in points_full if len(p["vector"]["bm25"]["indices"]) > 3
         ]
         check(
-            "bm25 真的切出了多个 token（中文 bigram）",
+            M["CHECK_38"],
             len(sparse_ok) == len(points_full),
             f"{len(sparse_ok)}/{len(points_full)} "
             "tokens="
@@ -594,19 +609,19 @@ def main() -> int:
 
         final = cli("reconcile", "--doc-key", DOC)
         check(
-            "重建后对账干净",
+            M["CHECK_39"],
             final["remaining"] == 0,
             str(final["drift_counts"]),
         )
 
     finally:
-        print("\n[cleanup] 清掉本次演练的行与点")
+        print(M["PRINT_11"])
         cleanup()
         shutil.rmtree(figures, ignore_errors=True)
 
     print("\n" + "=" * 78)
     if FAILURES:
-        print(f"FAILED: {len(FAILURES)} 条")
+        print(f"FAILED: {len(FAILURES)}{M['PRINT_12']}")
         for item in FAILURES:
             print(f"  - {item}")
         return 1

@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from api.resources import messages as msg
+
 TableRunner = Callable[[str], list[dict[str, Any]]]
 
 
@@ -46,7 +48,9 @@ def _context_of(
     cursor = index + direction
     while 0 <= cursor < len(blocks):
         if blocks[cursor].get("type") != "table":
-            return str(blocks[cursor].get("text") or "").strip()
+            return str(
+                blocks[cursor].get("text") if blocks[cursor].get("text") else ""
+            ).strip()
         cursor += direction
     return ""
 
@@ -60,8 +64,12 @@ def _match_docling(
         by_page.setdefault(table.get("page_num"), []).append(table)
     matched: list[dict[str, Any] | None] = []
     for block in mineru_tables:
-        page = (block.get("page_idx") or 0) + 1
-        candidates = by_page.get(page) or by_page.get(None) or []
+        page = (block.get("page_idx") if block.get("page_idx") else 0) + 1
+        candidates = by_page.get(page)
+        if not candidates:
+            candidates = by_page.get(None)
+        if not candidates:
+            candidates = []
         matched.append(candidates.pop(0) if candidates else None)
     return matched
 
@@ -84,24 +92,28 @@ def enhance_tables(
 
     for position, docling in zip(table_positions, matched, strict=False):
         block = blocks[position]
-        page = (block.get("page_idx") or 0) + 1
+        page = (block.get("page_idx") if block.get("page_idx") else 0) + 1
         before = _context_of(blocks, position, -1)
         after = _context_of(blocks, position, 1)
-        caption = " ".join(block.get("table_caption") or []).strip()
-        footnote = " ".join(block.get("table_footnote") or []).strip()
-        parts = [f"表格（第 {page} 页）"]
+        caption = " ".join(
+            block.get("table_caption") if block.get("table_caption") else []
+        ).strip()
+        footnote = " ".join(
+            block.get("table_footnote") if block.get("table_footnote") else []
+        ).strip()
+        parts = [msg.TABLE_PAGE.format(page=page)]
         if caption:
-            parts.append(f"表题：{caption}")
+            parts.append(msg.TABLE_TITLE.format(caption=caption))
         if docling and docling.get("markdown"):
             parts.append(docling["markdown"])
         elif block.get("table_body"):
             parts.append(str(block["table_body"]))
         if footnote:
-            parts.append(f"注：{footnote}")
+            parts.append(msg.TABLE_FOOTNOTE.format(footnote=footnote))
         if before:
-            parts.append(f"前文：{before}")
+            parts.append(msg.TABLE_BEFORE.format(before=before))
         if after:
-            parts.append(f"后文：{after}")
+            parts.append(msg.TABLE_AFTER.format(after=after))
         block["text"] = "\n".join(parts)
         block["docling"] = docling or {}
         block["context_before"] = before

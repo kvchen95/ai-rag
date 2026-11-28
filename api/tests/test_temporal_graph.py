@@ -1,4 +1,4 @@
-"""时序事实与文档期间图：从表格提取、按期间检索、同比比较。"""
+"""时序事实与文档期间图：从表格提取、按期间检索、同比比较。."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ TABLE = """| 项目 | 本期数 | 上年同期数 | 变化幅度（%） |
 
 
 def test_table_facts_keep_current_and_prior_periods() -> None:
+    """Run test_table_facts_keep_current_and_prior_periods."""
     facts = extract_table_facts(
         chunk_id="ch_fin",
         doc_key="reports/han-wu-ji-2026-h1",
@@ -35,6 +36,7 @@ def test_table_facts_keep_current_and_prior_periods() -> None:
 
 
 def test_graph_series_is_sorted_and_comparable() -> None:
+    """Run test_graph_series_is_sorted_and_comparable."""
     facts = extract_table_facts(
         chunk_id="ch_fin",
         doc_key="reports/han-wu-ji-2026-h1",
@@ -62,6 +64,7 @@ def test_graph_series_is_sorted_and_comparable() -> None:
 
 
 def test_graph_rejects_cross_unit_comparison() -> None:
+    """Run test_graph_rejects_cross_unit_comparison."""
     graph = TemporalKnowledgeGraph(
         extract_table_facts(
             chunk_id="ch_a",
@@ -92,6 +95,7 @@ def test_graph_rejects_cross_unit_comparison() -> None:
 
 
 def test_change_rate_column_is_not_treated_as_prior_period() -> None:
+    """Run test_change_rate_column_is_not_treated_as_prior_period."""
     table = (
         "| 项目 | 本报告期 "
         "| 本报告期比上年同期增减变动幅度（%） "

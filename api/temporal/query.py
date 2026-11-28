@@ -8,20 +8,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from api.resources import finance_terms
 from api.temporal.graph import TemporalKnowledgeGraph
 from api.temporal.types import TemporalScope
 
-_ALIASES = {
-    "营收": "营业收入",
-    "收入": "营业收入",
-    "归母净利润": "归属于上市公司股东的净利润",
-    "扣非净利润": "归属于上市公司股东的扣除非经常性损益的净利润",
-    "研发费用": "研发投入合计",
-    "研发投入": "研发投入合计",
-    "研发强度": "研发投入总额占营业收入比例",
-    "占营业收入比例": "研发投入总额占营业收入比例",
-    "经营现金流": "经营活动产生的现金流量净额",
-}
+_ALIASES = finance_terms.ALIASES
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,7 +134,7 @@ def resolve_fact_query(
         _previous_quarter(start)
         if any(
             marker in question
-            for marker in ("上一季度", "上季度", "环比", "较上一季")
+            for marker in finance_terms.PREVIOUS_QUARTER_MARKERS
         )
         else _prior(start, end)
     )

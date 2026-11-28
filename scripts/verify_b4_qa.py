@@ -33,6 +33,11 @@ import sys
 import uuid
 from pathlib import Path
 
+if __package__:
+    from .resources.verify_b4_qa_msgs import MESSAGES as M
+else:  # run as a script: python3 scripts/verify_b4_qa.py
+    from resources.verify_b4_qa_msgs import MESSAGES as M
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
@@ -45,19 +50,21 @@ CHECKS: list[tuple[str, bool, str]] = []
 
 
 def check(name: str, ok: bool, detail: str = "") -> None:
+    """Run check."""
     CHECKS.append((name, ok, detail))
     mark = "PASS" if ok else "FAIL"
     print(f"  [{mark}] {name}" + (f" — {detail}" if detail else ""))
 
 
 def main() -> int:
+    """Run main."""
     dsn = os.getenv("AI_RAG_TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
     if not dsn:
-        print("需要 AI_RAG_TEST_DATABASE_URL 或 DATABASE_URL", file=sys.stderr)
+        print(M["PRINT_01"], file=sys.stderr)
         return 2
     for var in ("QDRANT_URL", "EMBEDDING_BASE_URL", "RERANK_BASE_URL"):
         if not os.getenv(var):
-            print(f"需要 {var}（本脚本要真检索链路）", file=sys.stderr)
+            print(f"{M['PRINT_02']}{var}{M['PRINT_03']}", file=sys.stderr)
             return 2
 
     from api.clients.pg import PgDatabase
@@ -96,12 +103,14 @@ def main() -> int:
         """生成与判别的脚本替身（本机没有网关，见模块头）。."""
 
         def __init__(self, generation: str, verdict: str = "SUPPORTED") -> None:
+            """Initialize the instance."""
             self.generation = generation
             self.verdict = verdict
             self.temps: list[float] = []
             self.called = 0
 
         def complete(self, messages, *, temperature: float = 0.0) -> str:  # type: ignore[override]
+            """Run complete."""
             self.temps.append(temperature)
             self.called += 1
             body = "\n".join(m.get("content", "") for m in messages)
@@ -173,6 +182,7 @@ def main() -> int:
         return version_id
 
     def service(llm: LlmClient | None) -> QaService:
+        """Run service."""
         pipeline = build_pipeline(settings, pg)
         return QaService(
             pipeline=pipeline,
@@ -186,13 +196,14 @@ def main() -> int:
     def run(
         question: str, llm: LlmClient | None
     ):  # -> (QaOutcome, list[SseEvent])
+        """Run run."""
         sent: list = []
         svc = service(llm)
         try:
             outcome = svc.run(question, identity, emit=sent.append)
         finally:
             svc.pipeline.close()
-        print(f"\n问：{question}")
+        print(f"{M['PRINT_04']}{question}")
         print(
             f"  verdict={outcome.verdict} code={outcome.error_code} "
             f"events={[e.name for e in sent]}"
@@ -213,7 +224,7 @@ def main() -> int:
         return outcome, sent
 
     print("=" * 78)
-    print("B4 端到端验收（真 PG + Qdrant + TEI；生成/判别为脚本替身）")
+    print(M["PRINT_05"])
     print("=" * 78)
 
     # --- 造数 ---------------------------------------------------------------
@@ -223,7 +234,7 @@ def main() -> int:
         [
             {
                 "chunk_id": f"ch_{good}_a",
-                "text": "住宿费标准：每人每天 500 元，按职级限额报销。",
+                "text": M["TEXT_01"],
                 "page_num": 47,
             },
         ],
@@ -234,20 +245,20 @@ def main() -> int:
         json.dumps(
             {
                 "status": "answered",
-                "answer": "住宿费标准为每人每天 500 元[1]。",
+                "answer": M["ANSWER_01"],
                 "citations": [1],
                 "claims": [
-                    {"text": "住宿费标准为每人每天 500 元", "citations": [1]}
+                    {"text": M["TEXT_02"], "citations": [1]}
                 ],
             },
             ensure_ascii=False,
         )
     )
-    print("\n--- 判据 1：正常答案与引用 ---")
-    outcome, sent = run("住宿费标准是多少", accept)
+    print(M["PRINT_06"])
+    outcome, sent = run(M["RUN_01"], accept)
     names = [e.name for e in sent]
     check(
-        "有 token 与 citations，事件以 done 收尾",
+        M["CHECK_01"],
         "token" in names and names[-1] == "done",
         f"events={names}",
     )
@@ -264,7 +275,7 @@ def main() -> int:
         "chunk_id",
     }
     check(
-        "citations 含 doc/page/bbox/snippet/chunk_id",
+        M["CHECK_02"],
         ok_fields,
         json.dumps(items[:1], ensure_ascii=False)[:200],
     )
@@ -275,7 +286,7 @@ def main() -> int:
         )
         row = cur.fetchone()
     check(
-        "citations 的页码与 bbox 与库里的行一致",
+        M["CHECK_03"],
         bool(items)
         and row is not None
         and items[0]["page_num"] == row[0]
@@ -283,7 +294,7 @@ def main() -> int:
         f"db={row}",
     )
     check(
-        "生成与判别都在 Temperature=0 调用",
+        M["CHECK_04"],
         bool(accept.temps) and set(accept.temps) == {0.0},
         f"temps={accept.temps}",
     )
@@ -293,27 +304,27 @@ def main() -> int:
         json.dumps(
             {
                 "status": "answered",
-                "answer": "住宿费标准一般是 400 元[1]。",
+                "answer": M["ANSWER_02"],
                 "citations": [1],
                 "claims": [
-                    {"text": "住宿费标准一般是 400 元", "citations": [1]}
+                    {"text": M["TEXT_03"], "citations": [1]}
                 ],
             },
             ensure_ascii=False,
         )
     )
-    print("\n--- 判据 2：不可验证不输出结论 ---")
-    outcome2, sent2 = run("住宿费标准是多少", hallu)
+    print(M["PRINT_07"])
+    outcome2, sent2 = run(M["RUN_02"], hallu)
     names2 = [e.name for e in sent2]
     fb2 = next((e for e in sent2 if e.name == "fallback"), None)
-    check("校验不过时不发 token", "token" not in names2, f"events={names2}")
+    check(M["CHECK_05"], "token" not in names2, f"events={names2}")
     check(
-        "降级码是 unverifiable",
+        M["CHECK_06"],
         bool(fb2) and fb2.payload["code"] == "unverifiable",
-        fb2.payload["code"] if fb2 else "无 fallback",
+        fb2.payload["code"] if fb2 else M["CHECK_07"],
     )
     check(
-        "档一给了原文片段",
+        M["CHECK_08"],
         bool(fb2) and bool(fb2.payload["docs"]),
         json.dumps(fb2.payload["docs"][:1], ensure_ascii=False)[:200]
         if fb2
@@ -321,60 +332,60 @@ def main() -> int:
     )
 
     # --- 判据 3：无关问题 → 不调模型 --------------------------------------
-    garbage = Scripted("不应被调用")
-    print("\n--- 判据 3：无证据不硬答 ---")
-    outcome3, sent3 = run("如何申报个人所得税专项附加扣除", garbage)
+    garbage = Scripted(M["SCRIPTED_01"])
+    print(M["PRINT_08"])
+    outcome3, sent3 = run(M["RUN_03"], garbage)
     names3 = [e.name for e in sent3]
-    check("拒答路径没有 token", "token" not in names3, f"events={names3}")
-    check("拒答路径没有调模型", garbage.called == 0, f"calls={garbage.called}")
+    check(M["CHECK_09"], "token" not in names3, f"events={names3}")
+    check(M["CHECK_10"], garbage.called == 0, f"calls={garbage.called}")
     check(
-        "verdict 是拒答两态之一",
+        M["CHECK_11"],
         outcome3.verdict in ("reject_none", "reject_low"),
         outcome3.verdict,
     )
 
     # --- 判据 4：模型不可用 → 系统档，不给原文 ----------------------------
-    print("\n--- 判据 4：系统异常不暴露内部细节 ---")
-    outcome4, sent4 = run("住宿费标准是多少", None)
+    print(M["PRINT_09"])
+    outcome4, sent4 = run(M["RUN_04"], None)
     fb4 = next((e for e in sent4 if e.name == "fallback"), None)
     if fb4 is None:
         check(
-            "有证据但模型不可用 → 系统档",
+            M["CHECK_12"],
             False,
             f"events={[e.name for e in sent4]}",
         )
     else:
         check(
-            "降级码是 model_timeout",
+            M["CHECK_13"],
             fb4.payload["code"] == "model_timeout",
             fb4.payload["code"],
         )
         check(
-            "系统档不给原文",
+            M["CHECK_14"],
             fb4.payload["docs"] == [],
             json.dumps(fb4.payload["docs"], ensure_ascii=False),
         )
         check(
-            "系统档文案是稍后重试",
-            fb4.payload["message"] == "稍后重试",
+            M["CHECK_15"],
+            fb4.payload["message"] == M["CHECK_16"],
             fb4.payload["message"],
         )
 
     # --- 判据 5：审计行能插进真表 ----------------------------------------
-    print("\n--- 判据 5：审计落库 ---")
+    print(M["PRINT_10"])
     from api.audit import AuditWriter
 
     outcome5, _ = run(
-        "住宿费标准是多少",
+        M["RUN_05"],
         Scripted(
             json.dumps(
                 {
                     "status": "answered",
-                    "answer": "住宿费标准为每人每天 500 元[1]。",
+                    "answer": M["ANSWER_03"],
                     "citations": [1],
                     "claims": [
                         {
-                            "text": "住宿费标准为每人每天 500 元",
+                            "text": M["TEXT_04"],
                             "citations": [1],
                         }
                     ],
@@ -386,7 +397,7 @@ def main() -> int:
     assert outcome5.audit is not None
     result = AuditWriter(pg, retention_days=1).record(outcome5.audit)
     check(
-        "qa_log 插入成功（真表 CHECK 通过）",
+        M["CHECK_17"],
         result.ok,
         result.error or f"id={result.audit_id}",
     )
@@ -398,10 +409,10 @@ def main() -> int:
                 (result.audit_id,),
             )
             row5 = cur.fetchone()
-        print(f"  qa_log 行：gate1={row5[0]} gate2={row5[1]} model={row5[2]}")
+        print(f"{M['PRINT_11']}{row5[0]} gate2={row5[1]} model={row5[2]}")
 
     # --- 判据 6：SSE 帧的字节形状 ----------------------------------------
-    print("\n--- 判据 6：SSE 帧形状 ---")
+    print(M["PRINT_12"])
     frame_ok = True
     for event in sent:
         frame = event.frame()
@@ -416,7 +427,7 @@ def main() -> int:
             frame_ok = False
             break
     check(
-        "每帧都是 event:/data: 且 data.type 与事件名一致",
+        M["CHECK_18"],
         frame_ok,
         f"checked={len(sent)}",
     )
@@ -441,15 +452,12 @@ def main() -> int:
     failed = [name for name, ok, _ in CHECKS if not ok]
     print("\n" + "=" * 78)
     if failed:
-        print(f"{len(failed)} 条判据不成立：")
+        print(f"{len(failed)}{M['PRINT_13']}")
         for name in failed:
             print(f"  - {name}")
         return 1
     print(f"ALL {len(CHECKS)} CHECKS PASSED")
-    print(
-        "注意：生成与判别是脚本替身。生成质量（模型真的会说错并被拦住）"
-        "需要配了 LLM 网关后跑 eval/run_eval.py。"
-    )
+    print(M["PRINT_14"])
     return 0
 
 

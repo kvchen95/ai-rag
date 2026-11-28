@@ -49,6 +49,7 @@ from api.ingest.fingerprint import (
 )
 from api.ingest.lockkeys import SCAN_LOCK_KEY
 from api.observability import get_logger, log_event, log_exception
+from api.resources import messages as msg
 
 logger = get_logger("api.ingest.scan")
 
@@ -309,9 +310,8 @@ def _collision_free(
                     filename=sample.filename,
                     outcome=Outcome.FAIL,
                     reason=SkipReason.DOC_KEY_COLLISION,
-                    error=(
-                        f"doc_key_collision: {sample.rel_path} 与 {others} "
-                        f"归一化到同一个 doc_key，拒绝入库（§4.4）"
+                    error=msg.DOC_KEY_COLLISION.format(
+                        path=sample.rel_path, others=others
                     ),
                 ),
             )

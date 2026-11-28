@@ -35,6 +35,11 @@ import sys
 import tempfile
 from pathlib import Path
 
+if __package__:
+    from .resources.b4_mutation_check_msgs import MESSAGES as M
+else:  # run as a script: python3 scripts/b4_mutation_check.py
+    from resources.b4_mutation_check_msgs import MESSAGES as M
+
 REPO = Path(__file__).resolve().parent.parent
 
 # 每个变异只跑它该打红的那一小撮用例：跑全量会让一次变异花掉几分钟，
@@ -49,6 +54,7 @@ PYTEST_TARGETS = [
 
 
 def run(targets: list[str]) -> tuple[int, str]:
+    """Run run."""
     env = dict(os.environ)
     for var in (
         "ALL_PROXY",
@@ -113,40 +119,37 @@ def run(targets: list[str]) -> tuple[int, str]:
 
 
 def mutate(path: Path, old: str, new: str) -> None:
+    """Run mutate."""
     text = path.read_text(encoding="utf-8")
-    assert old in text, f"变异锚点未找到: {old[:80]!r} in {path.name}"
+    assert old in text, f"{M['MUTATE_01']}{old[:80]!r} in {path.name}"
     path.write_text(text.replace(old, new, 1), encoding="utf-8")
     # 校验文件真的变了：锚点落在 docstring 里的同名文本上时，变异等于没改，
     # 于是报"判据无效"——而真相是变异根本没生效（B3 实测撞过这个坑）。
     assert (
         path.read_text(encoding="utf-8") != text
-    ), f"变异没有改变文件内容: {path.name}"
+    ), f"{M['MUTATE_02']}{path.name}"
 
 
 MUTATIONS = [
     {
-        "name": "证据包不合并同父片",
+        "name": M["NAME_01"],
         "file": "api/generate/evidence.py",
         # 锚点带上下文：`_group_by_parent` 在 docstring 里也出现过。
         "old": """    groups: dict[str, list[Candidate]] = {}
     order: list[str] = []
     for candidate in candidates:
         key = candidate.parent_id or f"__self__:{candidate.chunk_id}\"""",
-        "new": """    groups: dict[str, list[Candidate]] = {}
-    order: list[str] = []
-    for candidate in candidates:
-        key = f"__self__:{candidate.chunk_id}"  # 变异：不按父片分组""",
+        "new": M["NEW_01"],
     },
     {
-        "name": "合并时不删子片重叠",
+        "name": M["NAME_02"],
         "file": "api/generate/evidence.py",
         "old": """        overlap = _overlap_length(merged, text)
         merged = merged + text[overlap:]""",
-        "new": """        overlap = 0  # 变异：不删重叠
-        merged = merged + text[overlap:]""",
+        "new": M["NEW_02"],
     },
     {
-        "name": "封顶时从高分往低分丢（方向反了）",
+        "name": M["NAME_03"],
         "file": "api/generate/evidence.py",
         "old": (
             "    kept: list[tuple[Candidate, tuple[str, ...], str, "
@@ -155,90 +158,50 @@ MUTATIONS = [
             "    used = 0\n"
             "    for index, entry in enumerate(merged):"
         ),
-        "new": (
-            "    kept: list[tuple[Candidate, tuple[str, ...], str, "
-            "ChunkText]] = []\n"
-            "    dropped: list[str] = []\n"
-            "    used = 0\n"
-            "    for index, entry in enumerate(reversed(merged)):  # "
-            "变异：从低分开始装"
-        )
+        "new": M["NEW_03"]
     },
     {
-        "name": "第一道只扫 citations 字段，不扫正文",
+        "name": M["NAME_04"],
         "file": "api/verify/checks.py",
         "old": """    for number in parse_citations(draft.answer):
         if number not in numbers and f"[{number}]" not in offenders:
             offenders.append(f"[{number}]")""",
-        "new": """    for number in ():  # 变异：不扫正文里的角标
-        if number not in numbers and f"[{number}]" not in offenders:
-            offenders.append(f"[{number}]")""",
+        "new": M["NEW_04"],
     },
     {
-        "name": "第二道只看 claims，不看 answer 的句子",
+        "name": M["NAME_05"],
         "file": "api/verify/checks.py",
         "old": """    sentences = _draft_sentences(draft)
     if not sentences:""",
-        "new": (
-            "    sentences = tuple(\n"
-            "        Sentence(text=c.text, citations=c.citations, "
-            "bare=c.text) for c in draft.claims\n"
-            "    )  # 变异：丢掉 answer "
-            "里模型没报的句子\n"
-            "    if not sentences:"
-        ),
+        "new": M["NEW_05"],
     },
     {
-        "name": "第三道用整包证据而不是被引证据",
+        "name": M["NAME_06"],
         "file": "api/verify/checks.py",
-        "old": """        cited = referable_evidence(pack, sentence.citations)
-        if not cited:
-            # 没有可查的证据只可能因为编号越界，而第一道已经拦了。
-            continue""",
-        "new": """        cited = pack.items  # 变异：整包都算"被引"
-        if not cited:
-            continue""",
+        "old": M["OLD_01"],
+        "new": M["NEW_06"],
     },
     {
-        "name": "第四道通过就 return（第五道永远不执行）",
+        "name": M["NAME_07"],
         "file": "api/verify/checks.py",
         "old": (
             "        elif check == CHECK_NLI:\n"
             "            failure, judge_result = check_nli(judge_client, "
             "question, draft, pack)"
         ),
-        "new": (
-            "        elif check == CHECK_NLI:\n"
-            "            failure, judge_result = check_nli(judge_client, "
-            "question, draft, pack)\n"
-            "            if failure is None:\n"
-            "                return VerificationReport(\n"
-            "                    passed=True,\n"
-            "                    checks_run=tuple(ran),\n"
-            "                    judge=judge_result,\n"
-            "                    answer=draft.answer,\n"
-            "                    citations=draft.citations,\n"
-            "                    cited_evidence=referable_evidence(pack, "
-            "draft.citations),\n"
-            "                    elapsed_ms=0.0,\n"
-            "                )  # "
-            "变异：提前收尾"
-        )
+        "new": M["NEW_07"]
     },
     {
-        "name": "gate2 只看 judge is None（skipped 被读成 not_supported）",
+        "name": M["NAME_08"],
         "file": "api/verify/checks.py",
         "old": """        if self.judge is None:
             return "skipped"
         if self.judge.skipped:
             return "skipped\"""",
-        "new": """        if self.judge is None:
-            return "skipped"
-        if False:  # 变异：不看 judge.skipped
-            return "skipped\"""",
+        "new": M["NEW_08"],
     },
     {
-        "name": "空 claim 被跳过（第二道放过空主张）",
+        "name": M["NAME_09"],
         "file": "api/verify/sentences.py",
         "old": (
             "        if not bare:\n"
@@ -246,19 +209,17 @@ MUTATIONS = [
             "citations=parse_citations(claim), bare=\"\"))\n"
             "            continue"
         ),
-        "new": """        if not bare:
-            continue  # 变异：空主张直接丢掉""",
+        "new": M["NEW_09"],
     },
     {
-        "name": "score_snapshot 重复字典键（分数分布被静默覆盖）",
+        "name": M["NAME_10"],
         "file": "api/retrieval/pipeline.py",
         "old": '            "rerank_scores": [round(s, 6) for s in'
         ' rerank_scores],',
-        "new": '            "rerank": [round(s, 6) for s in rerank_scores],  #'
-        ' 变异：与下面的键重名',
+        "new": M["NEW_10"],
     },
     {
-        "name": "token 在校验之前就发（不等校验结论）",
+        "name": M["NAME_11"],
         "file": "api/qa/orchestrator.py",
         "old": (
             "        send(ev.step(ev.PHASE_VERIFY, "
@@ -266,25 +227,17 @@ MUTATIONS = [
             "        report = verify_draft(draft, pack, "
             "question=question, judge_client=self.judge_client)"
         ),
-        "new": (
-            "        for _piece in ev.chunk_text(draft.answer, "
-            "self.token_chunk_chars):\n"
-            "            send(ev.token(_piece))  # "
-            "变异：不等校验就发正文\n"
-            "        send(ev.step(ev.PHASE_VERIFY, "
-            "hop=snapshot.hop_count, elapsed_ms=_ms(started)))\n"
-            "        report = verify_draft(draft, pack, "
-            "question=question, judge_client=self.judge_client)"
-        ),
+        "new": M["NEW_11"],
     },
 ]
 
 
 def main() -> int:
+    """Run main."""
     baseline_rc, baseline_tail = run(PYTEST_TARGETS)
     print(f"baseline rc={baseline_rc} :: {baseline_tail}")
     if baseline_rc != 0:
-        print("基线不绿，变异测试无意义。先修基线。")
+        print(M["PRINT_01"])
         return 1
 
     undetected: list[str] = []
@@ -299,7 +252,7 @@ def main() -> int:
             rc, tail = run(PYTEST_TARGETS)
             if rc == 0:
                 undetected.append(mut["name"])
-                print(f"[{mut['name']}] STILL GREEN（判据无效）:: {tail}")
+                print(f"[{mut['name']}{M['PRINT_02']}{tail}")
             else:
                 print(f"[{mut['name']}] RED (expected) :: {tail}")
         finally:
@@ -309,10 +262,10 @@ def main() -> int:
     restored_rc, restored_tail = run(PYTEST_TARGETS)
     print(f"restored rc={restored_rc} :: {restored_tail}")
     if restored_rc != 0:
-        print("还原后仍然不绿——变异脚本没把文件改回去，先查这个。")
+        print(M["PRINT_03"])
         return 1
     if undetected:
-        print(f"\n以下变异没有被检出（对应判据形同虚设）: {undetected}")
+        print(f"{M['PRINT_04']}{undetected}")
         return 1
     print(f"\nALL {len(MUTATIONS)} MUTATIONS DETECTED AND RESTORED")
     return 0

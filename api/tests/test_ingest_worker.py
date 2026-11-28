@@ -1,4 +1,4 @@
-"""摄取 worker 的链路测试（真 PG + 假 parser）。
+"""摄取 worker 的链路测试（真 PG + 假 parser）。.
 
 为什么用真 PG：`claim_next_job` 的 `FOR UPDATE SKIP LOCKED`、chunks 的
 jsonb/text[] 落库形状、`succeed_job` 的事务边界都是 PG 行为，sqlite 替身
@@ -35,6 +35,7 @@ EXPECTED_ACL = (False, ("fin",), ("staff",))
 
 
 def _make_sample(root: Path) -> Path:
+    """Run _make_sample."""
     path = root / "pdf_reports" / "demo.pdf"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"%PDF-1.4\n% ingest worker test fixture\n")
@@ -48,6 +49,7 @@ def _enqueue(
     *,
     doc_key: str = DOC_KEY,
 ) -> int:
+    """Run _enqueue."""
     conn.execute(
         "INSERT INTO documents (doc_key, filename, status) "
         "VALUES (%s, %s, 'queued')",
@@ -66,6 +68,7 @@ def _enqueue(
 def _cleanup(
     conn: psycopg.Connection[object], version_id: str, *, doc_key: str = DOC_KEY
 ) -> None:
+    """Run _cleanup."""
     conn.execute("DELETE FROM chunks WHERE version_id = %s", (version_id,))
     conn.execute("DELETE FROM ingest_jobs WHERE doc_key = %s", (doc_key,))
     conn.execute(
@@ -78,12 +81,13 @@ def _cleanup(
 def _fake_parser(
     seen: dict[str, Any] | None = None, *, raises: Exception | None = None
 ):
-    """返回一份带齐六项随行信息的假解析结果。
+    """返回一份带齐六项随行信息的假解析结果。.
 
     ACL 原样带入 chunk 便于落库断言。
     """
 
     def parser(path, *, doc_key, version_id, acl, **kwargs):
+        """Run parser."""
         if seen is not None:
             seen["acl"] = (acl.is_public, acl.allowed_depts, acl.allowed_roles)
             seen["path"] = path
@@ -116,7 +120,7 @@ def _fake_parser(
 def test_claim_parse_persist_succeed_writes_chunks_and_succeeds_job(
     pg_dsn: str, tmp_path: Path
 ) -> None:
-    """一条 queued job 跑完后 chunks 真在库里，job 变 succeeded。
+    """一条 queued job 跑完后 chunks 真在库里，job 变 succeeded。.
 
     权限是显式传进去的那份。这条是 tracer bullet：整个 worker 的第一个
     端到端切片。它红了说明链路根本没接上，后面所有“幂等 / 失败重试”的
@@ -187,7 +191,7 @@ def test_claim_parse_persist_succeed_writes_chunks_and_succeeds_job(
 def test_rerun_same_version_does_not_duplicate_chunks(
     pg_dsn: str, tmp_path: Path
 ) -> None:
-    """同一 version_id 再跑一轮，chunks 不能翻倍。
+    """同一 version_id 再跑一轮，chunks 不能翻倍。.
 
     模拟重跑的方式是把 succeeded 就地退回 queued（002 的唯一索引只挡 open job，
     不挡人工/脚本重放）。没有按 version_id 先删老行时，第二次 INSERT 会撞主键
@@ -246,7 +250,7 @@ def test_rerun_same_version_does_not_duplicate_chunks(
 def test_parse_failure_retries_three_times_then_terminal(
     pg_dsn: str, tmp_path: Path
 ) -> None:
-    """解析异常走 fail_job：前三次回 queued 并涨 retry_count。
+    """解析异常走 fail_job：前三次回 queued 并涨 retry_count。.
 
     第四次进 failed 终态。
     """
@@ -297,7 +301,7 @@ def test_parse_failure_retries_three_times_then_terminal(
 def test_missing_sample_terminal_fails_without_consuming_retry(
     pg_dsn: str, tmp_path: Path
 ) -> None:
-    """样本文件不在目录里属于确定性失败。
+    """样本文件不在目录里属于确定性失败。.
 
     直接 failed、retry_count 不涨、不再入队。
     """
@@ -347,7 +351,7 @@ def test_missing_sample_terminal_fails_without_consuming_retry(
 
 
 def test_acl_rules_are_explicit_and_never_public() -> None:
-    """每条路径规则都必须带非空部门与角色，且不是全放行。"""
+    """每条路径规则都必须带非空部门与角色，且不是全放行。."""
     from worker.ingest_worker import acl_for_sample  # noqa: PLC0415
 
     for rel in (
@@ -364,7 +368,7 @@ def test_acl_rules_are_explicit_and_never_public() -> None:
 
 
 def test_acl_rule_refuses_unlisted_directory() -> None:
-    """没配规则的目录必须报错——'猜一个权限'比拒绝入库危险。"""
+    """没配规则的目录必须报错——'猜一个权限'比拒绝入库危险。."""
     from worker.ingest_worker import (  # noqa: PLC0415
         UnsupportedSamplePath,
         acl_for_sample,
@@ -375,7 +379,7 @@ def test_acl_rule_refuses_unlisted_directory() -> None:
 
 
 def test_acl_for_pdf_reports_matches_eval_identity() -> None:
-    """研报的部门口径与黄金集检索身份一致（depts=fin / roles=staff）。"""
+    """研报的部门口径与黄金集检索身份一致（depts=fin / roles=staff）。."""
     from worker.ingest_worker import acl_for_sample  # noqa: PLC0415
 
     acl = acl_for_sample("pdf_reports/zhong-xin-guo-ji.pdf")
@@ -387,7 +391,7 @@ def test_acl_for_pdf_reports_matches_eval_identity() -> None:
 
 @pytest.mark.integration
 def test_real_parser_persists_a_real_pdf(pg_dsn: str, tmp_path: Path) -> None:
-    """假 parser 验编排，这条验真链路：真 PDF -> 真解析 -> 真落库。
+    """假 parser 验编排，这条验真链路：真 PDF -> 真解析 -> 真落库。.
 
     用 A2 的 stdlib 版面夹具（`layout/prose-demo.pdf`，ASCII doc_key），不占用
     真实研报的 queued job，也不动 samples/ 里的任何文件。
@@ -436,7 +440,7 @@ def test_real_parser_persists_a_real_pdf(pg_dsn: str, tmp_path: Path) -> None:
 
 @pytest.mark.integration
 def test_main_once_reports_json_and_exits_on_empty_queue(pg_dsn: str) -> None:
-    """`--once --json` 是 `make ingest-once` 的底层入口。
+    """`--once --json` 是 `make ingest-once` 的底层入口。.
 
     空队列也必须正常退出。
     """

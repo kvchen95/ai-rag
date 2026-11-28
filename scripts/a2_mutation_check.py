@@ -29,6 +29,11 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+if __package__:
+    from .resources.a2_mutation_check_msgs import MESSAGES as M
+else:  # run as a script: python3 scripts/a2_mutation_check.py
+    from resources.a2_mutation_check_msgs import MESSAGES as M
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -61,7 +66,7 @@ MUTATIONS: tuple[Mutation, ...] = (
             "api/tests/test_parse_geometry.py",
             "api/tests/test_parse_pipeline_e2e.py",
         ),
-        why="旋转 90 度映射写错 → 旋转页 bbox 与未旋转页对不上",
+        why=M["WHY_01"],
     ),
     Mutation(
         key="rotation-inverse",
@@ -70,7 +75,7 @@ MUTATIONS: tuple[Mutation, ...] = (
         " (self.user_height - y, x)",
         new="        if self.rotation == 90:\n            return (y, x)",
         tests=("api/tests/test_parse_geometry.py",),
-        why="逆映射写错 → 显示/阅读空间往返不闭合",
+        why=M["WHY_02"],
     ),
     Mutation(
         key="header-footer",
@@ -82,7 +87,7 @@ MUTATIONS: tuple[Mutation, ...] = (
             "api/tests/test_parse_layout.py",
             "api/tests/test_parse_pipeline_e2e.py",
         ),
-        why="去掉页边带判据 → 每页的章节标题与条款被当页眉删掉",
+        why=M["WHY_03"],
     ),
     Mutation(
         key="digits-flatten",
@@ -90,7 +95,7 @@ MUTATIONS: tuple[Mutation, ...] = (
         old='    return _DIGITS.sub("#", collapsed)',
         new="    return collapsed",
         tests=("api/tests/test_parse_layout.py",),
-        why="不抹平数字 → 带页码的页眉一个都认不出来",
+        why=M["WHY_04"],
     ),
     Mutation(
         key="gutter-guard",
@@ -98,7 +103,7 @@ MUTATIONS: tuple[Mutation, ...] = (
         old="        if rect.x0 < gap_start - 0.5 and rect.x1 > gap_end + 0.5:",
         new="        if False:",
         tests=("api/tests/test_parse_layout.py",),
-        why="去掉「跨栏缝即非表格」→ 双栏正文被当成表格",
+        why=M["WHY_05"],
     ),
     Mutation(
         key="prose-guard",
@@ -107,7 +112,7 @@ MUTATIONS: tuple[Mutation, ...] = (
         " TABLE_CELL_MAX_CHARS)",
         new="    long_cells = 0",
         tests=("api/tests/test_parse_layout.py",),
-        why="去掉「长单元格即非表格」→ 一段话被当成表格的一格",
+        why=M["WHY_06"],
     ),
     Mutation(
         key="table-span",
@@ -115,7 +120,7 @@ MUTATIONS: tuple[Mutation, ...] = (
         old="                    col_span=max(1, col_end - col),",
         new="                    col_span=1,",
         tests=("api/tests/test_parse_merged_table.py",),
-        why="丢掉合并列信息 → 三表示的一致性被破坏",
+        why=M["WHY_07"],
     ),
     Mutation(
         key="widen-expand",
@@ -124,7 +129,7 @@ MUTATIONS: tuple[Mutation, ...] = (
         " grid[r][c] = text",
         new="                grid[r][c] = text",
         tests=("api/tests/test_parse_tables.py",),
-        why="合并格展开改成「后到先得」→ 左上角的值被覆盖",
+        why=M["WHY_08"],
     ),
     Mutation(
         key="md-pipe-escape",
@@ -133,7 +138,7 @@ MUTATIONS: tuple[Mutation, ...] = (
         ' "\\\\|")',
         new="    return value",
         tests=("api/tests/test_parse_tables.py",),
-        why="md 不转义竖线 → 一行被切成更多列",
+        why=M["WHY_09"],
     ),
     Mutation(
         key="percent-sum",
@@ -144,7 +149,7 @@ MUTATIONS: tuple[Mutation, ...] = (
             "api/tests/test_parse_figures.py",
             "api/tests/test_parse_pipeline_e2e.py",
         ),
-        why="去掉占比求和检查 → 32 被读成 74 也能入库",
+        why=M["WHY_10"],
     ),
     Mutation(
         key="value-in-figure",
@@ -153,7 +158,7 @@ MUTATIONS: tuple[Mutation, ...] = (
         " _value_supported(value, evidence, axis)\n    ]",
         new="    unmatched: list[float] = []",
         tests=("api/tests/test_parse_figures.py",),
-        why="去掉「数值能在图上找到」→ 模型编的数字也能入库",
+        why=M["WHY_11"],
     ),
     Mutation(
         key="label-in-figure",
@@ -162,7 +167,7 @@ MUTATIONS: tuple[Mutation, ...] = (
         " _label_supported(label, evidence)]",
         new="    missing_labels: list[str] = []",
         tests=("api/tests/test_parse_figures.py",),
-        why="去掉标签检查 → 编造的类别名也能入库",
+        why=M["WHY_12"],
     ),
     Mutation(
         key="acl-denied",
@@ -172,7 +177,7 @@ MUTATIONS: tuple[Mutation, ...] = (
         ' denied)")',
         new="        pass",
         tests=("api/tests/test_parse_chunking.py",),
-        why="放行「谁都看不到」的切片 → 六项校验少一项",
+        why=M["WHY_13"],
     ),
     Mutation(
         key="page-num",
@@ -181,7 +186,7 @@ MUTATIONS: tuple[Mutation, ...] = (
         ' missing.append("page_num")',
         new="        pass",
         tests=("api/tests/test_parse_chunking.py",),
-        why="不校验页码 → 引用不能跳页的切片也能入库",
+        why=M["WHY_14"],
     ),
     Mutation(
         key="year-matches-date",
@@ -190,7 +195,7 @@ MUTATIONS: tuple[Mutation, ...] = (
         " self.effective_year != self.effective_date // 10000:",
         new="        if False:",
         tests=("api/tests/test_parse_chunking.py",),
-        why="派生列不自洽 → 时间过滤按错误的年去筛",
+        why=M["WHY_15"],
     ),
     Mutation(
         key="overlap",
@@ -198,7 +203,7 @@ MUTATIONS: tuple[Mutation, ...] = (
         old="    effective_overlap = max(0, min(overlap, max_chars // 2))",
         new="    effective_overlap = 0",
         tests=("api/tests/test_parse_chunking.py",),
-        why="去掉重叠 → 一句话被切断后两边都检索不到",
+        why=M["WHY_16"],
     ),
     Mutation(
         key="dates-explicit",
@@ -206,7 +211,7 @@ MUTATIONS: tuple[Mutation, ...] = (
         old='        return BusinessDate(value, year, "explicit")',
         new='        return BusinessDate(value, year, "inferred")',
         tests=("api/tests/test_parse_dates.py",),
-        why="显式日期被降级成推断 → 时间过滤永远不认它",
+        why=M["WHY_17"],
     ),
     Mutation(
         key="zero-width",
@@ -214,7 +219,7 @@ MUTATIONS: tuple[Mutation, ...] = (
         old="    chars = fill_missing_widths(page.chars)",
         new="    chars = list(page.chars)",
         tests=("api/tests/test_parse_zero_width.py",),
-        why="不补零宽字宽 → 真实样本的行宽为 0，整份文档一条切片都出不来",
+        why=M["WHY_18"],
     ),
     Mutation(
         key="figure-dpi",
@@ -222,7 +227,7 @@ MUTATIONS: tuple[Mutation, ...] = (
         old="        fig.assert_min_dpi(rendered)",
         new="        pass",
         tests=("api/tests/test_parse_figure_render.py",),
-        why="不查 DPI → 糊图也能入库（刻度读出来是错的）",
+        why=M["WHY_19"],
     ),
     Mutation(
         key="figure-reject",
@@ -230,7 +235,7 @@ MUTATIONS: tuple[Mutation, ...] = (
         old="    if not result.ok:",
         new="    if False:",
         tests=("api/tests/test_parse_pipeline_e2e.py",),
-        why="对账失败仍然入库 → 验收第二条破了",
+        why=M["WHY_20"],
     ),
     Mutation(
         key="scan-image-ratio",
@@ -238,7 +243,7 @@ MUTATIONS: tuple[Mutation, ...] = (
         old="        if area / page_area >= CONTENT_IMAGE_MIN_RATIO:",
         new="        if False:",
         tests=("api/tests/test_parse_ocr.py",),
-        why="要求位图覆盖半页 → 23% 的真实扫描页被判成非扫描件",
+        why=M["WHY_21"],
     ),
     Mutation(
         key="ocr-render-page",
@@ -247,7 +252,7 @@ MUTATIONS: tuple[Mutation, ...] = (
         " _render_page(page, render_scale)",
         new="    image = _render_page(page, render_scale)",
         tests=("api/tests/test_parse_ocr.py",),
-        why="不让调用方提供渲染器 → 拿 pdfplumber 的 Page 去 render，运行时崩",
+        why=M["WHY_22"],
     ),
     Mutation(
         key="ocr-blocked",
@@ -256,7 +261,7 @@ MUTATIONS: tuple[Mutation, ...] = (
         " list(draft.blocked_rects)",
         new="    blocked = list(draft.blocked_rects)",
         tests=("api/tests/test_parse_ocr.py",),
-        why="OCR 页仍按图区域遮挡 → 识别出的文字全被扣掉，一片都不入库",
+        why=M["WHY_23"],
     ),
     Mutation(
         key="ocr-notes",
@@ -264,7 +269,7 @@ MUTATIONS: tuple[Mutation, ...] = (
         old='    if sources == {"ocr"}:\n        return ("source:ocr",)',
         new='    if sources == {"ocr"}:\n        return ()',
         tests=("api/tests/test_parse_ocr.py",),
-        why="不把来源传下去 → 下游分不清文字层与识别结果",
+        why=M["WHY_24"],
     ),
     Mutation(
         key="as-row-table-cells",
@@ -272,7 +277,7 @@ MUTATIONS: tuple[Mutation, ...] = (
         old='            "table_cells": self.table_cells,',
         new='            "table_cells": None,',
         tests=("api/tests/test_parse_persist_integration.py",),
-        why="as_row 丢掉矩阵 → §3.3 的第三份表示入库即丢，校验只能正则拆 HTML",
+        why=M["WHY_25"],
         needs_db=True,
     ),
     Mutation(
@@ -281,7 +286,7 @@ MUTATIONS: tuple[Mutation, ...] = (
         old='            "notes": list(self.notes),',
         new='            "notes": [],',
         tests=("api/tests/test_parse_persist_integration.py",),
-        why="as_row 丢掉来源标记 → 下游看不出这段文字是 OCR 认的",
+        why=M["WHY_26"],
         needs_db=True,
     ),
     Mutation(
@@ -290,7 +295,7 @@ MUTATIONS: tuple[Mutation, ...] = (
         old='    return f"ch_{digest[:12]}"',
         new='    return f"ch_{version_id}_{page_num}_{kind}_{index}_{part}"',
         tests=("api/tests/test_parse_chunking.py",),
-        why="编号带上 version_id → 文件路径里有 / 与 #，图必定 404",
+        why=M["WHY_27"],
     ),
 )
 
@@ -307,12 +312,12 @@ def run_mutation(mutation: Mutation, workdir: Path) -> tuple[bool, str]:
     target = workdir / mutation.path
     original = target.read_text(encoding="utf-8")
     if mutation.old not in original:
-        return False, f"锚点未找到（{mutation.path}）：{mutation.old[:60]!r}"
-    if mutation.needs_db and not _db_dsn():
         return False, (
-            "这条变异需要真 PG（集成用例会 skip），但没设 "
-            "AI_RAG_TEST_DATABASE_URL/DATABASE_URL —— 不把 skip 当检出"
+            f"{M['RUN_MUTATION_01']}{mutation.path}）："
+            f"{mutation.old[:60]!r}"
         )
+    if mutation.needs_db and not _db_dsn():
+        return False, M["RUN_MUTATION_02"]
     try:
         target.write_text(
             original.replace(mutation.old, mutation.new, 1), encoding="utf-8"
@@ -336,9 +341,9 @@ def run_mutation(mutation: Mutation, workdir: Path) -> tuple[bool, str]:
         if proc.returncode == 0:
             skipped = "skipped" in proc.stdout
             return False, (
-            "变异后只用例被 skip 了（没有真 PG）—— 不算检出"
+            M["RUN_MUTATION_03"]
                 if skipped
-                else "变异后测试仍然全绿 —— 这条判据没有被任何用例覆盖"
+                else M["RUN_MUTATION_04"]
             )
         tail = [
             line
@@ -370,11 +375,12 @@ def _pytest_env(mutation: Mutation) -> dict[str, str]:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="A2 判据变异测试")
-    ap.add_argument("--list", action="store_true", help="只列出变异，不执行")
-    ap.add_argument("--only", help="只跑指定 key")
+    """Run main."""
+    ap = argparse.ArgumentParser(description=M["DESCRIPTION_01"])
+    ap.add_argument("--list", action="store_true", help=M["HELP_01"])
+    ap.add_argument("--only", help=M["HELP_02"])
     ap.add_argument(
-        "--keep", action="store_true", help="保留临时副本（调试用）"
+        "--keep", action="store_true", help=M["HELP_03"]
     )
     args = ap.parse_args()
 

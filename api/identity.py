@@ -33,6 +33,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from api.config import Settings
 from api.errors import AppError, ErrorCode
 from api.observability import get_logger, log_event
+from api.resources import messages as msg
 
 logger = get_logger("api.identity")
 
@@ -62,15 +63,16 @@ def _normalise_claim_list(value: Any, *, claim: str) -> tuple[str, ...]:
         for item in value:
             if not isinstance(item, str):
                 raise _invalid(
-                    f"{claim} 里的元素必须是字符串，"
-                    f"实际是 {type(item).__name__}"
+                    msg.CLAIM_ITEM_TYPE.format(
+                        claim=claim, type_name=type(item).__name__
+                    )
                 )
             item = item.strip()
             if item:
                 items.append(item)
     else:
         raise _invalid(
-            f"{claim} 必须是数组或逗号分隔字符串，实际是 {type(value).__name__}"
+            msg.CLAIM_SHAPE.format(claim=claim, type_name=type(value).__name__)
         )
     return tuple(sorted(set(items)))
 
@@ -85,16 +87,14 @@ class IdentitySnapshot(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    user_id: str = Field(min_length=1, description="用户标识；空串等于没有身份")
+    user_id: str = Field(min_length=1, description=msg.DESC_USER_ID)
     depts: tuple[str, ...] = Field(
-        default_factory=tuple, description="部门列表，去重排序"
+        default_factory=tuple, description=msg.DESC_DEPTS
     )
     roles: tuple[str, ...] = Field(
-        default_factory=tuple, description="角色列表，去重排序"
+        default_factory=tuple, description=msg.DESC_ROLES
     )
-    admin: bool = Field(
-        default=False, description="管理员可跨部门，但审计必须可辨"
-    )
+    admin: bool = Field(default=False, description=msg.DESC_ADMIN)
 
     @field_validator("user_id")
     @classmethod
@@ -102,7 +102,7 @@ class IdentitySnapshot(BaseModel):
         """Run _user_id_not_blank."""
         value = value.strip()
         if not value:
-            raise ValueError("user_id 不能为空")
+            raise ValueError(msg.USER_ID_BLANK)
         return value
 
     @field_validator("depts", "roles", mode="before")
@@ -173,15 +173,15 @@ class IdentityResolver:
     ) -> IdentitySnapshot:
         """Run _from_authorization."""
         if not authorization or not authorization.strip():
-            raise _invalid("缺少 Authorization 头")
+            raise _invalid(msg.MISSING_AUTHORIZATION)
         scheme, _, token = authorization.strip().partition(" ")
         if scheme.lower() != "bearer":
             raise _invalid(
-                f"Authorization 方案必须是 Bearer，实际是 {scheme or '空'}"
+                msg.SCHEME_NOT_BEARER.format(scheme=scheme or msg.EMPTY_SCHEME)
             )
         token = token.strip()
         if not token:
-            raise _invalid("Bearer 后面没有 token")
+            raise _invalid(msg.MISSING_BEARER_TOKEN)
         claims = self._decode(token)
         return self._snapshot_from_claims(claims)
 
@@ -199,17 +199,21 @@ class IdentityResolver:
                 options={"require": ["exp"]},
             )
         except jwt.ExpiredSignatureError as exc:
-            raise _invalid("token 已过期") from exc
+            raise _invalid(msg.TOKEN_EXPIRED) from exc
         except jwt.InvalidSignatureError as exc:
-            raise _invalid("token 签名校验失败") from exc
+            raise _invalid(msg.TOKEN_BAD_SIGNATURE) from exc
         except jwt.InvalidAlgorithmError as exc:
-            raise _invalid(f"token alg 不是 {s.auth_jwt_alg}") from exc
+            raise _invalid(
+                msg.TOKEN_BAD_ALG.format(alg=s.auth_jwt_alg)
+            ) from exc
         except jwt.InvalidTokenError as exc:
             # 解码失败的原因（格式/claims/必须项缺失）只进 detail，
             # 不回显给用户。
-            raise _invalid(f"token 无法解析: {type(exc).__name__}") from exc
+            raise _invalid(
+                msg.TOKEN_UNPARSEABLE.format(error_type=type(exc).__name__)
+            ) from exc
         if not isinstance(claims, dict):
-            raise _invalid("token payload 不是对象")
+            raise _invalid(msg.TOKEN_PAYLOAD_NOT_OBJECT)
         return claims
 
     def _snapshot_from_claims(
@@ -219,11 +223,15 @@ class IdentityResolver:
         s = self._settings
         raw_user = claims.get(s.auth_jwt_user_id_claim)
         if raw_user is None:
-            raise _invalid(f"token 缺少 {s.auth_jwt_user_id_claim} 声明")
+            raise _invalid(
+                msg.TOKEN_MISSING_CLAIM.format(claim=s.auth_jwt_user_id_claim)
+            )
         if isinstance(raw_user, int) and not isinstance(raw_user, bool):
             raw_user = str(raw_user)
         if not isinstance(raw_user, str) or not raw_user.strip():
-            raise _invalid(f"{s.auth_jwt_user_id_claim} 声明必须是非空字符串")
+            raise _invalid(
+                msg.CLAIM_NOT_NONEMPTY.format(claim=s.auth_jwt_user_id_claim)
+            )
 
         depts = _normalise_claim_list(
             claims.get(s.auth_jwt_depts_claim), claim=s.auth_jwt_depts_claim
@@ -262,9 +270,15 @@ class IdentityResolver:
     def _from_headers(self, headers: Mapping[str, str]) -> IdentitySnapshot:
         """Run _from_headers."""
         lowered = {key.lower(): value for key, value in headers.items()}
-        user_id = (lowered.get(HEADER_USER_ID.lower()) or "").strip()
+        user_id = (
+            lowered.get(HEADER_USER_ID.lower())
+            if lowered.get(HEADER_USER_ID.lower())
+            else ""
+        ).strip()
         if not user_id:
-            raise _invalid(f"缺少 {HEADER_USER_ID} 头（AUTH_MODE=mock_header）")
+            raise _invalid(
+                msg.MISSING_USER_HEADER.format(header=HEADER_USER_ID)
+            )
         snapshot = IdentitySnapshot(
             user_id=user_id,
             depts=_normalise_claim_list(
@@ -321,10 +335,10 @@ def mint_dev_token(
     生产环境拒绝调用——把签发能力留在生产进程里，等于给了一个"谁都能当"的入口。
     """
     if settings.is_prod:
-        raise RuntimeError("mint_dev_token 不允许在生产环境使用")
+        raise RuntimeError(msg.MINT_TOKEN_PROD_FORBIDDEN)
     if settings.auth_mode != "fixed_jwt":
         raise RuntimeError(
-            f"mint_dev_token 只适用于 fixed_jwt，当前是 {settings.auth_mode}"
+            msg.MINT_TOKEN_WRONG_MODE.format(mode=settings.auth_mode)
         )
     now = int(time.time())
     claims = {

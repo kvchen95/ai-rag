@@ -1,4 +1,4 @@
-"""healthz：依赖故障必须能被区分——"挂了"和"哪个挂了"是两件事。"""
+"""healthz：依赖故障必须能被区分——"挂了"和"哪个挂了"是两件事。."""
 
 from __future__ import annotations
 
@@ -11,46 +11,58 @@ from api.tests.conftest import make_settings
 
 
 class FakePg:
+    """FakePg."""
     def __init__(self, probe: Probe) -> None:
+        """Initialize the instance."""
         self.probe = probe
         self.opened = False
         self.closed = False
 
     def open(self) -> None:
+        """Run open."""
         self.opened = True
 
     def close(self) -> None:
+        """Run close."""
         self.closed = True
 
     def ping(self, *, timeout_s: float | None = None) -> Probe:
+        """Run ping."""
         return self.probe
 
 
 class FakeQdrant:
+    """FakeQdrant."""
     def __init__(self, probe: Probe | BaseException) -> None:
+        """Initialize the instance."""
         self.probe = probe
         self.started = False
         self.stopped = False
 
     async def start(self) -> None:
+        """Run start."""
         self.started = True
 
     async def stop(self) -> None:
+        """Run stop."""
         self.stopped = True
 
     async def ping(self, *, timeout_s: float | None = None) -> Probe:
+        """Run ping."""
         if isinstance(self.probe, BaseException):
             raise self.probe
         return self.probe
 
 
 def _client(pg: FakePg, qdrant: FakeQdrant, **overrides: object) -> TestClient:
+    """Run _client."""
     return TestClient(
         create_app(make_settings(**overrides), pg=pg, qdrant=qdrant)
     )
 
 
 def test_healthy_returns_200_with_both_checks() -> None:
+    """Run test_healthy_returns_200_with_both_checks."""
     pg = FakePg(
         Probe(ok=True, latency_ms=1.2, extra={"server_version": "16.4"})
     )
@@ -70,6 +82,7 @@ def test_healthy_returns_200_with_both_checks() -> None:
 
 
 def test_postgres_down_is_503_and_points_at_postgres() -> None:
+    """Run test_postgres_down_is_503_and_points_at_postgres."""
     pg = FakePg(
         Probe(
             ok=False,
@@ -89,6 +102,7 @@ def test_postgres_down_is_503_and_points_at_postgres() -> None:
 
 
 def test_qdrant_down_is_503_and_points_at_qdrant() -> None:
+    """Run test_qdrant_down_is_503_and_points_at_qdrant."""
     pg = FakePg(Probe(ok=True, latency_ms=1.0))
     qd = FakeQdrant(
         Probe(ok=False, latency_ms=2000.0, error="ConnectError: [Errno 111]")
@@ -102,7 +116,7 @@ def test_qdrant_down_is_503_and_points_at_qdrant() -> None:
 
 
 def test_probe_crash_does_not_become_500() -> None:
-    """探针自己抛异常时 healthz 仍须是可解析的 503。
+    """探针自己抛异常时 healthz 仍须是可解析的 503。.
 
     不能退化成 handler 兜底的 500。
     """
@@ -116,7 +130,7 @@ def test_probe_crash_does_not_become_500() -> None:
 
 
 def test_collection_missing_is_not_a_dependency_failure() -> None:
-    """库是空的但服务是好的：首次入库前 api 不能被判 unhealthy 反复重启。"""
+    """库是空的但服务是好的：首次入库前 api 不能被判 unhealthy 反复重启。."""
     pg = FakePg(Probe(ok=True, latency_ms=1.0))
     qd = FakeQdrant(
         Probe(
@@ -132,6 +146,7 @@ def test_collection_missing_is_not_a_dependency_failure() -> None:
 
 
 def test_livez_ignores_dependencies() -> None:
+    """Run test_livez_ignores_dependencies."""
     pg = FakePg(Probe(ok=False, latency_ms=1.0, error="down"))
     qd = FakeQdrant(Probe(ok=False, latency_ms=1.0, error="down"))
     with _client(pg, qd) as client:
@@ -141,6 +156,7 @@ def test_livez_ignores_dependencies() -> None:
 
 
 def test_config_fingerprint_exposed_in_dev_only() -> None:
+    """Run test_config_fingerprint_exposed_in_dev_only."""
     with _client(
         FakePg(Probe(ok=True, latency_ms=1.0)),
         FakeQdrant(Probe(ok=True, latency_ms=1.0)),
@@ -164,6 +180,7 @@ def test_config_fingerprint_exposed_in_dev_only() -> None:
 
 @pytest.mark.parametrize("app_env", ["dev", "test", "prod"])
 def test_healthz_never_leaks_secrets(app_env: str) -> None:
+    """Run test_healthz_never_leaks_secrets."""
     with _client(
         FakePg(Probe(ok=True, latency_ms=1.0)),
         FakeQdrant(Probe(ok=True, latency_ms=1.0)),

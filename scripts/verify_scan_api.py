@@ -31,11 +31,17 @@ import time
 import urllib.error
 import urllib.request
 
+if __package__:
+    from .resources.verify_scan_api_msgs import MESSAGES as M
+else:  # run as a script: python3 scripts/verify_scan_api.py
+    from resources.verify_scan_api_msgs import MESSAGES as M
+
 # 仓库自带的三个样本（scripts/make_samples.py 生成）归一化后的 doc_key
 EXPECTED_SAMPLE_DOCS = {"policy/travel-cn", "policy/expense-cn", "hr/leave"}
 
 
 def call(base_url: str, path: str, method: str = "GET") -> tuple[int, dict]:
+    """Run call."""
     req = urllib.request.Request(base_url.rstrip("/") + path, method=method)
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
@@ -49,6 +55,7 @@ def call(base_url: str, path: str, method: str = "GET") -> tuple[int, dict]:
 
 
 def read_lock_key(base_url: str) -> tuple[int | None, str]:
+    """Run read_lock_key."""
     status, body = call(base_url, "/healthz")
     if status != 200:
         return None, f"healthz status={status}"
@@ -102,6 +109,7 @@ def hold_lock(dsn: str | None, key: int) -> tuple[subprocess.Popen[str], str]:
 
 
 def main() -> int:
+    """Run main."""
     ap = argparse.ArgumentParser(
         description="verify /api/v1/ingest/scan contract"
     )
@@ -110,7 +118,7 @@ def main() -> int:
         "--dsn", default=None, help="PG DSN for holding the scan lock"
     )
     ap.add_argument(
-        "--skip-conflict", action="store_true", help="跳过 409 并发检查"
+        "--skip-conflict", action="store_true", help=M["HELP_01"]
     )
     args = ap.parse_args()
     base = args.base_url.rstrip("/")
@@ -119,6 +127,7 @@ def main() -> int:
     unverified: list[str] = []
 
     def check(name: str, ok: bool, detail: str = "") -> None:
+        """Run check."""
         print(
             f"{'PASS' if ok else 'FAIL'}  {name}"
             + (f"   <- {detail}" if detail and not ok else "")

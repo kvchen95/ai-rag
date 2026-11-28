@@ -1,4 +1,4 @@
-"""在线检索编排的端到端验证（真 PG + 真 Qdrant + 真 TEI）。
+"""在线检索编排的端到端验证（真 PG + 真 Qdrant + 真 TEI）。.
 
 覆盖 §6 → §7 → §8 这一条链路。
 
@@ -61,6 +61,7 @@ def _pipeline(
     max_hops: int = 3,
     top_k: int = 30,
 ) -> RetrievalPipeline:
+    """Run _pipeline."""
     return RetrievalPipeline(
         pg=b3_pg,
         retriever=retriever,
@@ -81,7 +82,7 @@ def _pipeline(
 def test_happy_path_returns_evidence_and_a_reusable_audit(
     conn, store, embedder, b3_pg, retriever, reranker, query_embedder
 ) -> None:
-    """正常路径：能召回、能过阈、审计快照能直接落 qa_log。"""
+    """正常路径：能召回、能过阈、审计快照能直接落 qa_log。."""
     name = unique("happy")
     publish(
         conn,
@@ -128,6 +129,7 @@ def test_happy_path_returns_evidence_and_a_reusable_audit(
 def test_unrelated_question_is_rejected_not_answered(
     conn, store, embedder, b3_pg, retriever, reranker, query_embedder
 ) -> None:
+    """Run test_unrelated_question_is_rejected_not_answered."""
     name = unique("nohit")
     publish(
         conn,
@@ -158,16 +160,18 @@ def test_unrelated_question_is_rejected_not_answered(
 def test_out_of_scope_question_never_touches_the_embedding_service(
     b3_pg,
 ) -> None:
-    """§6.3："明显超出库范围 → 直接拒答，不检索"。
+    """§6.3："明显超出库范围 → 直接拒答，不检索"。.
 
     用一个一调就炸的编码替身证明"真的没调"：如果实现里先检索再判范围，
     这个替身会抛 `EmbeddingUnavailable`，用例就红了。
     """
 
     class ExplodingEmbedder(QueryEmbedder):
+        """ExplodingEmbedder."""
         def embed(
             self, text: str
         ) -> list[float]:  # pragma: no cover - 不该被调用
+            """Run embed."""
             raise AssertionError("超出范围的问句不该触发编码")
 
     pipeline = RetrievalPipeline(
@@ -193,12 +197,14 @@ def test_out_of_scope_question_never_touches_the_embedding_service(
 
 
 def test_unresolvable_pronoun_asks_instead_of_searching(b3_pg) -> None:
-    """§6.1："指代不清（多个候选）→ 不替换，触发澄清"。"""
+    """§6.1："指代不清（多个候选）→ 不替换，触发澄清"。."""
 
     class ExplodingEmbedder(QueryEmbedder):
+        """ExplodingEmbedder."""
         def embed(
             self, text: str
         ) -> list[float]:  # pragma: no cover - 不该被调用
+            """Run embed."""
             raise AssertionError("指代不清时不该检索")
 
     pipeline = RetrievalPipeline(
@@ -228,7 +234,7 @@ def test_unresolvable_pronoun_asks_instead_of_searching(b3_pg) -> None:
 def test_stale_version_never_reaches_the_reranker(
     conn, store, embedder, b3_pg, retriever, reranker, query_embedder
 ) -> None:
-    """§7.4 的顺序判据：旧版本切片必须在**进精排之前**被剔除。
+    """§7.4 的顺序判据：旧版本切片必须在**进精排之前**被剔除。.
 
     可观测的痕迹只有一个：精排实际收到的条数（`RerankOutcome.scored`）。造一个
     旧版本（1 条）+ 新版本（2 条）都在向量库里 active 的状态，若顺序对，
@@ -289,7 +295,7 @@ def test_stale_version_never_reaches_the_reranker(
 def test_single_hop_prediction_is_downgraded_when_first_hop_suffices(
     conn, store, embedder, b3_pg, retriever, reranker, query_embedder
 ) -> None:
-    """§6.3 / §8.3：预判多跳可被第一跳推翻。
+    """§6.3 / §8.3：预判多跳可被第一跳推翻。.
 
     问句里带"分别"会被预判成多跳，但库里两条证据一次就找齐了 —— 最终 `hop_count`
     必须是 0（没跑多跳），因为多跑的每一跳都是一次检索 + 一次精排。
@@ -336,7 +342,7 @@ def test_single_hop_prediction_is_downgraded_when_first_hop_suffices(
 
 
 def test_build_pipeline_reads_every_threshold_from_settings(settings) -> None:
-    """装配只走 `build_pipeline`。
+    """装配只走 `build_pipeline`。.
 
     阈值全部来自 `Settings`，不在代码里另写一份。
     """
@@ -359,6 +365,6 @@ def test_build_pipeline_reads_every_threshold_from_settings(settings) -> None:
 
 
 def test_needs_clarification_from_understand_propagates(b3_pg) -> None:
-    """`understand()` 抛的澄清必须被编排层接住，而不是当异常冒到 HTTP 层。"""
+    """`understand()` 抛的澄清必须被编排层接住，而不是当异常冒到 HTTP 层。."""
     with pytest.raises(NeedsClarification):
         understand("那它呢", previous_entities=None)

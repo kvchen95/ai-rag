@@ -27,6 +27,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from api.clients.pg import PgDatabase
 from api.errors import ErrorCode
 from api.observability import get_logger, log_event
+from api.resources import messages as msg
 
 logger = get_logger("api.audit")
 
@@ -61,18 +62,18 @@ class QaLogEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     # --- 身份快照（§11.2 / §5.1）：管理员跨部门访问必须在审计里可辨 ---
-    user_id: str = Field(min_length=1, description="用户标识；空串等于没有审计")
+    user_id: str = Field(min_length=1, description=msg.DESC_AUDIT_USER_ID)
     user_depts: list[str] = Field(default_factory=list)
     user_roles: list[str] = Field(default_factory=list)
     is_admin: bool = False
 
     # --- 问答本身（附录 A.4）---
-    question: str = Field(min_length=1, description="原问，不改写")
+    question: str = Field(min_length=1, description=msg.DESC_AUDIT_QUESTION)
     retrieved_ids: list[str] = Field(
-        default_factory=list, description="进精排的切片编号"
+        default_factory=list, description=msg.DESC_AUDIT_RETRIEVED
     )
     score_snapshot: dict[str, Any] = Field(
-        default_factory=dict, description="各路最高分与分布"
+        default_factory=dict, description=msg.DESC_AUDIT_SCORES
     )
     gate1_verdict: Gate1Verdict
     gate2_verdict: Gate2Verdict | None = None
@@ -93,16 +94,18 @@ class QaLogEntry(BaseModel):
         """
         if self.gate1_verdict in REJECT_VERDICTS and self.reject_reason is None:
             raise ValueError(
-                f"gate1_verdict={self.gate1_verdict} "
-                "必须带 reject_reason（§11.3）"
+                msg.AUDIT_REJECT_REASON_REQUIRED.format(
+                    verdict=self.gate1_verdict
+                )
             )
         if self.reject_reason in (
             ErrorCode.NO_EVIDENCE,
             ErrorCode.LOW_CONFIDENCE,
         ) and (self.gate1_verdict not in REJECT_VERDICTS):
             raise ValueError(
-                f"reject_reason={self.reject_reason} 只能配拒答判定，"
-                f"实际 gate1={self.gate1_verdict}"
+                msg.AUDIT_REJECT_MISMATCH.format(
+                    reason=self.reject_reason, verdict=self.gate1_verdict
+                )
             )
         # 第五道失败时判别器仍可能为 supported，两者不矛盾：门控放行且证据有据，
         # 但同属性多值的内部一致性不过，仍然只能拒答并附原文。

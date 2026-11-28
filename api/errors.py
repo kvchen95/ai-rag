@@ -22,12 +22,14 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from api.observability import get_logger, log_event, request_id_var
+from api.resources import messages as msg
 
 logger = get_logger("api.errors")
 
 
 class ErrorCode(StrEnum):
     """ErrorCode."""
+
     AUTH_INVALID = "auth_invalid"
     FORBIDDEN = "forbidden"
     NO_EVIDENCE = "no_evidence"
@@ -57,6 +59,7 @@ class ErrorCode(StrEnum):
 
 class AlertPolicy(StrEnum):
     """AlertPolicy."""
+
     NONE = "none"  # 用户侧问题，不告警
     BURST = "burst"  # 连续出现才告警（forbidden：偶发是正常越权拦截）
     ALWAYS = "always"  # 出现即告警
@@ -65,6 +68,7 @@ class AlertPolicy(StrEnum):
 @dataclass(frozen=True, slots=True)
 class ErrorSpec:
     """ErrorSpec."""
+
     http_status: int
     user_message: str
     alert: AlertPolicy
@@ -73,42 +77,46 @@ class ErrorSpec:
 
 # §11.3 原表逐行落地；顺序与文档一致，便于对照。
 ERROR_SPECS: Mapping[ErrorCode, ErrorSpec] = {
-    ErrorCode.AUTH_INVALID: ErrorSpec(401, "请重新登录", AlertPolicy.NONE),
-    ErrorCode.FORBIDDEN: ErrorSpec(403, "无权查看", AlertPolicy.BURST),
+    ErrorCode.AUTH_INVALID: ErrorSpec(
+        401, msg.ERR_AUTH_INVALID, AlertPolicy.NONE
+    ),
+    ErrorCode.FORBIDDEN: ErrorSpec(403, msg.ERR_FORBIDDEN, AlertPolicy.BURST),
     ErrorCode.NO_EVIDENCE: ErrorSpec(
-        200, "未找到可验证依据", AlertPolicy.NONE, sse_fallback=True
+        200, msg.ERR_NO_EVIDENCE, AlertPolicy.NONE, sse_fallback=True
     ),
     ErrorCode.LOW_CONFIDENCE: ErrorSpec(
-        200, "现有资料不足以下结论", AlertPolicy.NONE, sse_fallback=True
+        200, msg.ERR_LOW_CONFIDENCE, AlertPolicy.NONE, sse_fallback=True
     ),
     ErrorCode.UNVERIFIABLE: ErrorSpec(
-        200, "本次不作结论，附原文", AlertPolicy.ALWAYS, sse_fallback=True
+        200, msg.ERR_UNVERIFIABLE, AlertPolicy.ALWAYS, sse_fallback=True
     ),
     ErrorCode.MODEL_TIMEOUT: ErrorSpec(
-        504, "稍后重试", AlertPolicy.ALWAYS, sse_fallback=True
+        504, msg.ERR_RETRY_LATER, AlertPolicy.ALWAYS, sse_fallback=True
     ),
     ErrorCode.INDEX_STALE: ErrorSpec(
-        503, "稍后重试", AlertPolicy.ALWAYS, sse_fallback=True
+        503, msg.ERR_RETRY_LATER, AlertPolicy.ALWAYS, sse_fallback=True
     ),
     ErrorCode.INTERNAL: ErrorSpec(
-        500, "稍后重试", AlertPolicy.ALWAYS, sse_fallback=True
+        500, msg.ERR_RETRY_LATER, AlertPolicy.ALWAYS, sse_fallback=True
     ),
     ErrorCode.INVALID_REQUEST: ErrorSpec(
-        422, "请求格式不正确", AlertPolicy.NONE
+        422, msg.ERR_INVALID_REQUEST, AlertPolicy.NONE
     ),
     # 404 是用户侧问题（链接/编号错了），不告警。
-    ErrorCode.NOT_FOUND: ErrorSpec(404, "未找到该文档", AlertPolicy.NONE),
+    ErrorCode.NOT_FOUND: ErrorSpec(404, msg.ERR_NOT_FOUND, AlertPolicy.NONE),
     # 409 是"有人正在跑"，正常并发行为。但连续出现说明有人在反复点，
     # 或者有一轮扫描卡死没释放锁——两种都需要人看一眼，所以按 BURST。
     ErrorCode.SCAN_IN_PROGRESS: ErrorSpec(
-        409, "扫描正在进行中", AlertPolicy.BURST
+        409, msg.ERR_SCAN_IN_PROGRESS, AlertPolicy.BURST
     ),
     # 配置/部署问题，不是用户问题：出现即告警（通常是挂载没挂上或路径写错）。
-    ErrorCode.SAMPLES_MISSING: ErrorSpec(500, "稍后重试", AlertPolicy.ALWAYS),
+    ErrorCode.SAMPLES_MISSING: ErrorSpec(
+        500, msg.ERR_RETRY_LATER, AlertPolicy.ALWAYS
+    ),
     # 版本状态冲突：并发翻牌 / 重复翻牌。BURST 而不是 NONE——连续出现说明有人在
     # 反复翻同一份文档，值得看一眼；单次出现是正常的幂等结果。
     ErrorCode.VERSION_CONFLICT: ErrorSpec(
-        409, "该版本状态已变更，请刷新后重试", AlertPolicy.BURST
+        409, msg.ERR_VERSION_CONFLICT, AlertPolicy.BURST
     ),
 }
 
@@ -150,6 +158,7 @@ class AppError(Exception):
 
 def install_error_handlers(app: FastAPI) -> None:
     """Run install_error_handlers."""
+
     @app.exception_handler(AppError)
     async def _app_error(_: Request, exc: AppError) -> JSONResponse:
         """Run _app_error."""
@@ -180,7 +189,8 @@ def install_error_handlers(app: FastAPI) -> None:
         ]
         log_event(logger, "invalid_request", level=30, fields=fields)
         err = AppError(
-            ErrorCode.INVALID_REQUEST, detail=", ".join(fields) or None
+            ErrorCode.INVALID_REQUEST,
+            detail=(", ".join(fields) if ", ".join(fields) else None),
         )
         return JSONResponse(
             status_code=err.spec.http_status, content=err.body(rid)

@@ -12,6 +12,11 @@ import os
 import sys
 from pathlib import Path
 
+if __package__:
+    from .resources.backfill_temporal_metadata_msgs import MESSAGES as M
+else:  # run as a script: python3 scripts/backfill_temporal_metadata.py
+    from resources.backfill_temporal_metadata_msgs import MESSAGES as M
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
@@ -23,14 +28,15 @@ PERIODS = {
 }
 
 COMPANIES = {
-    "hai-guang-xin-xi": "海光信息",
-    "han-wu-ji": "寒武纪",
-    "yu-shu-ke-ji": "宇树科技",
-    "zhang-xin-ke-ji": "长鑫科技",
+    "hai-guang-xin-xi": M["HAI_GUANG_XIN_XI_01"],
+    "han-wu-ji": M["HAN_WU_JI_01"],
+    "yu-shu-ke-ji": M["YU_SHU_KE_JI_01"],
+    "zhang-xin-ke-ji": M["ZHANG_XIN_KE_JI_01"],
 }
 
 
 def parse_doc_key(doc_key: str) -> tuple[str, str, str, str, str]:
+    """Run parse_doc_key."""
     stem = doc_key.split("/")[-1]
     company_slug = None
     for slug in COMPANIES:
@@ -46,6 +52,7 @@ def parse_doc_key(doc_key: str) -> tuple[str, str, str, str, str]:
 
 
 def main() -> int:
+    """Run main."""
     apply = "--apply" in sys.argv
     dry_run = "--dry-run" in sys.argv
     if not apply and not dry_run:

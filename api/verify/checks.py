@@ -17,6 +17,7 @@ from api.generate.judge import JudgeResult, judge
 from api.generate.llm import Draft, Fact, LlmClient
 from api.generate.render import render_draft
 from api.observability import get_logger, log_event
+from api.resources import messages as msg
 from api.verify.numbers import (
     find_value_conflicts,
     locate_proper_nouns,
@@ -151,7 +152,7 @@ class VerificationReport:
 
 def _facts(draft: Draft) -> tuple[Fact, ...]:
     """Run _facts."""
-    return tuple(draft.facts or ())
+    return tuple(draft.facts if draft.facts else ())
 
 
 def _evidence_by_chunk(pack: EvidencePack) -> dict[str, Evidence]:
@@ -189,7 +190,7 @@ def _evidence_text(items: Sequence[Evidence]) -> str:
 
 def _clip(text: str, limit: int = 60) -> str:
     """Run _clip."""
-    text = " ".join((text or "").split())
+    text = " ".join(((text if text else "")).split())
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
@@ -206,7 +207,7 @@ def check_citation_range(
     if offenders:
         return CheckFailure(
             check=CHECK_CITATION_RANGE,
-            detail="引用的 evidence_id 不在证据包中",
+            detail=msg.CHECK_CITATION_OUT_OF_PACK,
             offenders=tuple(offenders[:8]),
         )
     return None
@@ -220,13 +221,13 @@ def check_every_claim_cited(
     if not facts:
         return CheckFailure(
             check=CHECK_EVERY_CLAIM,
-            detail="草稿没有任何可校验的主张（主张为空）",
+            detail=msg.CHECK_NO_CLAIMS,
         )
     naked = [fact.text for fact in facts if not fact.evidence_ids]
     if naked:
         return CheckFailure(
             check=CHECK_EVERY_CLAIM,
-            detail=f"{len(naked)} 条 fact 没有 evidence_ids",
+            detail=msg.CHECK_NAKED_FACTS.format(count=len(naked)),
             offenders=tuple(naked[:5]),
         )
     return None
@@ -245,7 +246,9 @@ def check_grounding(
         if fact.kind == "calculation":
             if validate_calculation(fact.expression, fact.result, blob) is None:
                 offenders.append(
-                    f"「{_clip(fact.text)}」的计算无法由被引证据复算"
+                    msg.CHECK_CALC_UNVERIFIABLE.format(
+                        text=_clip(fact.text)
+                    )
                 )
             continue
         missing_numbers, _ = locate_quantities(fact.text, blob)
@@ -253,18 +256,23 @@ def check_grounding(
         parts: list[str] = []
         if missing_numbers:
             parts.append(
-                "数字 " + "、".join(item.raw for item in missing_numbers)
+                msg.CHECK_NUMBER_PREFIX
+                + "、".join(item.raw for item in missing_numbers)
             )
         if missing_names:
-            parts.append("专名 " + "、".join(missing_names))
+            parts.append(msg.CHECK_NAME_PREFIX + "、".join(missing_names))
         if parts:
             offenders.append(
-                f"「{_clip(fact.text)}」里的{'、'.join(parts)}在被引证据里定位不到"
+                msg.CHECK_UNLOCATABLE.format(
+                    text=_clip(fact.text), missing="、".join(parts)
+                )
             )
     if offenders:
         return CheckFailure(
             check=CHECK_GROUNDING,
-            detail=f"{len(offenders)} 条 fact 的数字或专名无法在被引证据里定位",
+            detail=msg.CHECK_UNLOCATABLE_DETAIL.format(
+                count=len(offenders)
+            ),
             offenders=tuple(offenders[:5]),
         )
     return None
@@ -277,7 +285,7 @@ def check_nli(
     facts = _facts(draft)
     if not facts:
         result = judge(client, question, "", "")
-        return CheckFailure(check=CHECK_NLI, detail="无 fact 可校验"), result
+        return CheckFailure(check=CHECK_NLI, detail=msg.CHECK_NO_FACTS), result
     # §10.1 第四道：判别器吃“问题 + 被引证据 + 答案”。按整份渲染后的答案判，
     # 而不是逐 fact 判，避免把复合问题拆成多条事实后误报“漏答子问题”。
     cited = _all_cited(pack, draft)
@@ -291,9 +299,9 @@ def check_nli(
         return (
             CheckFailure(
                 check=CHECK_NLI,
-                detail="判别器判不支持"
+                detail=msg.CHECK_JUDGE_NOT_SUPPORTED
                 if not result.skipped
-                else "判别器未运行（未配置），按不支持处理",
+                else msg.CHECK_JUDGE_SKIPPED,
                 offenders=(result.reason,) if result.reason else (),
             ),
             result,
@@ -307,9 +315,14 @@ def check_consistency(draft: Draft, _pack: EvidencePack) -> CheckFailure | None:
     if conflicts:
         return CheckFailure(
             check=CHECK_CONSISTENCY,
-            detail=f"{len(conflicts)} 处同一属性出现两个值",
+            detail=msg.CHECK_CONFLICT_DETAIL.format(count=len(conflicts)),
             offenders=tuple(
-                f"{attribute} 同时是 {left} 与 {right}（单位 {unit}）"
+                msg.CHECK_CONFLICT_ITEM.format(
+                    attribute=attribute,
+                    left=left,
+                    right=right,
+                    unit=unit,
+                )
                 for attribute, unit, left, right in conflicts
             )[:5],
         )
@@ -332,7 +345,7 @@ def verify_draft(
             checks_run=(),
             failure=CheckFailure(
                 check=CHECK_DRAFT_STATUS,
-                detail="模型判定证据不足（status=unknown）",
+                detail=msg.CHECK_DRAFT_UNKNOWN,
                 offenders=(),
             ),
             elapsed_ms=(time.perf_counter() - started) * 1000,

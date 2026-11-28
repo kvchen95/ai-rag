@@ -1,4 +1,4 @@
-"""图转译与数值对账（§3.4）。验收第二条："数值对不上下标失败不入库"。
+"""图转译与数值对账（§3.4）。验收第二条："数值对不上下标失败不入库"。.
 
 对账是这个系统里唯一能拦住"VLM 把 47% 读成 74%"的关卡——校验阶段只看"数字
 在不在证据里"，证据本身错了它看不出来。所以这里每一个检查都要有**能通过的
@@ -62,6 +62,7 @@ def _transcript(
     kind: str = "bar",
     percent: bool = True,
 ) -> Transcript:
+    """Run _transcript."""
     unit = "%" if percent else "count"
     return Transcript(
         kind=kind,
@@ -88,6 +89,7 @@ GOOD = _transcript(
 
 
 def test_good_transcript_passes() -> None:
+    """Run test_good_transcript_passes."""
     result = reconcile(GOOD, EVIDENCE)
     assert result.ok, result.reason()
     assert result.stats["percent_sum"] == 100.0
@@ -97,7 +99,7 @@ def test_good_transcript_passes() -> None:
 
 
 def test_value_beyond_the_axis_is_rejected() -> None:
-    """刻度 0..150 的图上出现 400 —— 越界。
+    """刻度 0..150 的图上出现 400 —— 越界。.
 
     注意 74 在 0..100 的图上**不越界**：它能被拦下是因为占比求和不拢（见
     下一条）。
@@ -127,7 +129,7 @@ def test_value_beyond_the_axis_is_rejected() -> None:
 
 
 def test_value_below_the_axis_is_rejected() -> None:
-    """负值/低于下界同样越界。"""
+    """负值/低于下界同样越界。."""
     transcript = Transcript(
         kind="bar",
         raw_markdown="x",
@@ -145,7 +147,7 @@ def test_value_below_the_axis_is_rejected() -> None:
 
 
 def test_value_slightly_above_the_axis_is_tolerated() -> None:
-    """刻度 0..100 而读成 100.4 —— 那是四舍五入，不是读错。
+    """刻度 0..100 而读成 100.4 —— 那是四舍五入，不是读错。.
 
     给跨度 1% 的余量；比这更大的越界只能是读错。
     """
@@ -160,7 +162,7 @@ def test_value_slightly_above_the_axis_is_tolerated() -> None:
 
 
 def test_percent_sum_outside_the_window_is_rejected() -> None:
-    """把 32 读成 74：总和变成 142，饼图/百分比的"和不拢"立刻暴露。"""
+    """把 32 读成 74：总和变成 142，饼图/百分比的"和不拢"立刻暴露。."""
     bad = _transcript(
         [("Transport", 74), ("Lodging", 28), ("Meals", 24), ("Other", 16)]
     )
@@ -170,6 +172,7 @@ def test_percent_sum_outside_the_window_is_rejected() -> None:
 
 
 def test_percent_window_lower_edge_is_rejected() -> None:
+    """Run test_percent_window_lower_edge_is_rejected."""
     low = _transcript(
         [("Transport", 30), ("Lodging", 28), ("Meals", 24), ("Other", 16)]
     )
@@ -179,7 +182,7 @@ def test_percent_window_lower_edge_is_rejected() -> None:
 
 
 def test_percent_window_is_inclusive() -> None:
-    """99 与 101 都在窗口内：读图允许 ±1 的取整误差。"""
+    """99 与 101 都在窗口内：读图允许 ±1 的取整误差。."""
     assert PERCENT_SUM_MIN == 99.0
     assert PERCENT_SUM_MAX == 101.0
     ok_low = _transcript(
@@ -190,7 +193,7 @@ def test_percent_window_is_inclusive() -> None:
 
 
 def test_non_percent_charts_skip_the_sum_check() -> None:
-    """金额型柱状图不该被"求和必须 99-101"约束。"""
+    """金额型柱状图不该被"求和必须 99-101"约束。."""
     money = FigureEvidence(
         texts=("500", "380", "320"),
         numbers=(500.0, 380.0, 320.0),
@@ -219,7 +222,7 @@ def test_non_percent_charts_skip_the_sum_check() -> None:
 
 
 def test_value_not_printed_and_not_a_bar_height_is_rejected() -> None:
-    """`45` 既不是印出来的数、也对不上任何柱高 —— 它就是模型编的。"""
+    """`45` 既不是印出来的数、也对不上任何柱高 —— 它就是模型编的。."""
     fabricated = Transcript(
         kind="bar",
         raw_markdown="x",
@@ -245,7 +248,7 @@ def test_value_not_printed_and_not_a_bar_height_is_rejected() -> None:
 
 
 def test_value_matching_a_bar_height_is_accepted() -> None:
-    """图上没印数值的柱图：靠柱高比例对账（容差 3%）。"""
+    """图上没印数值的柱图：靠柱高比例对账（容差 3%）。."""
     bare = FigureEvidence(
         texts=("Transport", "Lodging"),
         numbers=(100.0, 0.0),
@@ -271,7 +274,7 @@ def test_value_matching_a_bar_height_is_accepted() -> None:
 
 
 def test_bar_height_drift_beyond_tolerance_is_rejected() -> None:
-    """柱高 60% 却被读成 72% —— 超出 3% 容差就是读错。"""
+    """柱高 60% 却被读成 72% —— 超出 3% 容差就是读错。."""
     bare = FigureEvidence(
         texts=("Transport", "Lodging"),
         numbers=(100.0, 0.0),
@@ -300,7 +303,7 @@ def test_bar_height_drift_beyond_tolerance_is_rejected() -> None:
 
 
 def test_invented_label_is_rejected() -> None:
-    """类别名编错 → 引用的"哪一档"是假的。"""
+    """类别名编错 → 引用的"哪一档"是假的。."""
     bad = Transcript(
         kind="bar",
         raw_markdown="x",
@@ -326,7 +329,7 @@ def test_invented_label_is_rejected() -> None:
 
 
 def test_split_labels_still_match() -> None:
-    """中文/英文标签常被拆成多行（`Monthly` / `limit`），互相包含也算匹配。"""
+    """中文/英文标签常被拆成多行（`Monthly` / `limit`），互相包含也算匹配。."""
     evidence = FigureEvidence(
         texts=("Monthly", "limit", "2000"), numbers=(2000.0,)
     )
@@ -350,7 +353,7 @@ def test_split_labels_still_match() -> None:
 
 
 def test_transcript_without_values_is_rejected() -> None:
-    """没有数值的转译没有可校验内容，等价于空转译 → 不入库。"""
+    """没有数值的转译没有可校验内容，等价于空转译 → 不入库。."""
     empty = Transcript(kind="bar", raw_markdown="只有文字", axes={}, series=())
     result = reconcile(empty, EVIDENCE)
     assert not result.ok
@@ -358,7 +361,7 @@ def test_transcript_without_values_is_rejected() -> None:
 
 
 def test_null_values_are_skipped_not_counted() -> None:
-    """模型按提示词写了 `null`（"无法确定"），那些点不参与对账。"""
+    """模型按提示词写了 `null`（"无法确定"），那些点不参与对账。."""
     partial = Transcript(
         kind="bar",
         raw_markdown="x",
@@ -386,6 +389,7 @@ def test_null_values_are_skipped_not_counted() -> None:
 
 
 def test_parse_transcript_splits_markdown_and_json() -> None:
+    """Run test_parse_transcript_splits_markdown_and_json."""
     raw = """| 类别 | 百分比 |
 | --- | --- |
 | Transport | 32 |
@@ -399,6 +403,7 @@ JSON: {"kind":"bar","axes":{"y":{"min":0,"max":100}},
 
 
 def test_parse_transcript_strips_code_fences() -> None:
+    """Run test_parse_transcript_strips_code_fences."""
     raw = """```markdown
 | a | b |
 
@@ -411,7 +416,7 @@ def test_parse_transcript_strips_code_fences() -> None:
 
 
 def test_parse_transcript_without_json_raises() -> None:
-    """只有 Markdown 没有结构化输出 → 对账无从下手 → 必须判失败。
+    """只有 Markdown 没有结构化输出 → 对账无从下手 → 必须判失败。.
 
     这是有意的：没有结构化输出就无法证明模型没读错。
     """
@@ -420,6 +425,7 @@ def test_parse_transcript_without_json_raises() -> None:
 
 
 def test_parse_transcript_tolerates_missing_axes() -> None:
+    """Run test_parse_transcript_tolerates_missing_axes."""
     transcript = parse_transcript(
         'text\nJSON: {"kind":"structure","series":[]}'
     )
@@ -431,7 +437,7 @@ def test_parse_transcript_tolerates_missing_axes() -> None:
 
 
 def test_prompts_forbid_estimation() -> None:
-    """两条提示词都必须写"无法确定写 null，不要估算"。
+    """两条提示词都必须写"无法确定写 null，不要估算"。.
 
     这是对账能起作用的前提：模型不猜，我们才敢拿对账结果当"可以入库"。
     """
@@ -442,11 +448,13 @@ def test_prompts_forbid_estimation() -> None:
 
 
 def test_structure_prompt_asks_for_nodes_and_edges() -> None:
+    """Run test_structure_prompt_asks_for_nodes_and_edges."""
     prompt = prompt_for("structure")
     assert "节点" in prompt and "连线" in prompt
 
 
 def test_prompts_ask_for_the_structured_json_block() -> None:
+    """Run test_prompts_ask_for_the_structured_json_block."""
     for kind in ("bar", "structure"):
         assert "JSON:" in prompt_for(kind)
 
@@ -455,7 +463,7 @@ def test_prompts_ask_for_the_structured_json_block() -> None:
 
 
 def test_figure_content_text_puts_caption_first() -> None:
-    r"""图注放最前：\"这张图讲什么\"通常是问句最可能命中的一句。"""
+    r"""图注放最前：\"这张图讲什么\"通常是问句最可能命中的一句。."""
     figure = FigureData(
         image_path="figures/ch_x.webp",
         width_px=800,
@@ -471,7 +479,7 @@ def test_figure_content_text_puts_caption_first() -> None:
 
 
 def test_figure_content_text_omits_structured_fields() -> None:
-    """结构化字段不进 content_text：`{"axes": {...}}` 进检索文本是纯噪声。"""
+    """结构化字段不进 content_text：`{"axes": {...}}` 进检索文本是纯噪声。."""
     figure = FigureData(
         image_path="x",
         width_px=1,
@@ -487,11 +495,12 @@ def test_figure_content_text_omits_structured_fields() -> None:
 
 
 def test_extract_numbers_handles_mixed_text() -> None:
+    """Run test_extract_numbers_handles_mixed_text."""
     assert extract_numbers(["每人每天 500 元", "80%"]) == (500.0, 80.0)
 
 
 def test_extract_numbers_does_not_turn_date_hyphens_into_negatives() -> None:
-    """`2025-03-01` 是三个正数，不是 `2025, -3, -1`。
+    """`2025-03-01` 是三个正数，不是 `2025, -3, -1`。.
 
     第一版的正则吃了连字符当负号，日期因此在对账依据里变成负数——而负数会让
     "数值落在轴范围内"这个检查以最莫名其妙的方式失败。
@@ -500,10 +509,11 @@ def test_extract_numbers_does_not_turn_date_hyphens_into_negatives() -> None:
 
 
 def test_extract_numbers_keeps_real_negatives() -> None:
-    """真负数要保留：`-12.5%` 前面不是数字，所以连字符是负号。"""
+    """真负数要保留：`-12.5%` 前面不是数字，所以连字符是负号。."""
     assert extract_numbers(["同比 -12.5%"]) == (-12.5,)
 
 
 def test_check_failure_str_is_machine_readable() -> None:
+    """Run test_check_failure_str_is_machine_readable."""
     failure = CheckFailure("percent_sum", "sum to 142")
     assert str(failure) == "percent_sum: sum to 142"

@@ -197,7 +197,9 @@ row: dict[str, Any], status: str | None = None
 
 
 class HttpError(RuntimeError):
+    """HttpError."""
     def __init__(self, method: str, url: str, code: int, body: str):
+        """Initialize the instance."""
         super().__init__(f"{method} {url} -> HTTP {code}: {body[:400]}")
         self.code = code
         self.body = body
@@ -286,6 +288,7 @@ def spec_mismatches(info: dict[str, Any], dim: int = DEFAULT_DIM) -> list[str]:
 
 
 def create_collection(base_url: str, name: str, dim: int = DEFAULT_DIM) -> None:
+    """Run create_collection."""
     request(
         "PUT",
         f"{base_url.rstrip('/')}/collections/{name}",
@@ -294,6 +297,7 @@ def create_collection(base_url: str, name: str, dim: int = DEFAULT_DIM) -> None:
 
 
 def delete_collection(base_url: str, name: str) -> None:
+    """Run delete_collection."""
     try:
         request("DELETE", f"{base_url.rstrip('/')}/collections/{name}")
     except HttpError as exc:
@@ -326,6 +330,7 @@ def ensure_payload_indexes(
 def count_points(
     base_url: str, name: str, flt: dict[str, Any] | None = None
 ) -> int:
+    """Run count_points."""
     payload: dict[str, Any] = {"exact": True}
     if flt:
         payload["filter"] = flt

@@ -1,4 +1,4 @@
-"""OCR 兜底（§3.2「扫描页：识别后按文本框位置算坐标」）。
+"""OCR 兜底（§3.2「扫描页：识别后按文本框位置算坐标」）。.
 
 这一组的存在理由：OCR 默认关，所以它的整条链路**从来没被真跑过**。本轮把
 `OcrConfig(enabled=True)` 打开后连出三个 bug：
@@ -36,6 +36,7 @@ SCRIPTS = REPO_ROOT / "scripts"
 
 @pytest.fixture(scope="module")
 def scanned_pdf(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Run scanned_pdf."""
     if str(SCRIPTS) not in sys.path:
         sys.path.insert(0, str(SCRIPTS))
     import make_layout_samples  # noqa: PLC0415
@@ -48,11 +49,12 @@ def scanned_pdf(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 class _FakePage:
-    """最小的 page 替身：只需要 `chars` / `images` / `width` / `height`。"""
+    """最小的 page 替身：只需要 `chars` / `images` / `width` / `height`。."""
 
     def __init__(
         self, chars: list[str], images: list[tuple[float, float, float, float]]
     ) -> None:
+        """Initialize the instance."""
         self.width = 595.0
         self.height = 842.0
         self.chars = [{"text": ch} for ch in chars]
@@ -63,7 +65,7 @@ class _FakePage:
 
 
 class _StubEngine:
-    """固定返回若干 `OcrWord` 的替身引擎。
+    """固定返回若干 `OcrWord` 的替身引擎。.
 
     用它把 OCR 的**后处理**（坐标换算、置信度过滤、行聚类）与引擎本身解耦
     ——真实引擎的识别质量不该影响这些判据的测试。
@@ -72,10 +74,12 @@ class _StubEngine:
     name = "stub"
 
     def __init__(self, words: list[OcrWord]) -> None:
+        """Initialize the instance."""
         self.words = words
         self.calls = 0
 
     def recognize(self, image: object) -> list[OcrWord]:  # noqa: ARG002
+        """Run recognize."""
         self.calls += 1
         return list(self.words)
 
@@ -84,18 +88,19 @@ class _StubEngine:
 
 
 def test_disabled_config_never_ocrs() -> None:
+    """Run test_disabled_config_never_ocrs."""
     page = _FakePage([], [(72.0, 100.0, 462.0, 400.0)])
     assert not text_layer_missing(page, OcrConfig(enabled=False))
 
 
 def test_page_with_a_real_text_layer_never_ocrs() -> None:
-    """有文字层的页一旦 OCR，会把准确的文字换成有错字的识别结果。"""
+    """有文字层的页一旦 OCR，会把准确的文字换成有错字的识别结果。."""
     page = _FakePage(list("x" * 200), [(72.0, 100.0, 462.0, 400.0)])
     assert not text_layer_missing(page, OcrConfig(enabled=True))
 
 
 def test_a_small_but_real_scan_is_still_ocrd() -> None:
-    """**这条是本轮修的第一个 bug**：位图只占页面 23% 的扫描页必须走 OCR。
+    """**这条是本轮修的第一个 bug**：位图只占页面 23% 的扫描页必须走 OCR。.
 
     原判据要求覆盖 ≥ 25%，`scanned-demo` 第 2 页（390×300pt/595×842pt ≈ 23%）
     就被判成"不是扫描件"，那一页一条切片都出不来。传真件、单据贴图、印章页
@@ -106,7 +111,7 @@ def test_a_small_but_real_scan_is_still_ocrd() -> None:
 
 
 def test_a_blank_page_with_a_tiny_logo_is_not_ocrd() -> None:
-    """装饰性小图（logo/水印 < 2%）不该触发 OCR。
+    """装饰性小图（logo/水印 < 2%）不该触发 OCR。.
 
     它上面没有正文，只会产生噪声。
     """
@@ -116,11 +121,12 @@ def test_a_blank_page_with_a_tiny_logo_is_not_ocrd() -> None:
 
 
 def test_a_blank_page_with_no_image_is_not_ocrd() -> None:
+    """Run test_a_blank_page_with_no_image_is_not_ocrd."""
     assert not text_layer_missing(_FakePage([], []), OcrConfig(enabled=True))
 
 
 def test_content_image_ratio_threshold_is_low_enough_for_documents() -> None:
-    """阈值本身：半页单据（~15%）必须过线，水印（~0.5%）必须不过。"""
+    """阈值本身：半页单据（~15%）必须过线，水印（~0.5%）必须不过。."""
     assert CONTENT_IMAGE_MIN_RATIO < 0.15
     assert CONTENT_IMAGE_MIN_RATIO > 0.001
 
@@ -129,13 +135,14 @@ def test_content_image_ratio_threshold_is_low_enough_for_documents() -> None:
 
 
 def test_disabled_engine_reports_the_reason() -> None:
+    """Run test_disabled_engine_reports_the_reason."""
     engine, reason = build_ocr_engine(OcrConfig(enabled=False))
     assert engine is None
     assert reason == "disabled"
 
 
 def test_enabled_engine_is_either_available_or_says_why() -> None:
-    """装了 rapidocr 就必须给出引擎，没装就必须给出原因——不许两者都空。"""
+    """装了 rapidocr 就必须给出引擎，没装就必须给出原因——不许两者都空。."""
     engine, reason = build_ocr_engine(OcrConfig(enabled=True))
     assert (engine is None) != (
         reason is None
@@ -150,7 +157,7 @@ def test_enabled_engine_is_either_available_or_says_why() -> None:
 def test_scanned_page_produces_chunks_with_the_ocr_source_note(
     scanned_pdf: Path,
 ) -> None:
-    """**这条是本轮第二、三个 bug 的克星。**
+    """**这条是本轮第二、三个 bug 的克星。**.
 
     它要求三件事同时成立：
       * 走的是真引擎（不是替身）—— 否则渲染路径的 `'Page' object has no
@@ -183,7 +190,7 @@ def test_scanned_page_produces_chunks_with_the_ocr_source_note(
 
 
 def test_scanned_page_without_an_engine_records_why(scanned_pdf: Path) -> None:
-    """引擎不可用时要**说出来**，不能静默少一页。
+    """引擎不可用时要**说出来**，不能静默少一页。.
 
     静默降级最坏的情况是：一页扫描件没入库，而报告里看不出少了什么。
     """
@@ -202,7 +209,7 @@ def test_scanned_page_without_an_engine_records_why(scanned_pdf: Path) -> None:
 
 
 def test_ocr_off_by_default(scanned_pdf: Path) -> None:
-    """默认配置下绝不 OCR：慢（1.3s/页）且有错字，不该是默认行为。"""
+    """默认配置下绝不 OCR：慢（1.3s/页）且有错字，不该是默认行为。."""
     doc = read_pdf(scanned_pdf, doc_key="layout/scanned")
     assert all(not page.ocr_applied for page in doc.pages)
     assert {page.ocr_skipped_reason for page in doc.pages} == {"disabled"}
@@ -212,7 +219,7 @@ def test_ocr_off_by_default(scanned_pdf: Path) -> None:
 
 
 def test_ocr_lines_are_not_silently_corrected() -> None:
-    """`5o0` 不许改成 `500`。
+    """`5o0` 不许改成 `500`。.
 
     这是 `§3.2` 的硬要求：识别错字是事实的一部分，下游（数值校验、引用展示）
     要能看到原文并自行判断。改成"看起来对"的数字等于造数据。
@@ -225,6 +232,7 @@ def test_ocr_lines_are_not_silently_corrected() -> None:
 
 
 def test_ocr_lines_carry_confidence_and_source() -> None:
+    """Run test_ocr_lines_carry_confidence_and_source."""
     engine = _StubEngine(
         [OcrWord("Total 1200", _rect(100, 200, 200, 212), 0.77)]
     )
@@ -234,7 +242,7 @@ def test_ocr_lines_carry_confidence_and_source() -> None:
 
 
 def test_low_confidence_words_are_dropped() -> None:
-    """置信度低于门槛的块丢掉：那多半就是错字，留着只会污染检索。"""
+    """置信度低于门槛的块丢掉：那多半就是错字，留着只会污染检索。."""
     engine = _StubEngine(
         [
             OcrWord("keep this", _rect(100, 200, 200, 212), 0.90),
@@ -247,7 +255,7 @@ def test_low_confidence_words_are_dropped() -> None:
 
 
 def test_ocr_pixel_coordinates_are_converted_to_points() -> None:
-    """**像素坐标必须除以渲染缩放比。**
+    """**像素坐标必须除以渲染缩放比。**.
 
     不除的话 bbox 全部越界（被夹到 1.0），高亮框会缩在页面右下角一小块。
 
@@ -263,6 +271,7 @@ def test_ocr_pixel_coordinates_are_converted_to_points() -> None:
 
 
 def _rect(x0: float, top: float, x1: float, bottom: float):
+    """Run _rect."""
     from api.parse.geometry import Rect  # noqa: PLC0415
 
     return Rect(x0, top, x1, bottom)
@@ -274,7 +283,7 @@ def _run_stub(
     render_scale: float = 150 / 72,
     min_confidence: float = 0.55,
 ):
-    """用固定位图跑 `ocr_lines`（不碰真 PDF，只验后处理）。"""
+    """用固定位图跑 `ocr_lines`（不碰真 PDF，只验后处理）。."""
     from PIL import Image  # noqa: PLC0415
 
     from api.parse.geometry import PageSpace  # noqa: PLC0415

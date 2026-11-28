@@ -1,4 +1,4 @@
-"""TemporalFactRepository 的行映射与 upsert 参数形状。"""
+"""TemporalFactRepository 的行映射与 upsert 参数形状。."""
 
 from __future__ import annotations
 
@@ -9,47 +9,62 @@ from api.temporal.repository import TemporalFactRepository
 
 
 class _Cursor:
+    """_Cursor."""
     def __init__(self) -> None:
+        """Initialize the instance."""
         self.rows = []
         self.executed = []
 
     def executemany(self, sql, rows):
+        """Run executemany."""
         self.executed.append((sql, list(rows)))
 
     def __enter__(self):
+        """Enter the context manager."""
         return self
 
     def __exit__(self, *args):
-        return None
+        """Exit the context manager."""
+        return
 
 
 class _Conn:
+    """_Conn."""
     def __init__(self, cursor):
+        """Initialize the instance."""
         self._cursor = cursor
 
     def cursor(self):
+        """Run cursor."""
         return self._cursor
 
     def __enter__(self):
+        """Enter the context manager."""
         return self
 
     def __exit__(self, *args):
-        return None
+        """Exit the context manager."""
+        return
 
 
 class _Pg:
+    """_Pg."""
     def __init__(self, cursor=None, rows=None):
+        """Initialize the instance."""
         self._cursor = cursor or _Cursor()
         self._rows = rows or []
 
     def connection(self):
+        """Run connection."""
         return _Conn(self._cursor)
 
     def fetch_all(self, sql, params):
+        """Run fetch_all."""
         return self._rows
 
 
 def _fact() -> TemporalFact:
+    """Run _fact."""
     return TemporalFact(
         fact_id="tf_1",
         subject="寒武纪",
@@ -65,6 +80,7 @@ def _fact() -> TemporalFact:
 
 
 def test_upsert_writes_one_row_per_fact() -> None:
+    """Run test_upsert_writes_one_row_per_fact."""
     pg = _Pg()
     assert TemporalFactRepository(pg).upsert([_fact()]) == 1
     sql, rows = pg._cursor.executed[0]
@@ -73,6 +89,7 @@ def test_upsert_writes_one_row_per_fact() -> None:
 
 
 def test_load_maps_numeric_and_json_columns() -> None:
+    """Run test_load_maps_numeric_and_json_columns."""
     pg = _Pg(
         rows=[
             {

@@ -22,9 +22,10 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+
+from api.resources import time_grammar
 
 # 完整日期：2025-03-01 / 2025/3/1 / 2025.03.01 / 2025年3月1日 / 20250301
 #
@@ -32,34 +33,15 @@ from dataclasses import dataclass
 # 会被匹配成"2025年3月" + 空日后缀 → 被当成 2025-03-01 的显式日期。
 # 实测就是这么错的（"2025年3月 修订"被记成 explicit 的 3 月 1 日）。
 # 负向断言要求：如果后面紧跟日号，它必须是真日期；否则必须不是数字。
-_FULL_DATE = re.compile(
-    r"(?<!\d)(\d{4})\s*[-/.年]\s*(\d{1,2})\s*[-/.月]\s*(\d{1,2})\s*日?(?!\d)"
-    r"|(?<!\d)(\d{4})(\d{2})(\d{2})(?!\d)"
-)
+_FULL_DATE = time_grammar.FULL_DATE
 # 年月（无日）：2025年3月 / 2025-03 / 2025.3
-_YEAR_MONTH = re.compile(
-    r"(?<!\d)(\d{4})\s*[-/.年]\s*(\d{1,2})(?![\d日])\s*月?(?![\d日])"
-)
+_YEAR_MONTH = time_grammar.YEAR_MONTH
 # 只有年份：2025 / 2025年 / 2025 年度 / 2025 revision
-_YEAR = re.compile(
-    r"(?<!\d)(20\d{2}|19\d{2})(?!\d)\s*(?:年|年度|版|revision|edition)?",
-    re.IGNORECASE,
-)
+_YEAR = time_grammar.YEAR
 
 # 日期前的引导词：有它才敢把"2025-03-01"当生效日期，而不是"文件里随便一个日期"。
 # 目录里的"发布日期"、发票里的"开票日期"都不该变成切片生效日期。
-_DATE_LEADS = (
-    "生效",
-    "实施",
-    "执行",
-    "发布",
-    "修订",
-    "effective",
-    "effective date",
-    "issued",
-    "revised",
-    "as of",
-)
+_DATE_LEADS = time_grammar.DATE_LEADS
 
 
 @dataclass(frozen=True, slots=True)

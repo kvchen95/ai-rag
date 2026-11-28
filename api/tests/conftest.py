@@ -1,4 +1,4 @@
-"""测试夹具。
+"""测试夹具。.
 
 两件事：
 1. 清掉环境变量，保证测试读的是用例显式给的值——否则本机 .env 或
@@ -49,7 +49,7 @@ BASE_ENV: dict[str, object] = {
 
 
 def build_settings(**values: object) -> Settings:
-    """构造 Settings：键名统一转小写。
+    """构造 Settings：键名统一转小写。.
 
     pydantic 的 `case_sensitive=False` 只作用于**环境变量**查找，
     直接传 init 参数时字段名必须精确匹配。测试里写 EVN 风格的大写键更贴近
@@ -59,11 +59,13 @@ def build_settings(**values: object) -> Settings:
 
 
 def make_settings(**overrides: object) -> Settings:
+    """Run make_settings."""
     return build_settings(**{**BASE_ENV, **overrides})
 
 
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run _clean_env."""
     for name in list(Settings.model_fields):
         monkeypatch.delenv(name, raising=False)
         monkeypatch.delenv(name.upper(), raising=False)
@@ -71,12 +73,13 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def settings() -> Settings:
+    """Run settings."""
     return make_settings()
 
 
 @pytest.fixture(scope="module")
 def pg_dsn() -> str:
-    """集成测试用的真实 PG。
+    """集成测试用的真实 PG。.
 
     优先取 AI_RAG_TEST_DATABASE_URL；没有就退回 DATABASE_URL（容器内跑测试时
     这个变量本来就有，指向 compose 里的 postgres）。两个都没有就跳过——

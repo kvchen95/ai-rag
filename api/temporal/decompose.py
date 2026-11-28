@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
+from api.resources import messages as msg
 from api.temporal.types import TemporalScope
 from api.time_range import normalise_time
 
@@ -79,7 +80,7 @@ def decompose_question(
     """返回单检索单元；不拆分、不猜主体/指标、不提供回退。."""
     original = (question or "").strip()
     if not original:
-        return Decomposition("", (), False, ("空问题",))
+        return Decomposition("", (), False, (msg.EMPTY_QUESTION,))
     return Decomposition(
         original=original,
         subquestions=(

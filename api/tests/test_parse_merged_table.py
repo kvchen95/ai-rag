@@ -1,4 +1,4 @@
-"""带合并单元格的真实 PDF 表格（§3.3 头号要求：合并单元格原样保留）。
+"""带合并单元格的真实 PDF 表格（§3.3 头号要求：合并单元格原样保留）。.
 
 `test_parse_tables.py` 用**合成的** `TableCell` 测模型与渲染，测不到
 "pdfplumber 到底怎么报合并格"。这一组补上那段真实路径：
@@ -31,6 +31,7 @@ SCRIPTS = REPO_ROOT / "scripts"
 
 @pytest.fixture(scope="module")
 def merged_pdf(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Run merged_pdf."""
     if str(SCRIPTS) not in sys.path:
         sys.path.insert(0, str(SCRIPTS))
     import make_layout_samples  # noqa: PLC0415
@@ -46,7 +47,7 @@ def merged_pdf(tmp_path_factory: pytest.TempPathFactory) -> Path:
 def test_pdfplumber_reports_the_merged_cell_as_a_wide_bbox(
     merged_pdf: Path,
 ) -> None:
-    """前提事实：表头那个格被报成跨三列的一个 bbox（不是三个格）。"""
+    """前提事实：表头那个格被报成跨三列的一个 bbox（不是三个格）。."""
     with pdfplumber.open(str(merged_pdf)) as pdf:
         page = pdf.pages[0]
         space = PageSpace.from_display(page)
@@ -59,7 +60,7 @@ def test_pdfplumber_reports_the_merged_cell_as_a_wide_bbox(
 
 
 def test_span_reaches_the_model_and_the_html(merged_pdf: Path) -> None:
-    """`col_span` 必须一路传到 `TableCell` 与 HTML 的 `colspan`。
+    """`col_span` 必须一路传到 `TableCell` 与 HTML 的 `colspan`。.
 
     这条是 `table-span` 变异的克星：把 `col_span` 写死成 1，HTML 里就没有
     colspan 了，而渲染出来会把"Monthly cap"塞进一列。
@@ -75,7 +76,7 @@ def test_span_reaches_the_model_and_the_html(merged_pdf: Path) -> None:
 def test_merged_header_fills_every_covered_column_in_md(
     merged_pdf: Path,
 ) -> None:
-    """§3.3 规则 3：Markdown 不支持合并表头，展开成重复列名。"""
+    """§3.3 规则 3：Markdown 不支持合并表头，展开成重复列名。."""
     with pdfplumber.open(str(merged_pdf)) as pdf:
         page = pdf.pages[0]
         space = PageSpace.from_display(page)
@@ -88,7 +89,7 @@ def test_merged_header_fills_every_covered_column_in_md(
 def test_merged_table_three_representations_agree_on_real_pdf(
     merged_pdf: Path,
 ) -> None:
-    """真实 PDF 上跑一遍三表示往返。
+    """真实 PDF 上跑一遍三表示往返。.
 
     HTML / md / cells 都从 pdfplumber 的结果出发。
     """
@@ -106,7 +107,7 @@ def test_merged_table_three_representations_agree_on_real_pdf(
 
 
 def test_merged_table_chunk_carries_the_span(merged_pdf: Path) -> None:
-    """落库的 `table_cells` 必须带 span —— 校验阶段靠它对齐数字。"""
+    """落库的 `table_cells` 必须带 span —— 校验阶段靠它对齐数字。."""
     outcome = parse_document(
         merged_pdf,
         doc_key="layout/merged",

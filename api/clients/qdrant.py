@@ -91,11 +91,13 @@ class QdrantGateway:
                     latency_ms=(time.perf_counter() - started) * 1000,
                     error=f"collections status={listing.status_code}",
                 )
+            listing_body = listing.json()
+            collections = listing_body.get("result")
+            if collections is None:
+                collections = {}
             names = [
                 c.get("name")
-                for c in (listing.json().get("result") or {}).get(
-                    "collections", []
-                )
+                for c in collections.get("collections", [])
             ]
             latency = (time.perf_counter() - started) * 1000
             # 集合缺失不是"依赖挂了"：库是空的但服务是好的。单独报出来，

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from api.retrieval.gate import GateDecision
+from api.resources import messages as msg
 from api.temporal.decompose import Decomposition, SubQuestion
 
 
@@ -57,9 +58,9 @@ class CompoundGateResult:
     @property
     def decision(self) -> GateDecision:
         """Run decision."""
+        # 合成门控出口；证据只来自通过子问题，且按 chunk_id 去重。
         from api.retrieval.gate import GateDecision
 
-        """合成门控出口；证据只来自通过子问题，且按 chunk_id 去重。"""
         if self.verdict in ("pass", "partial"):
             evidence: list[Any] = []
             seen: set[str] = set()
@@ -72,7 +73,7 @@ class CompoundGateResult:
                 verdict=self.verdict,  # type: ignore[arg-type]
                 evidence=tuple(evidence),
                 uncovered=self.uncovered,
-                reason="复合问各子问题独立门控",
+                reason=msg.COMPOUND_REASON,
             )
         failed = [result for result in self.results if not result.passed]
         first = (
@@ -111,7 +112,7 @@ def aggregate_gates(
 ) -> CompoundGateResult:
     """聚合规则：全过 pass；有过有不过 partial；无成功按拒答原因收口。."""
     if len(snapshots) != len(decomposition.subquestions):
-        raise ValueError("子问题与门控结果数量不一致，拒绝聚合")
+        raise ValueError(msg.COMPOUND_MISMATCH)
     results = tuple(
         SubQuestionGate(sub, snap)
         for sub, snap in zip(

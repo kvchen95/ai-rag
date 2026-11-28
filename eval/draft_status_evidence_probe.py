@@ -20,6 +20,11 @@ import re
 import subprocess
 from pathlib import Path
 
+if __package__:
+    from .resources.draft_status_evidence_probe_msgs import MESSAGES as M
+else:  # run as a script: python3 eval/draft_status_evidence_probe.py
+    from resources.draft_status_evidence_probe_msgs import MESSAGES as M
+
 ROOT = Path(__file__).resolve().parent.parent
 GOLDEN = ROOT / "eval" / "golden_50.jsonl"
 DOCKER = "/mnt/c/Program Files/Docker/Docker/resources/bin/docker.exe"
@@ -62,12 +67,12 @@ def numbers(text: str) -> set[str]:
     """
     text = re.sub(r"[pP]\s*\d+", " ", text)  # page labels
     text = re.sub(
-        r"(?:19|20)\d{2}\s*[年Ee]?", " ", text
+        M['TEXT_01'], " ", text
     )  # 2025 / 2025年 / 2025E
     text = re.sub(
         r"\b\d{1,2}\s*[Qq]\s*\d?\b|\b[Qq]\d\b", " ", text
     )  # 25Q1 / 1Q25 / Q1
-    text = re.sub(r"\b\d{1,2}\s*[-~至到]\s*\d{1,2}\s*年", " ", text)  # 25-27年
+    text = re.sub(M['TEXT_02'], " ", text)  # 25-27年
     found = re.findall(r"\d[\d,]*(?:\.\d+)?", text)
     return {n for n in found if float(n.replace(",", "")) >= 10}
 

@@ -41,8 +41,10 @@ class RequestContextMiddleware:
             await self.app(scope, receive, send)
             return
 
+        headers = scope.get("headers")
         request_id = (
-            extract_request_id(scope.get("headers") or []) or uuid.uuid4().hex
+            extract_request_id(headers if headers else [])
+            or uuid.uuid4().hex
         )
         token = request_id_var.set(request_id)
         started = time.perf_counter()

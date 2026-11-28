@@ -21,6 +21,11 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+if __package__:
+    from .resources.verify_a3_api_msgs import MESSAGES as M
+else:  # run as a script: python3 scripts/verify_a3_api.py
+    from resources.verify_a3_api_msgs import MESSAGES as M
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -46,6 +51,7 @@ FAILURES: list[str] = []
 
 
 def check(label: str, ok: bool, detail: str = "") -> None:
+    """Run check."""
     print(
         f"  [{'PASS' if ok else 'FAIL'}] {label}"
         + (f"  ({detail})" if detail else "")
@@ -55,6 +61,7 @@ def check(label: str, ok: bool, detail: str = "") -> None:
 
 
 def call(base: str, method: str, path: str, expect: int) -> tuple[int, dict]:
+    """Run call."""
     req = urllib.request.Request(base.rstrip("/") + path, method=method)
     try:
         with urllib.request.urlopen(req, timeout=180) as resp:
@@ -72,6 +79,7 @@ def call(base: str, method: str, path: str, expect: int) -> tuple[int, dict]:
 
 
 def dsn() -> str:
+    """Run dsn."""
     raw = (
         os.getenv("DATABASE_URL")
         or "postgresql://ai_rag:ai_rag_dev_password@127.0.0.1:5432/ai_rag"
@@ -83,12 +91,14 @@ def dsn() -> str:
 
 
 def sql(query: str, params: tuple = ()) -> None:
+    """Run sql."""
     with psycopg.connect(dsn()) as conn, conn.cursor() as cur:
         cur.execute(query, params)
         conn.commit()
 
 
 def cleanup() -> None:
+    """Run cleanup."""
     with psycopg.connect(dsn()) as conn, conn.cursor() as cur:
         for table in (
             "vector_drift_log",
@@ -120,6 +130,7 @@ def cleanup() -> None:
 
 
 def main() -> int:
+    """Run main."""
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--base", default=os.getenv("API_BASE", "http://127.0.0.1:18081")
@@ -128,7 +139,7 @@ def main() -> int:
     base = args.base
 
     print("=" * 78)
-    print(f"A3 API 契约实测（真 HTTP @ {base}）")
+    print(f"{M['PRINT_01']}{base}）")
     print("=" * 78)
 
     try:
@@ -146,28 +157,28 @@ def main() -> int:
             (V_EMPTY, DOC, "e" * 64),
         )
 
-        print("\n[1] 404：库里没有这个版本")
+        print(M["PRINT_02"])
         code, _ = call(
             base, "POST", "/api/v1/ingest/versions/a3api/nope%23v1/promote", 404
         )
-        check("不存在的版本 -> 404", code == 404)
+        check(M["CHECK_01"], code == 404)
 
-        print("\n[2] 422：空版本拒绝转正")
+        print(M["PRINT_03"])
         code, body = call(
             base,
             "POST",
             f"/api/v1/ingest/versions/{V_EMPTY.replace('#', '%23')}/promote",
             422,
         )
-        check("空版本 -> 422", code == 422)
+        check(M["CHECK_02"], code == 422)
         active = _scalar(
             "SELECT count(*) FROM doc_versions WHERE doc_key = %s AND status ="
             " 'active'",
             (DOC,),
         )
-        check("空版本没有被翻成 active", active == 0, f"active={active}")
+        check(M["CHECK_03"], active == 0, f"active={active}")
 
-        print("\n[3] 造一个有切片的版本，走 promote")
+        print(M["PRINT_04"])
         sql(
             "INSERT INTO doc_versions (version_id, doc_key, file_hash, status) "
             "VALUES (%s, %s, %s, 'pending')",
@@ -175,8 +186,8 @@ def main() -> int:
         )
         for i, text in enumerate(
             [
-                "住宿费标准：总监级每人每天 800 元，经理级 600 元。",
-                "市内交通费凭票报销，单次不超过 100 元。",
+                M["ENUMERATE_01"],
+                M["ENUMERATE_02"],
             ],
             start=1,
         ):
@@ -202,7 +213,7 @@ def main() -> int:
             str(body)[:200] if code != 200 else "",
         )
         check(
-            "返回体含 index/flip/drain/reconcile 四段",
+            M["CHECK_04"],
             all(k in body for k in ("index", "flip", "drain", "reconcile")),
             str(list(body)),
         )
@@ -213,30 +224,30 @@ def main() -> int:
                 str(body.get("error")),
             )
             check(
-                "索引了 2 个点",
+                M["CHECK_05"],
                 body["index"]["points"] == 2,
                 str(body["index"]),
             )
             check(
-                "对账无残留",
+                M["CHECK_06"],
                 body["reconcile"]["remaining"] == 0,
                 str(body["reconcile"]["drift_counts"]),
             )
 
-        print("\n[4] 409：重复 promote 同一个版本")
+        print(M["PRINT_05"])
         code, _ = call(
             base,
             "POST",
             f"/api/v1/ingest/versions/{V_OK.replace('#', '%23')}/promote",
             409,
         )
-        check("已 active 的版本再 promote -> 409", code == 409)
+        check(M["CHECK_07"], code == 409)
 
-        print("\n[5] reconcile：干净时 200，有漂移时 409")
+        print(M["PRINT_06"])
         code, body = call(
             base, "GET", f"/api/v1/ingest/reconcile?doc_key={DOC}", 200
         )
-        check("干净 -> 200", code == 200)
+        check(M["CHECK_08"], code == 200)
         check(
             "remaining=0",
             body.get("remaining") == 0,
@@ -267,9 +278,9 @@ def main() -> int:
             f"/api/v1/ingest/reconcile?doc_key={DOC}&dry_run=true",
             409,
         )
-        check("有漂移且 dry-run -> 409（不是 200）", code == 409)
+        check(M["CHECK_09"], code == 409)
         check(
-            "dry-run 看见了 1 处 status_mismatch",
+            M["CHECK_10"],
             body.get("drift_counts") == {"status_mismatch": 1},
             str(body.get("drift_counts")),
         )
@@ -277,18 +288,18 @@ def main() -> int:
         code, body = call(
             base, "GET", f"/api/v1/ingest/reconcile?doc_key={DOC}", 200
         )
-        check("真修好后 -> 200", code == 200)
+        check(M["CHECK_11"], code == 200)
         code, body = call(
             base, "GET", f"/api/v1/ingest/reconcile?doc_key={DOC}", 200
         )
-        check("再查一次仍干净", body.get("remaining") == 0)
+        check(M["CHECK_12"], body.get("remaining") == 0)
 
-        print("\n[6] sync 端点：没有待同步任务时 processed=0")
+        print(M["PRINT_07"])
         code, body = call(base, "POST", "/api/v1/ingest/sync", 200)
         check("sync -> 200", code == 200)
-        check("没有可疑的失败", body.get("failed") == 0, str(body))
+        check(M["CHECK_13"], body.get("failed") == 0, str(body))
 
-        print("\n[7] rollback：把已 deprecated 的版本翻回来")
+        print(M["PRINT_08"])
         # 先造一个 deprecated 版本（曾经上线过）
         sql(
             "INSERT INTO doc_versions (version_id, doc_key, file_hash, status,"
@@ -310,7 +321,7 @@ def main() -> int:
         )
         if code == 200:
             check(
-                "回滚到了那个版本",
+                M["CHECK_14"],
                 body["rollback"]["restored"] == f"{DOC}#prev2222",
                 str(body["rollback"]),
             )
@@ -319,7 +330,7 @@ def main() -> int:
             base, "GET", "/api/v1/ingest/reconcile?doc_key=" + DOC, 200
         )
         check(
-            "回滚后对账干净",
+            M["CHECK_15"],
             body.get("remaining") == 0,
             str(body.get("drift_counts")),
         )
@@ -338,6 +349,7 @@ def main() -> int:
 
 
 def _scalar(query: str, params: tuple = ()) -> int:
+    """Run _scalar."""
     with psycopg.connect(dsn()) as conn, conn.cursor() as cur:
         cur.execute(query, params)
         return int(cur.fetchone()[0])

@@ -24,6 +24,7 @@ from api.config import Settings, get_settings
 from api.errors import install_error_handlers
 from api.middleware import RequestContextMiddleware
 from api.observability import configure_logging, get_logger, log_event
+from api.resources import messages as msg
 from api.routers import health, ingest, qa, samples
 
 logger = get_logger("api.main")
@@ -72,7 +73,7 @@ def create_app(
     app = FastAPI(
         title="ai-rag API",
         version=__version__,
-        description="金融条款问答：在线链路 API（详细设计.md 附录 C）",
+        description=msg.API_DESCRIPTION,
         lifespan=lifespan,
         docs_url=None if settings.is_prod else "/docs",
         redoc_url=None,

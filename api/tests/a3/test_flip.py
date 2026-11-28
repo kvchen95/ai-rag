@@ -1,4 +1,4 @@
-"""翻牌事务（详细设计.md §4.1、§4.4）。
+"""翻牌事务（详细设计.md §4.1、§4.4）。.
 
 这张卡最难"看起来对"的地方就是翻牌：三处改动分开写，每一步都不报错，但中间态
 让线上一条也召不回。所以这里逐条断言**库的最终形状**，而不是"函数没抛异常"：
@@ -41,6 +41,7 @@ pytestmark = pytest.mark.integration
 
 
 def _version_row(conn, version_id: str) -> dict:
+    """Run _version_row."""
     from psycopg.rows import dict_row
 
     with conn.cursor(row_factory=dict_row) as cur:
@@ -53,6 +54,7 @@ def _version_row(conn, version_id: str) -> dict:
 
 
 def _chunk_statuses(conn, version_id: str) -> dict[str, str]:
+    """Run _chunk_statuses."""
     from psycopg.rows import dict_row
 
     with conn.cursor(row_factory=dict_row) as cur:
@@ -64,6 +66,7 @@ def _chunk_statuses(conn, version_id: str) -> dict[str, str]:
 
 
 def _active_versions(conn, key: str) -> list[str]:
+    """Run _active_versions."""
     with conn.cursor() as cur:
         cur.execute(
             "SELECT version_id FROM doc_versions "
@@ -77,7 +80,7 @@ def _active_versions(conn, key: str) -> list[str]:
 
 
 def test_flip_moves_all_three_places(conn) -> None:
-    """§4.1 的三处：旧版下线、新版生效、切片状态同步。"""
+    """§4.1 的三处：旧版下线、新版生效、切片状态同步。."""
     old = seed_document(
         conn, key="flip", version_tag="old", version_status="active"
     )
@@ -118,7 +121,7 @@ def test_flip_moves_all_three_places(conn) -> None:
 
 
 def test_flip_is_the_only_way_to_get_exactly_one_active(conn) -> None:
-    """连翻三次（三个版本）后仍然只有一个 active。"""
+    """连翻三次（三个版本）后仍然只有一个 active。."""
     v1 = seed_document(
         conn, key="chain", version_tag="v1", version_status="active"
     )
@@ -146,7 +149,7 @@ def test_flip_is_the_only_way_to_get_exactly_one_active(conn) -> None:
 
 
 def test_flip_writes_desired_state_for_both_versions(conn) -> None:
-    """期望状态必须与翻牌同事务写入。
+    """期望状态必须与翻牌同事务写入。.
 
     这是“Qdrant 一定知道发生过翻牌”的唯一保证。
     """
@@ -171,7 +174,7 @@ def test_flip_writes_desired_state_for_both_versions(conn) -> None:
 
 
 def test_reflipping_an_active_version_is_refused_not_duplicated(conn) -> None:
-    """重复翻同一版本：报 NotPending（幂等的正常结果）。
+    """重复翻同一版本：报 NotPending（幂等的正常结果）。.
 
     不会造出第二个 active。
     """
@@ -188,13 +191,14 @@ def test_reflipping_an_active_version_is_refused_not_duplicated(conn) -> None:
 
 
 def test_flip_unknown_version_is_refused(conn) -> None:
+    """Run test_flip_unknown_version_is_refused."""
     with pytest.raises(VersionNotFound):
         flip(conn, "a3test/nope#v1")
     conn.rollback()
 
 
 def test_empty_version_cannot_be_flipped(conn) -> None:
-    """空版本翻不过去。
+    """空版本翻不过去。.
 
     放过去的话：旧版立刻下线、新版一条切片也没有——线上"什么都问不出来"，
     而且没有任何报错。这是最短的一条"翻牌把服务翻空"的路径。
@@ -221,7 +225,7 @@ def test_empty_version_cannot_be_flipped(conn) -> None:
 def test_flip_rolls_back_completely_on_failure(
     conn, pool: ConnectionPool, a3_dsn: str
 ) -> None:
-    """翻牌中途失败 → 三处全部回滚，新版仍是 pending，旧版仍在服务。
+    """翻牌中途失败 → 三处全部回滚，新版仍是 pending，旧版仍在服务。.
 
     做法：先让翻牌跑起来，然后在同一个事务里制造一次失败（用数据库约束拒一次写）。
     这里选"给 documents 写一个 CHECK 不允许的状态"来制造失败——它发生在翻牌
@@ -260,7 +264,7 @@ def test_flip_rolls_back_completely_on_failure(
 
 
 def test_flip_waits_for_the_document_lock(conn, a3_dsn: str) -> None:
-    """另一事务持文档锁时，`wait=False` 直接报 DocumentLocked（不等）。"""
+    """另一事务持文档锁时，`wait=False` 直接报 DocumentLocked（不等）。."""
     version = seed_document(conn, key="lock", version_tag="v1")
     conn.commit()
 
@@ -286,7 +290,7 @@ def test_flip_waits_for_the_document_lock(conn, a3_dsn: str) -> None:
 def test_concurrent_flips_never_produce_two_actives(
     pool: ConnectionPool, a3_dsn: str
 ) -> None:
-    """两个线程同时翻同一文档的两个不同版本：最终只有一个 active。
+    """两个线程同时翻同一文档的两个不同版本：最终只有一个 active。.
 
     这是 §4.1「一份文档不能同时翻两次」的实际后果——两份同时生效会让同一句话
     两个版本都命中，引用都不知道该指哪一页。
@@ -300,6 +304,7 @@ def test_concurrent_flips_never_produce_two_actives(
     done = threading.Barrier(2)
 
     def attempt(version_id: str) -> None:
+        """Run attempt."""
         try:
             with pool.connection() as c:
                 done.wait(timeout=5)
@@ -329,7 +334,7 @@ def test_concurrent_flips_never_produce_two_actives(
 
 
 def test_rollback_restores_the_previous_version(conn) -> None:
-    """24h 内把旧版翻回来（§4.4）：新版下线、旧版生效、切片状态对称变化。"""
+    """24h 内把旧版翻回来（§4.4）：新版下线、旧版生效、切片状态对称变化。."""
     v1 = seed_document(conn, key="rollback", version_tag="v1")
     conn.commit()
     flip(conn, v1)
@@ -357,7 +362,7 @@ def test_rollback_restores_the_previous_version(conn) -> None:
 
 
 def test_rollback_only_works_inside_the_retention_window_by_state(conn) -> None:
-    """回滚只接受 deprecated 的版本；已 purged 的翻不回来（切片都删了）。"""
+    """回滚只接受 deprecated 的版本；已 purged 的翻不回来（切片都删了）。."""
     v1 = seed_document(conn, key="purged", version_tag="v1")
     conn.commit()
     flip(conn, v1)
@@ -376,7 +381,7 @@ def test_rollback_only_works_inside_the_retention_window_by_state(conn) -> None:
 
 
 def test_scan_and_flip_share_the_same_document_lock(conn, a3_dsn: str) -> None:
-    """扫描与翻牌用同一个表达式（`pg_advisory_xact_lock(hashtext(doc_key))`）。
+    """扫描与翻牌用同一个表达式（`pg_advisory_xact_lock(hashtext(doc_key))`）。.
 
     实测方法：一个事务按扫描的写法持锁，另一个按翻牌的写法拿锁 → 拿不到。
     这条守的是"两处表达式漂移"：写法一旦不同，两把锁就互不相干了。
@@ -414,6 +419,7 @@ def test_scan_and_flip_share_the_same_document_lock(conn, a3_dsn: str) -> None:
 
 
 def test_flip_updates_documents_status_to_active(conn) -> None:
+    """Run test_flip_updates_documents_status_to_active."""
     version = seed_document(
         conn, key="docstatus", version_tag="v1", doc_status="queued"
     )
@@ -428,6 +434,7 @@ def test_flip_updates_documents_status_to_active(conn) -> None:
 
 
 def test_active_version_helper(conn) -> None:
+    """Run test_active_version_helper."""
     assert active_version(conn, doc_key("nothing")) is None
     v = seed_document(conn, key="helper", version_tag="v1")
     conn.commit()

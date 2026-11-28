@@ -13,6 +13,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+if __package__:
+    from .resources.verify_a3_migration_msgs import MESSAGES as M
+else:  # run as a script: python3 scripts/verify_a3_migration.py
+    from resources.verify_a3_migration_msgs import MESSAGES as M
+
 import psycopg
 
 REPO = Path(__file__).resolve().parent.parent
@@ -24,6 +29,7 @@ FAILS: list[str] = []
 
 
 def check(label: str, ok: bool, detail: str = "") -> None:
+    """Run check."""
     print(
         f"  [{'PASS' if ok else 'FAIL'}] {label}"
         + (f"  ({detail})" if detail else "")
@@ -33,18 +39,24 @@ def check(label: str, ok: bool, detail: str = "") -> None:
 
 
 def rejects(conn, label: str, sql: str, params: tuple = ()) -> None:
+    """Run rejects."""
     try:
         with conn.cursor() as cur:
             cur.execute(sql, params)
-        check(f"{label} 被拒", False, "没有报错（应当被约束拦住）")
+        check(f"{label}{M['CHECK_01']}", False, M["CHECK_02"])
     except Exception as exc:  # noqa: BLE001
         detail = str(exc).splitlines()[0][:110]
-        check(f"{label} 被拒", True, f"{type(exc).__name__}: {detail}")
+        check(
+            f"{label}{M['CHECK_03']}",
+            True,
+            f"{type(exc).__name__}: {detail}",
+        )
     finally:
         conn.rollback()
 
 
 def migrate(dsn: str) -> subprocess.CompletedProcess[str]:
+    """Run migrate."""
     return subprocess.run(  # noqa: S603
         [sys.executable, str(REPO / "scripts" / "db_migrate.py"), "--dsn", dsn],
         capture_output=True,
@@ -55,17 +67,18 @@ def migrate(dsn: str) -> subprocess.CompletedProcess[str]:
 
 
 def main() -> int:
+    """Run main."""
     with psycopg.connect(ADMIN, autocommit=True) as conn:
         conn.execute(f"DROP DATABASE IF EXISTS {DBNAME}")
         conn.execute(f"CREATE DATABASE {DBNAME}")
-    print(f"=== 新建 database {DBNAME}（等价于从零装机）")
+    print(f"{M['PRINT_01']}{DBNAME}{M['PRINT_02']}")
 
     proc = migrate(DSN)
     print(proc.stdout[-1500:])
     if proc.returncode != 0:
         print(proc.stderr[-2000:], file=sys.stderr)
     check(
-        "001+002+003 全新库 apply 成功",
+        M["CHECK_04"],
         proc.returncode == 0,
         f"rc={proc.returncode}",
     )
@@ -75,7 +88,7 @@ def main() -> int:
 
     proc2 = migrate(DSN)
     check(
-        "重跑 no-op",
+        M["CHECK_05"],
         proc2.returncode == 0 and "nothing to do" in proc2.stdout,
         proc2.stdout.strip()[-100:],
     )
@@ -91,8 +104,7 @@ def main() -> int:
                 )
                 tables = cur.fetchone()
             check(
-                "vector_sync_tasks / vector_drift_log / chunks /"
-                " v_active_chunks 都在",
+                M["CHECK_06"],
                 all(t is not None for t in tables),
                 str(tables),
             )
@@ -105,7 +117,7 @@ def main() -> int:
                     "  AND column_name = 'deprecated_at'"
                 )
                 check(
-                    "doc_versions.deprecated_at 存在",
+                    M["CHECK_07"],
                     cur.fetchone() is not None,
                 )
 
@@ -117,7 +129,7 @@ def main() -> int:
                     " 'uq_vector_drift_open_dedupe')"
                 )
                 names = {r[0] for r in cur.fetchall()}
-            check("三个新索引都在", len(names) == 3, str(sorted(names)))
+            check(M["CHECK_08"], len(names) == 3, str(sorted(names)))
 
             # 造一行版本，供后面的约束测试用
             with conn.cursor() as cur:
@@ -135,42 +147,42 @@ def main() -> int:
 
             rejects(
                 conn,
-                "desired_status 非法",
+                M["REJECTS_01"],
                 "INSERT INTO vector_sync_tasks (version_id, doc_key,"
                 " desired_status)"
                 " VALUES ('v/doc#a','v/doc','bogus')",
             )
             rejects(
                 conn,
-                "sync status 非法",
+                M["REJECTS_02"],
                 "INSERT INTO vector_sync_tasks (version_id, doc_key,"
                 " desired_status, status)"
                 " VALUES ('v/doc#a','v/doc','active','weird')",
             )
             rejects(
                 conn,
-                "failed 无 error",
+                M["REJECTS_03"],
                 "INSERT INTO vector_sync_tasks (version_id, doc_key,"
                 " desired_status, status)"
                 " VALUES ('v/doc#a','v/doc','active','failed')",
             )
             rejects(
                 conn,
-                "done 无 synced_at",
+                M["REJECTS_04"],
                 "INSERT INTO vector_sync_tasks (version_id, doc_key,"
                 " desired_status, status)"
                 " VALUES ('v/doc#a','v/doc','active','done')",
             )
             rejects(
                 conn,
-                "attempts 为负",
+                M["REJECTS_05"],
                 "INSERT INTO vector_sync_tasks (version_id, doc_key,"
                 " desired_status, attempts)"
                 " VALUES ('v/doc#a','v/doc','active',-1)",
             )
             rejects(
                 conn,
-                "drift kind 非法",
+                M["REJECTS_06"],
                 "INSERT INTO vector_drift_log (doc_key, kind, dedupe_key)"
                 " VALUES ('v/doc','whatever','k1')",
             )
@@ -186,11 +198,11 @@ def main() -> int:
                     " VALUES ('v/doc','status_mismatch','k2')"
                 )
             conn.commit()
-            check("合法行能插入", True)
+            check(M["CHECK_09"], True)
 
             rejects(
                 conn,
-                "未修复漂移重复",
+                M["REJECTS_07"],
                 "INSERT INTO vector_drift_log (doc_key, kind, dedupe_key)"
                 " VALUES ('v/doc','status_mismatch','k2')",
             )
@@ -205,7 +217,7 @@ def main() -> int:
                     " VALUES ('v/doc','status_mismatch','k2')"
                 )
             conn.commit()
-            check("修好之后可以再记一条", True)
+            check(M["CHECK_10"], True)
 
             # 003 的关键行为：删版本级联删同步任务（一次都别留）
             with conn.cursor() as cur:
@@ -218,7 +230,7 @@ def main() -> int:
                 )
                 left = cur.fetchone()[0]
             conn.commit()
-            check("删版本级联删同步任务", left == 0, f"left={left}")
+            check(M["CHECK_11"], left == 0, f"left={left}")
 
             # 001 的既有约束在这套迁移里仍然有效（回归：003 不该把它们弄坏）
             with conn.cursor() as cur:
@@ -240,7 +252,7 @@ def main() -> int:
             conn.commit()
             rejects(
                 conn,
-                "第二个 active 版本（ux_active_version）",
+                M["REJECTS_08"],
                 "INSERT INTO doc_versions (version_id, doc_key, file_hash,"
                 " status,"
                 " activated_at) VALUES ('v/doc2#b','v/doc2',%s,'active',"
@@ -249,7 +261,7 @@ def main() -> int:
             )
             rejects(
                 conn,
-                "active 版本无 activated_at",
+                M["REJECTS_09"],
                 "INSERT INTO doc_versions (version_id, doc_key, file_hash,"
                 " status)"
                 " VALUES ('v/doc2#c','v/doc2',%s,'active')",
@@ -267,6 +279,7 @@ def main() -> int:
 
 
 def _drop(*, restore: bool) -> None:
+    """Run _drop."""
     with psycopg.connect(ADMIN, autocommit=True) as conn:
         conn.execute(
             "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
@@ -275,7 +288,7 @@ def _drop(*, restore: bool) -> None:
         )
         conn.execute(f"DROP DATABASE IF EXISTS {DBNAME}")
     if restore:
-        print(f"\n=== 清理 database {DBNAME}")
+        print(f"{M['PRINT_03']}{DBNAME}")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""切片落库的往返测试（真 PG）：三份表格表示与来源标记必须都活到库里。
+"""切片落库的往返测试（真 PG）：三份表格表示与来源标记必须都活到库里。.
 
 为什么单开一个文件（而不是塞进 `test_parse_*` 的单元用例）：
 
@@ -57,6 +57,7 @@ INSERT INTO chunks (
 
 @pytest.fixture(scope="module")
 def migrated(pg_dsn: str) -> str:
+    """Run migrated."""
     proc = subprocess.run(  # noqa: S603 - 固定脚本路径
         [sys.executable, str(MIGRATE_SCRIPT), "--dsn", pg_dsn],
         capture_output=True,
@@ -85,7 +86,7 @@ def migrated(pg_dsn: str) -> str:
 def parsed_table_doc(
     tmp_path_factory: pytest.TempPathFactory,
 ) -> tuple[Path, object]:
-    """解析一份带表格的版面样本（夹具在测试里现造，不依赖 samples/）。"""
+    """解析一份带表格的版面样本（夹具在测试里现造，不依赖 samples/）。."""
     if str(SCRIPTS) not in sys.path:
         sys.path.insert(0, str(SCRIPTS))
     import make_layout_samples  # noqa: PLC0415
@@ -103,7 +104,7 @@ def parsed_table_doc(
 
 
 def _persist(conn, outcome, path: Path) -> list[str]:
-    """把一次解析结果写进库（版本行 + 切片），返回写入的 chunk_id。"""
+    """把一次解析结果写进库（版本行 + 切片），返回写入的 chunk_id。."""
     from api.ingest.fingerprint import file_hash  # noqa: PLC0415
 
     doc_key = outcome.doc.doc_key
@@ -142,6 +143,7 @@ def _persist(conn, outcome, path: Path) -> list[str]:
 
 
 def _to_json(value: object) -> str:
+    """Run _to_json."""
     import json  # noqa: PLC0415
 
     return json.dumps(value, ensure_ascii=False)
@@ -151,6 +153,7 @@ def _to_json(value: object) -> str:
 def written(
     migrated: str, parsed_table_doc: tuple[Path, object]
 ) -> dict[str, object]:
+    """Run written."""
     import psycopg  # noqa: PLC0415
     from psycopg.rows import dict_row  # noqa: PLC0415
 
@@ -183,7 +186,7 @@ def written(
 
 
 def test_table_three_representations_survive_a_round_trip(written) -> None:
-    """库里读回来的三份表示必须互相重建得出——这是 §3.3 可执行的定义。"""
+    """库里读回来的三份表示必须互相重建得出——这是 §3.3 可执行的定义。."""
     table_rows = [
         row for row in written["rows"] if row["chunk_type"] == "table"
     ]
@@ -221,7 +224,7 @@ def test_table_three_representations_survive_a_round_trip(written) -> None:
 def test_merged_cell_spans_survive_the_round_trip(
     migrated: str, tmp_path: Path
 ) -> None:
-    """`col_span` 必须从库里读得回来。
+    """`col_span` 必须从库里读得回来。.
 
     校验阶段靠它对齐数字，丢了就退化成正则拆 HTML。
     """
@@ -268,7 +271,7 @@ def test_merged_cell_spans_survive_the_round_trip(
 
 
 def test_notes_survive_the_round_trip(written) -> None:
-    """`notes` 往返后还在：否则下游看不出“这段文字是识别出来的”。
+    """`notes` 往返后还在：否则下游看不出“这段文字是识别出来的”。.
 
     这里不造 OCR（那要真引擎、慢），而是直接验 `notes` 这条通道——OCR
     的来源标记走的就是同一个字段，`scripts/verify_parse_pipeline.py`
@@ -284,7 +287,7 @@ def test_notes_survive_the_round_trip(written) -> None:
 
 
 def test_notes_column_carries_ocr_source(migrated: str) -> None:
-    """把 `source:ocr` 真的写进 `notes` 再读回——这条列存在且能装下标记。"""
+    """把 `source:ocr` 真的写进 `notes` 再读回——这条列存在且能装下标记。."""
     import psycopg  # noqa: PLC0415
     from psycopg.rows import dict_row  # noqa: PLC0415
 
@@ -351,7 +354,7 @@ def test_notes_column_carries_ocr_source(migrated: str) -> None:
 
 
 def test_table_cells_rejects_non_array(migrated: str) -> None:
-    """004 的 CHECK：`table_cells` 要么 NULL 要么数组，别的形状进不来。"""
+    """004 的 CHECK：`table_cells` 要么 NULL 要么数组，别的形状进不来。."""
     import psycopg  # noqa: PLC0415
 
     doc_key = DOC_PREFIX + "bad"

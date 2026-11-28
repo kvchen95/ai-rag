@@ -1,4 +1,4 @@
-"""端到端：真 PDF -> 解析 -> 切片（§3.2–§3.6 的验收面）。
+"""端到端：真 PDF -> 解析 -> 切片（§3.2–§3.6 的验收面）。.
 
 这是本卡的主验收文件。三条验收逐条落成断言：
 
@@ -38,6 +38,7 @@ VERSION = "policy/demo#abcdef123456"
 
 @pytest.fixture(scope="module")
 def fixtures(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Run fixtures."""
     if str(SCRIPTS) not in sys.path:
         sys.path.insert(0, str(SCRIPTS))
     import make_layout_samples  # noqa: PLC0415
@@ -51,6 +52,7 @@ def fixtures(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 def _parse(path: Path, **kwargs: object):
+    """Run _parse."""
     return parse_document(
         path,
         doc_key="policy/demo",
@@ -64,6 +66,7 @@ def _parse(path: Path, **kwargs: object):
 
 
 def test_table_document_produces_text_and_table_chunks(fixtures: Path) -> None:
+    """Run test_table_document_produces_text_and_table_chunks."""
     outcome = _parse(fixtures / "layout/table-demo.pdf")
     types = outcome.counts()
     assert types.get("table") == 2  # 两页各一张表
@@ -72,7 +75,7 @@ def test_table_document_produces_text_and_table_chunks(fixtures: Path) -> None:
 
 
 def test_every_chunk_is_complete(fixtures: Path) -> None:
-    """验收第三条：出流水线的每一条都必须带齐六项随行信息。"""
+    """验收第三条：出流水线的每一条都必须带齐六项随行信息。."""
     for name in (
         "layout/table-demo.pdf",
         "layout/two-column-demo.pdf",
@@ -87,7 +90,7 @@ def test_every_chunk_is_complete(fixtures: Path) -> None:
 
 
 def test_acl_is_propagated_to_every_chunk(fixtures: Path) -> None:
-    """权限是切片自带的（§2.3 六项之一），不是检索时再查。"""
+    """权限是切片自带的（§2.3 六项之一），不是检索时再查。."""
     outcome = _parse(fixtures / "layout/table-demo.pdf")
     for chunk in outcome.chunks:
         assert chunk.is_public is False
@@ -96,7 +99,7 @@ def test_acl_is_propagated_to_every_chunk(fixtures: Path) -> None:
 
 
 def test_empty_acl_is_refused(fixtures: Path) -> None:
-    """解析器不知道业务权限：猜一个"公开"比拒绝入库危险得多。"""
+    """解析器不知道业务权限：猜一个"公开"比拒绝入库危险得多。."""
     with pytest.raises(MissingAcl):
         parse_document(
             fixtures / "layout/table-demo.pdf",
@@ -107,7 +110,7 @@ def test_empty_acl_is_refused(fixtures: Path) -> None:
 
 
 def test_header_footer_never_becomes_a_chunk(fixtures: Path) -> None:
-    """页眉/页脚是噪声：进了库会让检索命中"ACME 内部文件"。"""
+    """页眉/页脚是噪声：进了库会让检索命中"ACME 内部文件"。."""
     outcome = _parse(fixtures / "layout/header-demo.pdf")
     texts = " ".join(chunk.content_text for chunk in outcome.chunks)
     assert "ACME Internal" not in texts
@@ -115,14 +118,14 @@ def test_header_footer_never_becomes_a_chunk(fixtures: Path) -> None:
 
 
 def test_repeated_clause_survives_as_a_chunk(fixtures: Path) -> None:
-    """每页都出现的条款必须留在库里（它是正文，不是页眉）。"""
+    """每页都出现的条款必须留在库里（它是正文，不是页眉）。."""
     outcome = _parse(fixtures / "layout/header-demo.pdf")
     texts = [chunk.content_text for chunk in outcome.chunks]
     assert any("Clause 4.2 applies to all staff." in text for text in texts)
 
 
 def test_two_column_text_is_not_spliced_across_columns(fixtures: Path) -> None:
-    """§3.2：不按栏切会把一句话拆成左右两栏拼起来。"""
+    """§3.2：不按栏切会把一句话拆成左右两栏拼起来。."""
     outcome = _parse(fixtures / "layout/two-column-demo.pdf")
     for chunk in outcome.chunks:
         assert not (
@@ -138,7 +141,7 @@ def test_two_column_text_is_not_spliced_across_columns(fixtures: Path) -> None:
 
 
 def _ink_ratio(image, bbox: tuple[float, float, float, float]) -> float:
-    """一块区域里"非白像素"的占比。"""
+    """一块区域里"非白像素"的占比。."""
     left = int(bbox[0] * image.width)
     top = int(bbox[1] * image.height)
     right = max(left + 1, int(bbox[2] * image.width))
@@ -152,7 +155,7 @@ def _ink_ratio(image, bbox: tuple[float, float, float, float]) -> float:
 
 @pytest.fixture(scope="module")
 def renderer(fixtures: Path):
-    """按需渲染某一页为 RGB 位图（200 DPI，与图裁片一致）。"""
+    """按需渲染某一页为 RGB 位图（200 DPI，与图裁片一致）。."""
     from pypdfium2 import PdfDocument  # noqa: PLC0415
 
     from api.parse import figures as fig  # noqa: PLC0415
@@ -160,6 +163,7 @@ def renderer(fixtures: Path):
     cache: dict[tuple[str, int], object] = {}
 
     def _render(name: str, page_num: int):
+        """Run _render."""
         key = (name, page_num)
         if key not in cache:
             document = PdfDocument(str(fixtures / name))
@@ -174,7 +178,7 @@ def renderer(fixtures: Path):
 
 
 def test_bbox_lands_on_the_text_it_describes(fixtures: Path, renderer) -> None:
-    """切片 bbox 裁出来的区域里必须有墨迹，**平移之后墨迹明显变少**。
+    """切片 bbox 裁出来的区域里必须有墨迹，**平移之后墨迹明显变少**。.
 
     "有点墨迹"在 A4 页上到处都是（页边、表格线、相邻段落），所以要靠平移对照：
     如果 bbox 是对的，平移 10% 页宽就会离开这段文字；如果 bbox 是错的（比如
@@ -198,6 +202,7 @@ def test_bbox_lands_on_the_text_it_describes(fixtures: Path, renderer) -> None:
 
 
 def test_bbox_of_a_table_lands_on_the_table(fixtures: Path, renderer) -> None:
+    """Run test_bbox_of_a_table_lands_on_the_table."""
     outcome = _parse(fixtures / "layout/table-demo.pdf")
     chunk = next(c for c in outcome.chunks if c.chunk_type == "table")
     image = renderer("layout/table-demo.pdf", chunk.page_num)
@@ -206,6 +211,7 @@ def test_bbox_of_a_table_lands_on_the_table(fixtures: Path, renderer) -> None:
 
 
 def test_bbox_is_normalized_and_well_formed(fixtures: Path) -> None:
+    """Run test_bbox_is_normalized_and_well_formed."""
     outcome = _parse(fixtures / "layout/table-demo.pdf")
     for chunk in outcome.chunks:
         assert chunk.bbox, chunk.chunk_id
@@ -218,7 +224,7 @@ def test_bbox_is_normalized_and_well_formed(fixtures: Path) -> None:
 def test_rotated_page_bbox_matches_the_unrotated_page(
     fixtures: Path, renderer
 ) -> None:
-    """旋转页上的 bbox 必须能映射回同一个物理位置。
+    """旋转页上的 bbox 必须能映射回同一个物理位置。.
 
     旋转页与未旋转页上同一段文字的 bbox 应该**不同**（页面转了），但把它
     映射回用户空间后必须落在同一个物理位置。
@@ -254,7 +260,7 @@ def test_rotated_page_bbox_matches_the_unrotated_page(
 
 
 def test_table_three_representations_agree(fixtures: Path) -> None:
-    """验收第二条：HTML 反解 == cells 展开 == md 解析。"""
+    """验收第二条：HTML 反解 == cells 展开 == md 解析。."""
     outcome = _parse(fixtures / "layout/table-demo.pdf")
     tables = [c for c in outcome.chunks if c.chunk_type == "table"]
     assert len(tables) == 2
@@ -274,6 +280,7 @@ def test_table_three_representations_agree(fixtures: Path) -> None:
 
 
 def _cell_obj(raw: dict[str, object]):
+    """Run _cell_obj."""
     from api.parse.model import TableCell  # noqa: PLC0415
 
     return TableCell(
@@ -287,7 +294,7 @@ def _cell_obj(raw: dict[str, object]):
 
 
 def test_table_content_text_carries_the_numbers(fixtures: Path) -> None:
-    """表格切片的检索文本必须带上单元格里的数字（否则"上海住宿限额"查不到）。"""
+    """表格切片的检索文本必须带上单元格里的数字（否则"上海住宿限额"查不到）。."""
     outcome = _parse(fixtures / "layout/table-demo.pdf")
     table = next(c for c in outcome.chunks if c.chunk_type == "table")
     assert "500" in table.content_text
@@ -295,7 +302,7 @@ def test_table_content_text_carries_the_numbers(fixtures: Path) -> None:
 
 
 def test_continued_table_is_flagged_not_merged(fixtures: Path) -> None:
-    """跨页续表：标出来，但**不合并**——合并会破坏 bbox 与原页的对应关系。
+    """跨页续表：标出来，但**不合并**——合并会破坏 bbox 与原页的对应关系。.
 
     第 2 页那张表贴着页面顶部且与第 1 页同列数，所以它该被标成续表。
     """
@@ -319,11 +326,14 @@ def test_continued_table_is_flagged_not_merged(fixtures: Path) -> None:
 
 
 class _FakeVLM:
+    """_FakeVLM."""
     def __init__(self, response: str) -> None:
+        """Initialize the instance."""
         self.response = response
         self.calls = 0
 
     def transcribe(self, image: bytes, prompt: str) -> str:
+        """Run transcribe."""
         assert image.startswith(b"RIFF")  # 无损 WebP 容器头
         self.calls += 1
         return self.response
@@ -348,6 +358,7 @@ BAD_TRANSCRIPT = GOOD_TRANSCRIPT.replace(
 
 
 def _figure_builder(response: str, path: Path):
+    """Run _figure_builder."""
     from api.parse.figure_pipeline import (  # noqa: PLC0415
         FigurePipelineConfig,
         make_builder,
@@ -361,6 +372,7 @@ def _figure_builder(response: str, path: Path):
 def test_figure_with_matching_numbers_is_indexed(
     fixtures: Path, tmp_path: Path
 ) -> None:
+    """Run test_figure_with_matching_numbers_is_indexed."""
     path = fixtures / "layout/figure-demo.pdf"
     figures_dir = tmp_path / "figures"
     outcome = parse_document(
@@ -383,7 +395,7 @@ def test_figure_with_matching_numbers_is_indexed(
 def test_figure_with_wrong_number_is_rejected(
     fixtures: Path, tmp_path: Path
 ) -> None:
-    """验收第二条的后半句：数值对不上 → 标失败 → **不入库**。
+    """验收第二条的后半句：数值对不上 → 标失败 → **不入库**。.
 
     74 与图的真实值 32 对不上：占比求和不拢（142），而且图里找不到 74 的依据。
     这条图既不产出 figure 切片，也不留下图文件。
@@ -416,7 +428,7 @@ def test_figure_with_wrong_number_is_rejected(
 
 
 def test_figure_without_vlm_is_not_indexed(fixtures: Path) -> None:
-    """没配 VLM 时不产出图切片：空转译的图切片是"没有内容的证据"。"""
+    """没配 VLM 时不产出图切片：空转译的图切片是"没有内容的证据"。."""
     path = fixtures / "layout/figure-demo.pdf"
     outcome = parse_document(
         path,
@@ -433,6 +445,7 @@ def test_figure_without_vlm_is_not_indexed(fixtures: Path) -> None:
 
 
 def _figure_builder_without_vlm(path: Path):
+    """Run _figure_builder_without_vlm."""
     from api.parse.figure_pipeline import (  # noqa: PLC0415
         FigurePipelineConfig,
         make_builder,
@@ -444,7 +457,7 @@ def _figure_builder_without_vlm(path: Path):
 def test_figure_image_meets_the_dpi_floor(
     fixtures: Path, tmp_path: Path
 ) -> None:
-    """§3.4：无损 WebP ≥ 200 DPI。"""
+    """§3.4：无损 WebP ≥ 200 DPI。."""
     from PIL import Image  # noqa: PLC0415
 
     path = fixtures / "layout/figure-demo.pdf"
@@ -475,7 +488,7 @@ def test_figure_image_meets_the_dpi_floor(
 
 
 def test_validate_catches_a_chunk_with_a_deleted_field(fixtures: Path) -> None:
-    """人为抹掉一个字段，`validate_chunks` 必须抛。
+    """人为抹掉一个字段，`validate_chunks` 必须抛。.
 
     这是"检查真的在跑"的反证：如果它只在 happy path 上被调用、从没见过坏输入，
     那么它是否有效就没人知道。
@@ -490,7 +503,7 @@ def test_validate_catches_a_chunk_with_a_deleted_field(fixtures: Path) -> None:
 
 
 def test_parse_report_has_no_chunk_text(fixtures: Path) -> None:
-    """`as_report()` 给接口/日志用，不该带正文（会把日志撑爆）。"""
+    """`as_report()` 给接口/日志用，不该带正文（会把日志撑爆）。."""
     outcome = _parse(fixtures / "layout/table-demo.pdf")
     report = outcome.as_report()
     assert "chunks" in report and isinstance(report["chunks"], dict)

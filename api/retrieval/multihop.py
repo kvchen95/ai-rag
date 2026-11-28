@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from api.observability import get_logger, log_event
+from api.resources import messages as msg
 
 logger = get_logger("api.retrieval.multihop")
 
@@ -186,7 +187,7 @@ def run_multihop(
     - 中途断     → `broken` + 已有事实（调用方据此 `partial`）。
     """
     if max_hops < 0:
-        raise ValueError(f"max_hops 必须 >= 0，实际 {max_hops}")
+        raise ValueError(msg.MAX_HOPS_INVALID.format(value=max_hops))
     board = Blackboard()
     hops: list[HopOutcome] = []
     gap = tuple(initial_gap)

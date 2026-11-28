@@ -55,6 +55,7 @@ from api.parse.model import (
     subtract_regions,
 )
 from api.parse.tables import build_table, clean_cell_text
+from api.resources import parsing
 
 # --- 行的聚类参数（单位 pt）-------------------------------------------------
 #
@@ -141,18 +142,9 @@ HEADER_BAND_RATIO = 0.12
 FOOTER_BAND_RATIO = 0.12
 # 数字+单位：金额、比例、期限、日期。带这些的行即便重复也不删——
 # 它多半是每页都印的"标准值"提示，删掉就是丢正文（§3.2 的原话）。
-_NUMERIC_UNIT = re.compile(
-    r"\d[\d,.]*\s*"
-    r"(?:元|块|万|亿|%|％|天|日|个工作日|工作日|个月|月|年|"
-    r"小时|分钟|次|人|页|pt|px|CNY|RMB|USD|¥|\$)"
-    r"|(?:CNY|RMB|USD|¥|\$)\s*\d",
-    re.IGNORECASE,
-)
-_DIGITS = re.compile(r"\d+")
-_CJK = re.compile(
-    "[\u3000-\u303f\u3040-\u30ff\u3400-\u4dbf"
-    "\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef]"
-)
+_NUMERIC_UNIT = parsing.NUMERIC_UNIT
+_DIGITS = parsing.DIGITS
+_CJK = parsing.CJK_RUN
 
 
 def _is_cjk(char: str) -> bool:
@@ -181,7 +173,7 @@ def _estimated_width(char: dict[str, Any]) -> float | None:
     width = float(char["x1"]) - float(char["x0"])
     if width > 0.01:
         return None
-    text = str(char.get("text") or "")
+    text = str(char.get("text") if char.get("text") else "")
     if not text:
         return None
     height = float(char["bottom"]) - float(char["top"])
@@ -718,7 +710,11 @@ def _table_data(table: Any) -> TableData | None:
     boxes: list[tuple[float, float, float, float]] = []
     for row in rows:
         parsed: list[tuple[float, float, float, float] | None] = []
-        for cell in getattr(row, "cells", None) or ():
+        for cell in (
+            getattr(row, "cells", None)
+            if getattr(row, "cells", None)
+            else ()
+        ):
             if cell is None:
                 parsed.append(None)
                 continue
@@ -852,12 +848,7 @@ def _bare_number(text: str) -> bool:
     if not stripped:
         return False
     cleaned = re.sub(r"[,\s¥$%％]", "", stripped)
-    cleaned = re.sub(
-        r"(元|块|万|亿|天|日|个月|年|小时|分钟|次|人|页|CNY|RMB|USD)$",
-        "",
-        cleaned,
-        flags=re.I,
-    )
+    cleaned = parsing.MONEY_SUFFIX.sub("", cleaned)
     try:
         float(cleaned)
     except ValueError:

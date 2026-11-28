@@ -1,4 +1,4 @@
-"""配置：必填项不许有代码默认值，跨字段约束必须真的拦得住。"""
+"""配置：必填项不许有代码默认值，跨字段约束必须真的拦得住。."""
 
 from __future__ import annotations
 
@@ -47,11 +47,13 @@ MUST_BE_REQUIRED = (
 
 @pytest.mark.parametrize("field", MUST_BE_REQUIRED)
 def test_business_values_have_no_code_default(field: str) -> None:
+    """Run test_business_values_have_no_code_default."""
     info = Settings.model_fields[field]
     assert info.is_required(), f"{field} 在代码里给了默认值，等于硬编码"
 
 
 def test_missing_required_field_names_the_variable() -> None:
+    """Run test_missing_required_field_names_the_variable."""
     values = {k: v for k, v in BASE_ENV.items() if k != "GATE_REJECT_LOW"}
     with pytest.raises(ValidationError) as excinfo:
         build_settings(**values)
@@ -61,6 +63,7 @@ def test_missing_required_field_names_the_variable() -> None:
 def test_thresholds_and_models_come_from_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Run test_thresholds_and_models_come_from_env."""
     for key, value in BASE_ENV.items():
         monkeypatch.setenv(key, str(value))
     monkeypatch.setenv("GATE_REJECT_LOW", "0.55")
@@ -117,18 +120,21 @@ def test_thresholds_and_models_come_from_env(
 def test_cross_field_and_range_rules(
     overrides: dict[str, object], needle: str
 ) -> None:
+    """Run test_cross_field_and_range_rules."""
     with pytest.raises(ValidationError) as excinfo:
         make_settings(**overrides)
     assert needle in str(excinfo.value)
 
 
 def test_gateway_without_model_is_rejected() -> None:
+    """Run test_gateway_without_model_is_rejected."""
     with pytest.raises(ValidationError) as excinfo:
         make_settings(LLM_BASE_URL="https://gw.example.com/v1")
     assert "LLM_MODEL is required" in str(excinfo.value)
 
 
 def test_gateway_with_model_is_accepted() -> None:
+    """Run test_gateway_with_model_is_accepted."""
     loaded = make_settings(
         LLM_BASE_URL="https://gw.example.com/v1", LLM_MODEL="gw-qwen-max"
     )
@@ -136,6 +142,7 @@ def test_gateway_with_model_is_accepted() -> None:
 
 
 def test_public_config_has_no_secrets() -> None:
+    """Run test_public_config_has_no_secrets."""
     loaded = make_settings(EMBEDDING_API_KEY="super-secret-embedding-key")
     dumped = repr(loaded.public_config())
     assert "super-secret-embedding-key" not in dumped
@@ -147,7 +154,7 @@ def test_public_config_has_no_secrets() -> None:
 
 
 def test_env_example_covers_every_required_variable() -> None:
-    """代码要求某变量、.env.example 却没写，人照着 example 起服务必然失败。"""
+    """代码要求某变量、.env.example 却没写，人照着 example 起服务必然失败。."""
     example = (REPO_ROOT / ".env.example").read_text(encoding="utf-8")
     example_keys = {
         line.split("=", 1)[0].strip()
